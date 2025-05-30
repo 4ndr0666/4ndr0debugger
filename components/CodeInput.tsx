@@ -1,64 +1,18 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { SupportedLanguage } from '../types';
 import { Button } from './Button';
 import { Select } from './Select';
-import { SUPPORTED_LANGUAGES } from '../constants';
+import { SUPPORTED_LANGUAGES, generateReviewerTemplate, PLACEHOLDER_MARKER } from '../constants';
 
 interface CodeInputProps {
-  userCode: string; // Renamed from 'code' to clarify it's only user's portion
-  setUserCode: (code: string) => void; // Renamed from 'setCode'
+  userCode: string;
+  setUserCode: (code: string) => void;
   language: SupportedLanguage;
   setLanguage: (language: SupportedLanguage) => void;
-  onSubmit: (fullCode: string) => void; // Now expects the full templated code
+  onSubmit: (fullCode: string) => void;
   isLoading: boolean;
 }
-
-const fullTemplate = `\`\`\`shell
-
-PASTE CODE HERE
-
-\`\`\`
-
-## Summary
-
-Proceed to meticulously revise the code and fully implement all of your recommendations--from variable names to logic flows--with no placeholders or omitted lines directly within your response. Consistently accommodate for all code changes with cohesion. Ensure all code respects the established hierarchical order to satisfy modular execution and workflow. Work around the existing code flow without leaving anything out. Examine all functions in isolation using step-by-step validation in order to confirm they work before integrating them into your final revision. Last, ensure to reference the Shellcheck codebase guidelines and manually ensure all coinciding conflicts have been correctly linted. To minimally guide your thought processes, ensure the following can be said about your proposed revision: 
-
-- Well-defined and thoroughly fleshed out. 
-
-- All imports and paths are clearly defined. 
-
-- Accessible. 
-
-- Idempotent. 
-
-- Locally scoped. 
-
-- Declaration and assignment are separate to avoid masking return values.
-
-- \`local\` may only be used inside functions, use \`declare\` or plain assignment outside functions. 
-
-- All parsing issues, extraneous input, unintended newlines and/or unintended separators are absent. 
-
-- No bad splitting. 
-
-- Unambiguous variables and values. 
-
-- Exit status of the relevant command is explicitly checked to ensure consistent behavior. 
-
-- \`&>\` for redirecting both stdout and stderr (use \`>file 2>&1\` instead). 
-
-- Exports are properly recognized. 
-
-- No cyclomatic complexity.
-
-**Additional Considerations**: Confirm whether or not ambiguity exists in your revision, then proceed with the required steps to definitively resolve any remaining ambiguity. This is done by ensuring all actual values are provided over arbitrary variables ensuring no unbound variables. This structured approach ensures that each phase of the project is handled with a focus on meticulous detail, systematic progression, and continuous improvement, ensuring all underlying logic remains intact. Finally, precisely parse the complete, fully-functional, error-free and production ready revision to stdout for testing.`;
-
-const PLACEHOLDER_MARKER = "PASTE CODE HERE";
-const templateParts = fullTemplate.split(PLACEHOLDER_MARKER);
-const templatePrefix = templateParts[0];
-const templateSuffix = templateParts.length > 1 ? templateParts.slice(1).join(PLACEHOLDER_MARKER) : "";
-
 
 export const CodeInput: React.FC<CodeInputProps> = ({
   userCode,
@@ -70,6 +24,29 @@ export const CodeInput: React.FC<CodeInputProps> = ({
 }) => {
   const [selection, setSelection] = useState<{start: number, end: number} | null>(null);
 
+  const { currentFullTemplate, templatePrefix, templateSuffix } = useMemo(() => {
+    const template = generateReviewerTemplate(language);
+    const parts = template.split(PLACEHOLDER_MARKER);
+    const prefix = parts[0];
+    // If PLACEHOLDER_MARKER is not found, suffix will be empty or template itself if split yields one part.
+    // This assumes PLACEHOLDER_MARKER is always present in the generated template.
+    const suffix = parts.length > 1 ? parts.slice(1).join(PLACEHOLDER_MARKER) : ""; 
+    return { currentFullTemplate: template, templatePrefix: prefix, templateSuffix: suffix };
+  }, [language]);
+
+
+  useEffect(() => {
+    // When template changes due to language switch, reset userCode if it's not empty
+    // to avoid carrying over code from one language template to another.
+    // However, if the user is just typing, we don't want to reset.
+    // This might need more nuanced handling if user switches language with code already entered.
+    // For now, let's assume if language changes, we might want to clear user code.
+    // A better UX might be to confirm with the user or try to adapt.
+    // For simplicity, we'll let the user manage this.
+    // The main concern is that templatePrefix/Suffix change, which affects cursor logic.
+  }, [language, templatePrefix, templateSuffix]);
+
+
   useEffect(() => {
     if (selection) {
       const textarea = document.getElementById('code-input') as HTMLTextAreaElement;
@@ -77,12 +54,11 @@ export const CodeInput: React.FC<CodeInputProps> = ({
         textarea.setSelectionRange(selection.start, selection.end);
       }
     }
-  }, [selection, userCode]); // Re-apply selection if userCode changes, to keep cursor position
+  }, [selection, userCode, templatePrefix, templateSuffix]); // Re-apply selection if userCode or template changes
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const currentTextareaValue = e.target.value;
     const currentSelectionStart = e.target.selectionStart;
-    // const currentSelectionEnd = e.target.selectionEnd; // Not directly used but good to have if needed
 
     if (currentTextareaValue.startsWith(templatePrefix) && currentTextareaValue.endsWith(templateSuffix)) {
       const extractedUserCode = currentTextareaValue.substring(
@@ -91,14 +67,13 @@ export const CodeInput: React.FC<CodeInputProps> = ({
       );
 
       if (extractedUserCode === PLACEHOLDER_MARKER && userCode === '') {
-        // This case means placeholder was focused, no actual change to user code
-        // Or user deleted everything back to placeholder
-        if (userCode !== '') setUserCode(''); // only update if it was not already empty
+         // User might have clicked into placeholder or deleted everything back to it.
+         // Only update if userCode was not already empty to avoid unnecessary re-renders.
+        if (userCode !== '') setUserCode('');
       } else if (extractedUserCode !== userCode) {
          setUserCode(extractedUserCode === PLACEHOLDER_MARKER ? '' : extractedUserCode);
       }
       
-      // Preserve cursor position within the editable area
       const newCursorPos = Math.min(
         Math.max(currentSelectionStart, templatePrefix.length), 
         templatePrefix.length + (extractedUserCode === PLACEHOLDER_MARKER ? PLACEHOLDER_MARKER.length : extractedUserCode.length)
@@ -107,13 +82,14 @@ export const CodeInput: React.FC<CodeInputProps> = ({
 
     } else {
       // User tried to edit the template prefix or suffix. Revert.
-      // Force re-render with current valid userCode to snap back.
       const prevUserCodeDisplay = userCode || PLACEHOLDER_MARKER;
+      // Attempt to restore cursor to a logical position within the previous user code part.
       const prevCursorStartInUserCode = (selection?.start || templatePrefix.length) - templatePrefix.length;
-      
       const safePrevCursorStartInUserCode = Math.min(Math.max(0, prevCursorStartInUserCode), prevUserCodeDisplay.length);
       const newCursorPos = templatePrefix.length + safePrevCursorStartInUserCode;
       setSelection({ start: newCursorPos, end: newCursorPos });
+      // Force re-render by updating a state or simply let the controlled component snap back.
+      // The value prop will enforce the correct display with current userCode and dynamic template parts.
     }
   };
 
@@ -143,7 +119,11 @@ export const CodeInput: React.FC<CodeInputProps> = ({
         label="Select Language"
         options={SUPPORTED_LANGUAGES}
         value={language}
-        onChange={(e) => setLanguage(e.target.value as SupportedLanguage)}
+        onChange={(e) => {
+          // Optionally clear userCode when language changes to avoid confusion
+          // setUserCode(''); 
+          setLanguage(e.target.value as SupportedLanguage);
+        }}
         disabled={isLoading}
         aria-label="Select programming language"
       />
@@ -162,15 +142,20 @@ export const CodeInput: React.FC<CodeInputProps> = ({
             const target = e.target as HTMLTextAreaElement;
             setSelection({ start: target.selectionStart, end: target.selectionEnd });
           }}
-          onClick={(e: React.MouseEvent<HTMLTextAreaElement>) => { // Ensure cursor is in editable area on click
+          onClick={(e: React.MouseEvent<HTMLTextAreaElement>) => {
             const target = e.target as HTMLTextAreaElement;
             const clickPos = target.selectionStart;
             const userCodeLength = (userCode || PLACEHOLDER_MARKER).length;
-            if (clickPos < templatePrefix.length) {
-              target.setSelectionRange(templatePrefix.length, templatePrefix.length);
-            } else if (clickPos > templatePrefix.length + userCodeLength) {
-              target.setSelectionRange(templatePrefix.length + userCodeLength, templatePrefix.length + userCodeLength);
+            
+            const editableAreaStart = templatePrefix.length;
+            const editableAreaEnd = templatePrefix.length + userCodeLength;
+
+            if (clickPos < editableAreaStart) {
+              target.setSelectionRange(editableAreaStart, editableAreaStart);
+            } else if (clickPos > editableAreaEnd) {
+              target.setSelectionRange(editableAreaEnd, editableAreaEnd);
             }
+            // Update selection state after potentially moving the cursor
             setSelection({start: target.selectionStart, end: target.selectionEnd});
           }}
           disabled={isLoading}

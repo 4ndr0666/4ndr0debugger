@@ -9,26 +9,21 @@ import { SupportedLanguage } from './types';
 import { SUPPORTED_LANGUAGES } from './constants';
 
 const App: React.FC = () => {
-  const [userOnlyCode, setUserOnlyCode] = useState<string>(''); // Stores only the user's raw code
+  const [userOnlyCode, setUserOnlyCode] = useState<string>('');
   const [language, setLanguage] = useState<SupportedLanguage>(SUPPORTED_LANGUAGES[0].value);
   const [reviewFeedback, setReviewFeedback] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleReviewSubmit = useCallback(async (fullCodeToSubmit: string) => {
-    // The fullCodeToSubmit already has the user's code embedded in the template
-    // The button in CodeInput is disabled if userOnlyCode is empty,
-    // so no need for an additional check for empty userOnlyCode here.
-    
     setIsLoading(true);
     setError(null);
-    setReviewFeedback(null); // Clear previous feedback
+    setReviewFeedback(null);
 
     try {
-      // Pass the fully templated code to the review service
-      const feedback = await reviewCode(fullCodeToSubmit, language);
+      // The 'language' argument is no longer needed for reviewCode
+      const feedback = await reviewCode(fullCodeToSubmit);
       setReviewFeedback(feedback);
-      // Check if feedback itself is an error message from the service
       if (feedback.toLowerCase().startsWith("error:")) {
         setError(feedback);
         setReviewFeedback(null);
@@ -41,7 +36,8 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [language]); // userOnlyCode is not needed in dependency array as fullCodeToSubmit is passed in
+  }, []); // language is removed from dependency array as it's not directly used by reviewCode anymore.
+           // fullCodeToSubmit encapsulates language-specific templating.
 
   return (
     <div className="min-h-screen flex flex-col">

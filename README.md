@@ -1,22 +1,22 @@
 # 4ndr0⫌ebugger
 
-Welcome to 4ndr0⫌ebugger! This application leverages the power of Google's Gemini API to provide intelligent analysis, feedback and a completey revised and production ready revisoin of your code. Accepts all languages, and the AI will identify potential bugs, suggest improvements for quality and style, offer insights based on best practices and finally provide a complete and production ready revision.
+Welcome to the 4ndr0⫌ebugger! This application leverages the power of Google's Gemini PRO 2.5 API to provide intelligent analysis, feedback and a complete revision of your code. Submit code or code snippets in all languages, and the AI will help you identify potential bugs, suggest improvements for quality, style, offer insights and provide a complete and production ready revisision. 
 
-The application features a sleek, cyan-centric cyberpunk-inspired UI I call "electric glass". 
+The application features a sleek, cyan-centric and cyberpunk-inspired UI theme I call "electric glass".
 
-<!-- 
+<!--
 **Screenshot Placeholder:**
 Consider adding a screenshot or a GIF of the application in action here.
 Example:
-![Application Screenshot](path/to/your/screenshot.png) 
+![Application Screenshot](path/to/your/screenshot.png)
 -->
 
 ## Features
 
-*   **AI-Powered Code Analysis:** Get feedback on code quality, bugs, style, and potential improvements followed by a complete and production ready revision using the Gemini API.
+*   **AI-Powered Code Analysis & Generation:** Get feedback on code quality, bugs, style, potential improvements and a completed revision using the Gemini PRO 2.5 API.
 *   **Multiple Language Support:** Review code in JavaScript, Python, Java, C#, Shell Script, and many more.
 *   **Structured Feedback:** AI responses are formatted in markdown for clear readability, including code block examples.
-*   **Persistent Code Template:** Input your code into a predefined template designed to provide context to the AI for a complete revision to be provided. The template guides the AI to perform a meticulous revision based on established guidelines and will output a complete rewrite of your code.
+*   **Persistent Code Template:** Input your code into a predefined template, "PASTE CODE HERE", designed to provide context to the AI for more targeted reviews that are language specific. 
 *   **Customizable Prompts:** The underlying prompts and system instructions for the AI can be modified (see `constants.ts`).
 *   **Responsive Design:** User interface adapts to various screen sizes.
 *   **Thematic UI:** My unique "electric glass" dark theme provides a visually appealing experience.
@@ -118,12 +118,12 @@ The application should now load, and the API Key banner should indicate that the
 
 ## Code Input Template
 
-The application uses a specific template for code input with general guidelines for shellscripts. This template is defined in `components/CodeInput.tsx` and includes:
+The application uses a specific template for code input. This template is defined in `components/CodeInput.tsx` and includes:
 *   Code fences (```shell ... ```) where your code should be pasted.
-*   The template can be edited as you like and tailored for whatever code you are reviewing.
-*   The "## Summary" section contains detailed instructions for shellscripts by default. 
+*   A "## Summary" section with detailed instructions for the AI reviewer.
+*   A list of criteria and considerations for the AI to focus on.
 
-Pasting your code within this template helps guide the Gemini model to provide more relevant and comprehensive feedback according to the established guidelines. The user interface restricts editing to only the `PASTE CODE HERE` section. I will change this in the upcoming release so that you can edit whichever section you like.
+Pasting your code within this template helps guide the Gemini model to provide more relevant and comprehensive feedback according to the established guidelines. The user interface restricts editing to only the `PASTE CODE HERE` section.
 
 ## Customization
 
@@ -143,4 +143,4 @@ You can customize various aspects of the AI's behavior:
 
 ---
 
-Enjoy using 4ndr0⫌ebugger!
+Enjoy using the AI Code 4ndr0⫌ebugger!
