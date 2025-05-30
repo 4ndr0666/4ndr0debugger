@@ -1,6 +1,6 @@
 # 4ndr0⫌ebugger
 
-Welcome to the 4ndr0⫌ebugger! This application leverages the power of Google's Gemini PRO 2.5 API to provide intelligent analysis, feedback and a complete revision of your code. Submit code or code snippets in all languages, and the AI will help you identify potential bugs, suggest improvements for quality, style, offer insights and provide a complete and production ready revisision. 
+Welcome to the 4ndr0⫌ebugger! This application leverages the power of Google's Gemini PRO 2.5 API to provide intelligent analysis, feedback and a complete revision of your code. Submit code or code snippets in all languages, and the AI will help you identify potential bugs, suggest improvements for quality, style, offer insights and provide a complete and production ready revisision.
 
 The application features a sleek, cyan-centric and cyberpunk-inspired UI theme I call "electric glass".
 
@@ -16,7 +16,7 @@ Example:
 *   **AI-Powered Code Analysis & Generation:** Get feedback on code quality, bugs, style, potential improvements and a completed revision using the Gemini PRO 2.5 API.
 *   **Multiple Language Support:** Review code in JavaScript, Python, Java, C#, Shell Script, and many more.
 *   **Structured Feedback:** AI responses are formatted in markdown for clear readability, including code block examples.
-*   **Persistent Code Template:** Input your code into a predefined template, "PASTE CODE HERE", designed to provide context to the AI for more targeted reviews that are language specific. 
+*   **Persistent Code Template:** Input your code into a predefined template, "PASTE CODE HERE", designed to provide context to the AI for more targeted reviews that are language specific.
 *   **Customizable Prompts:** The underlying prompts and system instructions for the AI can be modified (see `constants.ts`).
 *   **Responsive Design:** User interface adapts to various screen sizes.
 *   **Thematic UI:** My unique "electric glass" dark theme provides a visually appealing experience.
@@ -42,8 +42,8 @@ This project is designed to be run directly in a browser without a complex build
 
 If you've cloned a repository:
 ```bash
-git clone <repository-url>
-cd <repository-directory>
+git clone https://github.com/4ndr0666/4ndr0debugger
+cd 4ndr0debugger
 ```
 If you have the files directly, ensure they are in a single directory.
 
