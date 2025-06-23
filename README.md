@@ -1,4 +1,3 @@
-
 # 4ndr0⫌ebugger (AI Code Reviewer)
 
 Welcome to 4ndr0⫌ebugger! This application leverages the power of Google's Gemini API, specifically the \`gemini-2.5-flash-preview-04-17\` model, to provide intelligent analysis and feedback on your code. Submit code snippets in various languages, and the AI will help you identify potential bugs, suggest improvements for quality and style, and offer insights based on best practices, aiming to guide you towards production-ready revisions.
