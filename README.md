@@ -1,6 +1,7 @@
-# 4ndr0⫌ebugger
 
-Welcome to the 4ndr0⫌ebugger! This application leverages the power of Google's Gemini PRO 2.5 API to provide intelligent analysis, feedback and a complete revision of your code. Submit code or code snippets in all languages, and the AI will help you identify potential bugs, suggest improvements for quality, style, offer insights and provide a complete and production ready revisision.
+# 4ndr0⫌ebugger (AI Code Reviewer)
+
+Welcome to 4ndr0⫌ebugger! This application leverages the power of Google's Gemini API, specifically the \`gemini-2.5-flash-preview-04-17\` model, to provide intelligent analysis and feedback on your code. Submit code snippets in various languages, and the AI will help you identify potential bugs, suggest improvements for quality and style, and offer insights based on best practices, aiming to guide you towards production-ready revisions.
 
 The application features a sleek, cyan-centric and cyberpunk-inspired UI theme I call "electric glass".
 
@@ -13,11 +14,11 @@ Example:
 
 ## Features
 
-*   **AI-Powered Code Analysis & Generation:** Get feedback on code quality, bugs, style, potential improvements and a completed revision using the Gemini PRO 2.5 API.
-*   **Multiple Language Support:** Review code in JavaScript, Python, Java, C#, Shell Script, and many more.
+*   **AI-Powered Code Analysis & Feedback:** Get detailed feedback on code quality, bugs, style, and potential improvements using the Gemini API. For some languages, like Shell Script, the AI is prompted for a complete revision.
+*   **Multiple Language Support:** Review code in JavaScript, Python, Java, C#, Shell Script, and many more, each with tailored review criteria.
 *   **Structured Feedback:** AI responses are formatted in markdown for clear readability, including code block examples.
-*   **Persistent Code Template:** Input your code into a predefined template, "PASTE CODE HERE", designed to provide context to the AI for more targeted reviews that are language specific.
-*   **Customizable Prompts:** The underlying prompts and system instructions for the AI can be modified (see `constants.ts`).
+*   **Dynamic Language-Specific Templates:** Input your code into a predefined, language-specific template. This provides context to the AI for more targeted reviews based on established guidelines for each language.
+*   **Customizable AI Behavior:** The underlying system instructions and language-specific review criteria for the AI can be modified (see `constants.ts`).
 *   **Responsive Design:** User interface adapts to various screen sizes.
 *   **Thematic UI:** My unique "electric glass" dark theme provides a visually appealing experience.
 *   **API Key Status Banner:** Informs the user if the Gemini API key is configured.
@@ -42,8 +43,8 @@ This project is designed to be run directly in a browser without a complex build
 
 If you've cloned a repository:
 ```bash
-git clone https://github.com/4ndr0666/4ndr0debugger
-cd 4ndr0debugger
+git clone <repository-url>
+cd <repository-directory>
 ```
 If you have the files directly, ensure they are in a single directory.
 
@@ -70,7 +71,7 @@ The application requires a Gemini API key to function. It expects this key to be
     **Example placement in `index.html` (within `<head>`):**
     ```html
     <head>
-      <meta charset="UTF-R-8" />
+      <meta charset="UTF-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       <title>AI Code Reviewer</title>
       <script src="https://cdn.tailwindcss.com"></script>
@@ -111,19 +112,18 @@ The application should now load, and the API Key banner should indicate that the
 
 ## How to Use
 
-1.  **Select Language:** Choose the programming language of the code you want to review from the "Select Language" dropdown.
-2.  **Paste Code:** The input area provides a template. Paste your code snippet into the section marked `PASTE CODE HERE` within the pre-filled template. The rest of the template provides instructions and context to the Gemini AI model.
+1.  **Select Language:** Choose the programming language of the code you want to review from the "Select Language" dropdown. This will also load language-specific review criteria into the input template.
+2.  **Paste Code:** The input area provides a template. Paste your code snippet into the section marked `PASTE CODE HERE` within the pre-filled template. The rest of the template provides language-specific instructions and context to the Gemini AI model.
 3.  **Submit for Review:** Click the "Review Code" button.
 4.  **View Feedback:** The AI's review will appear in the "Review Feedback" panel. This panel will show a loading indicator while the AI processes your request. Any errors during the API call will also be displayed here.
 
 ## Code Input Template
 
-The application uses a specific template for code input. This template is defined in `components/CodeInput.tsx` and includes:
-*   Code fences (```shell ... ```) where your code should be pasted.
-*   A "## Summary" section with detailed instructions for the AI reviewer.
-*   A list of criteria and considerations for the AI to focus on.
+The application uses language-specific templates for code input. The structure for these templates is dynamically generated by the `generateReviewerTemplate` function in `constants.ts`. This function incorporates:
+*   Code fences (e.g., \`\`\`javascript ... \`\`\`) appropriate for the selected language, with a `PASTE CODE HERE` marker for your code.
+*   A "## Summary for [Language]" section with detailed, language-specific instructions and criteria for the AI reviewer, sourced from `LANGUAGE_SPECIFIC_INSTRUCTIONS` in `constants.ts`.
 
-Pasting your code within this template helps guide the Gemini model to provide more relevant and comprehensive feedback according to the established guidelines. The user interface restricts editing to only the `PASTE CODE HERE` section.
+Pasting your code within this template helps guide the Gemini model to provide more relevant and comprehensive feedback according to the established guidelines for each language. The user interface restricts editing to only the `PASTE CODE HERE` section.
 
 ## Customization
 
@@ -133,8 +133,7 @@ You can customize various aspects of the AI's behavior:
 
 *   **Model:** The Gemini model used is `gemini-2.5-flash-preview-04-17`, defined in `constants.ts` (`GEMINI_MODEL_NAME`). You can change this to other compatible models if needed.
 *   **System Instruction:** The high-level instruction given to the AI is defined in `constants.ts` (`SYSTEM_INSTRUCTION`).
-*   **Default Prompt Template:** The structure of the prompt sent to the Gemini API (which includes your code and selected language) is defined in `constants.ts` (`DEFAULT_PROMPT_TEMPLATE`).
-*   **Input Code Template:** The template visible in the UI is defined in `components/CodeInput.tsx` (`fullTemplate`).
+*   **Language-Specific Instructions:** The detailed review criteria and the prompt structure for each language are defined in `LANGUAGE_SPECIFIC_INSTRUCTIONS` and the `generateReviewerTemplate` function within `constants.ts`.
 
 ### Supported Languages
 
@@ -143,4 +142,4 @@ You can customize various aspects of the AI's behavior:
 
 ---
 
-Enjoy using the AI Code 4ndr0⫌ebugger!
+Enjoy using 4ndr0⫌ebugger!
