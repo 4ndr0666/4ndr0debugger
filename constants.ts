@@ -1,16 +1,35 @@
 
 import { LanguageOption, SupportedLanguage } from './types';
 
-export const GEMINI_MODEL_NAME = 'gemini-2.5-flash-preview-04-17';
+export const GEMINI_MODEL_NAME = 'gemini-2.5-flash';
 
+// --- For Code Review ---
 export const SYSTEM_INSTRUCTION = "You are an expert AI code reviewer. Your feedback should be constructive, clear, precise, and actionable. Focus on code quality, best practices, potential bugs, security vulnerabilities, and performance optimizations. When suggesting changes, provide brief explanations and, if appropriate, example code snippets. Format your review clearly using markdown, including code blocks for examples.";
+
+// --- For Documentation Generation ---
+export const DOCS_SYSTEM_INSTRUCTION = "You are an expert technical writer AI. Your task is to generate clear, concise, and comprehensive documentation for the provided code snippet. The documentation should be easy for other developers to understand. Format your output in clean markdown.";
+export const DOCS_INSTRUCTION = `## Documentation Generation Task
+
+Based on the code provided above, please generate comprehensive documentation. The documentation should include the following sections where applicable:
+
+1.  **Summary:** A brief, high-level overview of what the code does.
+2.  **Function/Class/Component Details:**
+    *   For each function, class, or component, provide a detailed description.
+    *   **Parameters/Props:** List each parameter/prop, its type, and a clear description of its purpose (e.g., using @param format).
+    *   **Return Value:** Describe what the function returns (e.g., using @returns format).
+    *   **Throws:** List any errors or exceptions that might be thrown.
+3.  **Usage Example:** Provide a clear and practical code snippet demonstrating how to use the code.
+4.  **Dependencies:** Mention any external libraries or modules the code depends on.
+
+Format the entire output in well-structured markdown. Use code blocks for examples and inline code for variable names, function names, etc.`;
+
 
 export const PLACEHOLDER_MARKER = "PASTE CODE HERE";
 
 export const LANGUAGE_SPECIFIC_INSTRUCTIONS: Record<SupportedLanguage, string> = {
   [SupportedLanguage.JAVASCRIPT]: `## Summary for JavaScript
 
-To minimally guide your thought processes, ensure the following can be said about your proposed revision:
+To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
 
 - **Type Coercion & Equality:** Consistently uses strict equality (\`===\` and \`!==\`) to prevent unexpected type coercion bugs.
 - **Variable Scoping:** Correctly uses \`let\` and \`const\` for block-scoped variable declarations, avoiding \`var\`.
@@ -23,10 +42,12 @@ To minimally guide your thought processes, ensure the following can be said abou
 - **\`this\` Keyword Context:** Shows correct understanding and binding of \`this\` in various contexts (functions, classes, arrow functions, event handlers).
 - **Performance Considerations:** Avoids common performance bottlenecks such as excessive DOM manipulations in loops, blocking operations on the main thread, or inefficient algorithms.
 - **Code Style & Readability:** Adheres to a consistent code style (e.g., consistent naming conventions like camelCase, indentation, comments where necessary).
-- **Security:** Actively guards against common web vulnerabilities (e.g., XSS, CSRF if applicable) and validates/sanitizes all external data.`,
+- **Security:** Actively guards against common web vulnerabilities (e.g., XSS, CSRF if applicable) and validates/sanitizes all external data.
+
+After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`//\` syntax.**`,
   [SupportedLanguage.TYPESCRIPT]: `## Summary for TypeScript
 
-To minimally guide your thought processes, ensure the following can be said about your proposed revision:
+To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
 
 - **Type Safety:** Leverages TypeScript's type system effectively; uses specific types over \`any\` where possible. Interfaces and custom types are well-defined.
 - **Strict Null Checks:** Code is written with \`strictNullChecks\` in mind, handling \`null\` and \`undefined\` explicitly.
@@ -39,10 +60,12 @@ To minimally guide your thought processes, ensure the following can be said abou
 - **Readability & Maintainability:** Code is well-structured, with clear type annotations enhancing understanding.
 - **Compatibility:** Considers JavaScript interoperability and declaration files (\`.d.ts\`) if creating libraries.
 - **Build Process:** Assumes code will be compiled; avoids TypeScript-specific syntax that might cause issues in plain JavaScript environments if not properly handled by a build step.
-- **Utility Types:** Effectively uses built-in utility types (e.g., \`Partial\`, \`Readonly\`, \`Pick\`, \`Omit\`) to transform and manage types.`,
+- **Utility Types:** Effectively uses built-in utility types (e.g., \`Partial\`, \`Readonly\`, \`Pick\`, \`Omit\`) to transform and manage types.
+
+After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`//\` syntax.**`,
   [SupportedLanguage.PYTHON]: `## Summary for Python
 
-To minimally guide your thought processes, ensure the following can be said about your proposed revision:
+To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
 
 - **PEP 8 Compliance:** Adheres to PEP 8 style guidelines for code layout, naming conventions (snake_case), and comments/docstrings.
 - **Idiomatic Python:** Uses Pythonic constructs and built-in functions/libraries where appropriate (e.g., list comprehensions, generators, context managers \`with\` statement).
@@ -55,10 +78,12 @@ To minimally guide your thought processes, ensure the following can be said abou
 - **Docstrings & Type Hinting:** Includes comprehensive docstrings for modules, classes, and functions. Uses type hints (PEP 484) for improved readability and static analysis.
 - **Resource Management:** Ensures proper cleanup of resources (e.g., files, network connections) using \`with\` statements or \`finally\` blocks.
 - **Performance:** Aware of potential performance bottlenecks, chooses efficient algorithms and data structures.
-- **Security:** If dealing with web applications or external input, guards against common vulnerabilities (e.g., SQL injection, command injection, insecure deserialization).`,
+- **Security:** If dealing with web applications or external input, guards against common vulnerabilities (e.g., SQL injection, command injection, insecure deserialization).
+
+After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using the \`#\` syntax.**`,
   [SupportedLanguage.JAVA]: `## Summary for Java
 
-To minimally guide your thought processes, ensure the following can be said about your proposed revision:
+To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
 
 - **Object-Oriented Principles:** Strongly adheres to OOP principles (Encapsulation, Inheritance, Polymorphism, Abstraction).
 - **SOLID Principles:** Design reflects SOLID principles where applicable.
@@ -72,10 +97,12 @@ To minimally guide your thought processes, ensure the following can be said abou
 - **Naming Conventions:** Follows standard Java naming conventions (e.g., PascalCase for classes, camelCase for methods/variables).
 - **Javadoc:** Includes comprehensive Javadoc comments for public APIs.
 - **Memory Management:** While Java has garbage collection, avoids memory leaks (e.g., unclosed resources, loitering objects).
-- **Design Patterns:** Applies appropriate design patterns to solve common problems.`,
+- **Design Patterns:** Applies appropriate design patterns to solve common problems.
+
+After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`//\` syntax.**`,
   [SupportedLanguage.CSHARP]: `## Summary for C#
 
-To minimally guide your thought processes, ensure the following can be said about your proposed revision:
+To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
 
 - **Object-Oriented Principles:** Code demonstrates strong adherence to OOP principles.
 - **Properties & Indexers:** Uses properties (auto-implemented or full) over public fields. Uses indexers where appropriate.
@@ -89,10 +116,12 @@ To minimally guide your thought processes, ensure the following can be said abou
 - **Naming Conventions:** Follows Microsoft's C# naming conventions (PascalCase for types/methods/properties, camelCase for local variables/parameters).
 - **XML Documentation Comments:** Includes XML documentation comments for public APIs.
 - **Value Types vs. Reference Types:** Shows clear understanding of the distinction and their implications.
-- **Pattern Matching (C# 7+):** Utilizes pattern matching features to simplify conditional logic.`,
+- **Pattern Matching (C# 7+):** Utilizes pattern matching features to simplify conditional logic.
+
+After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`//\` syntax.**`,
   [SupportedLanguage.CPP]: `## Summary for C++
 
-To minimally guide your thought processes, ensure the following can be said about your proposed revision:
+To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
 
 - **RAII (Resource Acquisition Is Initialization):** Strictly adheres to RAII for resource management (memory, files, locks, etc.), using smart pointers (\`std::unique_ptr\`, \`std::shared_ptr\`) and custom RAII wrappers.
 - **Memory Management:** Avoids manual \`new\`/\`delete\` where smart pointers or STL containers can be used. No memory leaks, dangling pointers, or double frees.
@@ -105,10 +134,12 @@ To minimally guide your thought processes, ensure the following can be said abou
 - **Undefined Behavior:** Code is free from constructs that lead to undefined behavior.
 - **Performance:** Writes efficient code, considering algorithm complexity and C++ performance characteristics.
 - **Templates & Metaprogramming (if applicable):** Uses templates effectively for generic programming.
-- **Readability:** Code is well-formatted, commented, and follows consistent naming conventions.`,
+- **Readability:** Code is well-formatted, commented, and follows consistent naming conventions.
+
+After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`//\` syntax.**`,
   [SupportedLanguage.GO]: `## Summary for Go
 
-To minimally guide your thought processes, ensure the following can be said about your proposed revision:
+To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
 
 - **Error Handling:** Explicitly checks for errors returned from function calls and handles them appropriately (typically by returning them up the call stack). Avoids panic for ordinary errors.
 - **Goroutines & Channels (Concurrency):** Uses goroutines and channels idiomatically for concurrent programming. Manages goroutine lifecycles and avoids deadlocks or race conditions.
@@ -121,10 +152,12 @@ To minimally guide your thought processes, ensure the following can be said abou
 - **Resource Management:** Manages resources carefully, especially in concurrent contexts.
 - **Zero Values:** Understands and utilizes zero values for types effectively.
 - **Pointers:** Uses pointers judiciously, understanding when to pass by value versus by pointer.
-- **Build & Dependencies:** Manages dependencies using Go Modules.`,
+- **Build & Dependencies:** Manages dependencies using Go Modules.
+
+After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`//\` syntax.**`,
   [SupportedLanguage.RUBY]: `## Summary for Ruby
 
-To minimally guide your thought processes, ensure the following can be said about your proposed revision:
+To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
 
 - **Ruby Idioms:** Employs idiomatic Ruby constructs (e.g., iterators like \`each\`, \`map\`, \`select\`; symbols; truthiness; blocks, procs, and lambdas).
 - **Readability & Expressiveness:** Code is expressive and reads like natural language where possible.
@@ -137,10 +170,12 @@ To minimally guide your thought processes, ensure the following can be said abou
 - **Testing (RSpec/Minitest):** Code is structured to be testable.
 - **Performance:** Aware of common Ruby performance characteristics and avoids obvious bottlenecks.
 - **Security (if Rails or web-related):** Guards against common web vulnerabilities (SQL injection, XSS, CSRF, mass assignment).
-- **Monkey Patching:** Avoids monkey patching core classes unless absolutely necessary and well-justified with minimal scope.`,
+- **Monkey Patching:** Avoids monkey patching core classes unless absolutely necessary and well-justified with minimal scope.
+
+After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using the \`#\` syntax.**`,
   [SupportedLanguage.PHP]: `## Summary for PHP
 
-To minimally guide your thought processes, ensure the following can be said about your proposed revision:
+To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
 
 - **Modern PHP Practices (PHP 7+):** Uses modern PHP features (e.g., strict types, return type declarations, arrow functions, null coalescing operator). Avoids deprecated features.
 - **Error Handling & Exceptions:** Uses exceptions for error handling over traditional PHP errors where appropriate. \`try-catch\` blocks are used effectively.
@@ -156,10 +191,12 @@ To minimally guide your thought processes, ensure the following can be said abou
 - **Session Management:** Implements secure session management if applicable.
 - **Readability & Maintainability:** Code is well-commented, organized, and easy to understand.
 - **Database Interaction:** Uses an appropriate abstraction layer (e.g., PDO) for database operations.
-- **API Design (if applicable):** If building an API, follows RESTful principles or other clear API design standards.`,
+- **API Design (if applicable):** If building an API, follows RESTful principles or other clear API design standards.
+
+After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`//\` syntax.**`,
   [SupportedLanguage.HTML]: `## Summary for HTML
 
-To minimally guide your thought processes, ensure the following can be said about your proposed revision:
+To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
 
 - **Semantic Markup:** Uses HTML5 semantic elements correctly (\`<article>\`, \`<aside>\`, \`<nav>\`, \`<section>\`, \`<header>\`, \`<footer>\`, etc.) to convey meaning and structure.
 - **Accessibility (A11y):**
@@ -174,10 +211,12 @@ To minimally guide your thought processes, ensure the following can be said abou
 - **Headings:** Uses heading elements (\`<h1>\` - \`<h6>\`) hierarchically to structure content.
 - **Lists:** Uses \`<ul>\`, \`<ol>\`, and \`<dl>\` appropriately for list-based content.
 - **Readability & Maintainability:** Code is well-indented and comments are used for complex sections if necessary.
-- **Performance:** Avoids excessive or deeply nested DOM elements where simpler structures suffice. Optimizes images if referenced.`,
+- **Performance:** Avoids excessive or deeply nested DOM elements where simpler structures suffice. Optimizes images if referenced.
+
+After your detailed review, provide a complete, fully-functional, and production-ready revision of the markup. This revision must incorporate all your feedback. Present the revised markup in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`<!-- -->\` syntax.**`,
   [SupportedLanguage.CSS]: `## Summary for CSS
 
-To minimally guide your thought processes, ensure the following can be said about your proposed revision:
+To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
 
 - **Readability & Maintainability:**
   - CSS is well-organized, possibly grouped by component or section.
@@ -194,10 +233,12 @@ To minimally guide your thought processes, ensure the following can be said abou
   - Considers techniques like critical CSS if applicable for large sites.
 - **Cross-Browser Compatibility:** Writes CSS that works consistently across modern browsers, possibly using vendor prefixes where necessary (though often handled by autoprefixers in build tools).
 - **Accessibility:** Ensures sufficient color contrast. Focus states for interactive elements are clear.
-- **Modularity:** CSS is modular and avoids global styles that are hard to override or lead to unintended side effects.`,
+- **Modularity:** CSS is modular and avoids global styles that are hard to override or lead to unintended side effects.
+
+After your detailed review, provide a complete, fully-functional, and production-ready revision of the stylesheet. This revision must incorporate all your feedback. Present the revised stylesheet in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`/* */\` syntax.**`,
   [SupportedLanguage.MARKDOWN]: `## Summary for Markdown
 
-To minimally guide your thought processes, ensure the following can be said about your proposed revision:
+To minimally guide your thought processes, ensure your review addresses the following points:
 
 - **Syntax Correctness:** Adheres to standard Markdown syntax (e.g., CommonMark or GFM if specified). All elements are correctly formatted.
 - **Readability:** The raw Markdown is easy to read and understand. Formatting choices enhance the readability of the rendered output.
@@ -211,10 +252,12 @@ To minimally guide your thought processes, ensure the following can be said abou
 - **Blockquotes:** Uses blockquotes (\`>\`) for quotations.
 - **Tables (if GFM):** If GitHub Flavored Markdown is implied, tables are formatted correctly.
 - **Line Breaks:** Understands how Markdown handles line breaks (e.g., requiring two spaces at the end of a line for a \`<br>\` or a blank line for a new paragraph).
-- **Minimalism:** Avoids overly complex or unnecessary Markdown where simpler formatting would suffice.`,
+- **Minimalism:** Avoids overly complex or unnecessary Markdown where simpler formatting would suffice.
+
+Your review should be in markdown format. Do not provide a separate "revision" block for markdown, but you can include corrected examples within your review.`,
   [SupportedLanguage.SQL]: `## Summary for SQL
 
-To minimally guide your thought processes, ensure the following can be said about your proposed revision:
+To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
 
 - **Clarity & Readability:** SQL queries are well-formatted (e.g., consistent indentation, capitalization of keywords) and easy to understand.
 - **Correctness:** The query achieves the intended result accurately.
@@ -229,30 +272,24 @@ To minimally guide your thought processes, ensure the following can be said abou
 - **Standard SQL:** Uses ANSI SQL standard syntax where possible for portability, unless specific database dialect features are intentionally and appropriately used.
 - **Transaction Management (if DML):** For Data Manipulation Language (DML) statements (\`INSERT\`, \`UPDATE\`, \`DELETE\`), consider if they should be part of a transaction in the application logic.
 - **Normalization:** Table structures implied by the query should ideally reflect good normalization principles (though this is about schema design, queries interact with it).
-- **Clarity of Intent:** Query clearly expresses what data is being requested or manipulated. Complex logic is broken down or commented if necessary.`,
+- **Clarity of Intent:** Query clearly expresses what data is being requested or manipulated. Complex logic is broken down or commented if necessary.
+
+After your detailed review, provide a complete, fully-functional, and production-ready revision of the query. This revision must incorporate all your feedback. Present the revised query in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`--\` syntax.**`,
   [SupportedLanguage.SHELL]: `## Summary for Shell Script
 
-Proceed to meticulously revise the code and fully implement all of your recommendations--from variable names to logic flows--with no placeholders or omitted lines directly within your response. Consistently accommodate for all code changes with cohesion. Ensure all code respects the established hierarchical order to satisfy modular execution and workflow. Work around the existing code flow without leaving anything out. Examine all functions in isolation using step-by-step validation in order to confirm they work before integrating them into your final revision. Last, ensure to reference the Shellcheck codebase guidelines and manually ensure all coinciding conflicts have been correctly linted. To minimally guide your thought processes, ensure the following can be said about your proposed revision: 
+First, provide a detailed review based on the following criteria. Pay close attention to Shellcheck guidelines and general best practices.
 
-- Well-defined and thoroughly fleshed out. 
-- All imports and paths are clearly defined. 
-- Accessible. 
-- Idempotent. 
-- Locally scoped. 
-- Declaration and assignment are separate to avoid masking return values.
-- \`local\` may only be used inside functions, use \`declare\` or plain assignment outside functions. 
-- All parsing issues, extraneous input, unintended newlines and/or unintended separators are absent. 
-- No bad splitting. 
-- Unambiguous variables and values. 
-- Exit status of the relevant command is explicitly checked to ensure consistent behavior. 
-- \`&>\` for redirecting both stdout and stderr (use \`>file 2>&1\` instead). 
-- Exports are properly recognized. 
-- No cyclomatic complexity.
+- **Linting:** Code should be free of common Shellcheck warnings.
+- **Robustness:** Ensure exit statuses are checked, variables are quoted to prevent word splitting and globbing, and input is handled safely. Use \`set -euo pipefail\` where appropriate.
+- **Clarity & Style:** Code should be readable, well-formatted, and use clear variable names. Use \`local\` for variables inside functions.
+- **Correctness:** Logic should be sound and free from common pitfalls like incorrect redirection (\`&>\` should be \`>file 2>&1\`).
+- **Idempotency & Scoping:** Scripts should be idempotent where possible. Variables should be properly scoped.
+- **Complexity:** Avoid unnecessary cyclomatic complexity.
 
-**Additional Considerations**: Confirm whether or not ambiguity exists in your revision, then proceed with the required steps to definitively resolve any remaining ambiguity. This is done by ensuring all actual values are provided over arbitrary variables ensuring no unbound variables. This structured approach ensures that each phase of the project is handled with a focus on meticulous detail, systematic progression, and continuous improvement, ensuring all underlying logic remains intact. Finally, precisely parse the complete, fully-functional, error-free and production ready revision to stdout for testing.`,
+After your detailed review, provide a complete, fully-functional, and production-ready revision of the script. This revision must incorporate all your feedback and adhere to the guidelines above. Present the revised script in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using the \`#\` syntax.**`,
   [SupportedLanguage.KOTLIN]: `## Summary for Kotlin
 
-To minimally guide your thought processes, ensure the following can be said about your proposed revision:
+To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
 
 - **Null Safety:** Effectively utilizes Kotlin's null safety features (\`?\`, \`!!\`, \`?.\`, \`?:\`, \`let\`). Avoids unnecessary \`!!\` assertions.
 - **Immutability:** Prefers immutable data structures (\`val\`, \`listOf\`, \`mapOf\`, \`setOf\`, data class \`copy\`) where possible.
@@ -264,10 +301,12 @@ To minimally guide your thought processes, ensure the following can be said abou
 - **Sealed Classes & When Expressions:** Uses sealed classes and exhaustive \`when\` expressions for modeling restricted hierarchies and state management.
 - **Extension Functions/Properties:** Uses extension functions/properties to enhance existing classes judiciously.
 - **Error Handling:** Uses Kotlin's exception handling mechanisms (\`try-catch-finally\`) or functional approaches (e.g., \`Result\` type) appropriately.
-- **Coding Conventions:** Follows official Kotlin coding conventions.`,
+- **Coding Conventions:** Follows official Kotlin coding conventions.
+
+After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`//\` syntax.**`,
   [SupportedLanguage.SWIFT]: `## Summary for Swift
 
-To minimally guide your thought processes, ensure the following can be said about your proposed revision:
+To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
 
 - **Type Safety & Optionals:** Effectively uses Swift's type system and handles optionals safely (\`?\`, \`!\`, optional binding \`if let\`/\`guard let\`, optional chaining, nil-coalescing operator \`??\`). Avoids forced unwrapping (\`!\`) unless safety is guaranteed.
 - **Value vs. Reference Types:** Demonstrates clear understanding and appropriate use of value types (structs, enums) and reference types (classes). Prefers value types where appropriate.
@@ -280,13 +319,15 @@ To minimally guide your thought processes, ensure the following can be said abou
 - **Concurrency (Grand Central Dispatch, async/await):** Uses GCD or modern Swift concurrency (\`async/await\`, Actors) correctly and safely.
 - **API Design Guidelines:** Follows Swift API Design Guidelines for naming and clarity.
 - **Higher-Order Functions:** Utilizes higher-order functions like \`map\`, \`filter\`, \`reduce\` for collection processing.
-- **Readability:** Code is clear, concise, and follows Swift's expressive style.`,
+- **Readability:** Code is clear, concise, and follows Swift's expressive style.
+
+After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`//\` syntax.**`,
   [SupportedLanguage.RUST]: `## Summary for Rust
 
-To minimally guide your thought processes, ensure the following can be said about your proposed revision:
+To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
 
 - **Ownership & Borrowing:** Correctly applies Rust's ownership, borrowing (immutable \`&\` and mutable \`&mut\`), and lifetime rules. Code compiles without fighting the borrow checker excessively.
-- **Memory Safety:** Code is memory safe, with no dangling pointers, data races, or use-after-free errors (as enforced by the compiler).
+- **Memory Safety:** Code is memory safe, with no data races, or use-after-free errors (as enforced by the compiler).
 - **Error Handling (\`Result\` & \`Option\`):** Uses \`Result<T, E>\` for recoverable errors and \`Option<T>\` for optional values idiomatically. Propagates errors using \`?\` operator. Avoids \`unwrap()\` or \`expect()\` in library code or where errors are expected.
 - **Pattern Matching:** Leverages powerful pattern matching with \`match\` expressions effectively.
 - **Traits & Generics:** Uses traits for defining shared behavior (similar to interfaces) and generics for writing abstract, reusable code.
@@ -296,10 +337,12 @@ To minimally guide your thought processes, ensure the following can be said abou
 - **Clippy Lints:** Code adheres to common Clippy lint suggestions for idiomatic and correct Rust.
 - **Unsafe Code:** Avoids \`unsafe\` blocks unless absolutely necessary, well-justified, and correctly implemented to uphold safety invariants.
 - **Documentation (\`rustdoc\`):** Includes documentation comments for public APIs.
-- **Performance:** Writes performant code, taking advantage of Rust's low-level control when needed.`,
+- **Performance:** Writes performant code, taking advantage of Rust's low-level control when needed.
+
+After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`//\` syntax.**`,
   [SupportedLanguage.OTHER]: `## Summary for Other (Generic)
 
-To minimally guide your thought processes, ensure the following can be said about your proposed revision:
+To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
 
 - **Clarity & Readability:** Code is well-formatted, uses clear and consistent naming conventions, and includes comments where logic is non-obvious.
 - **Correctness:** The code appears to achieve its stated purpose without obvious logical flaws.
@@ -310,7 +353,9 @@ To minimally guide your thought processes, ensure the following can be said abou
 - **Input Validation:** If the code processes external input, there are signs of basic validation or sanitization.
 - **Maintainability:** Code structure and comments suggest that it would be reasonably easy for another developer to understand and maintain.
 - **Efficiency:** No glaringly inefficient algorithms or operations are apparent for the given task.
-- **Consistency:** Follows a consistent style throughout the provided snippet.`,
+- **Consistency:** Follows a consistent style throughout the provided snippet.
+
+After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using the appropriate comment syntax for the language.**`,
 };
 
 
@@ -362,4 +407,9 @@ export const generateReviewerTemplate = (language: SupportedLanguage): string =>
   const instructions = LANGUAGE_SPECIFIC_INSTRUCTIONS[language] || LANGUAGE_SPECIFIC_INSTRUCTIONS[SupportedLanguage.OTHER];
 
   return `\`\`\`${languageTag}\n\n${PLACEHOLDER_MARKER}\n\n\`\`\`\n\n${instructions}`;
+};
+
+export const generateDocsTemplate = (language: SupportedLanguage): string => {
+  const languageTag = LANGUAGE_TAG_MAP[language] || '';
+  return `\`\`\`${languageTag}\n\n${PLACEHOLDER_MARKER}\n\n\`\`\`\n\n${DOCS_INSTRUCTION}`;
 };

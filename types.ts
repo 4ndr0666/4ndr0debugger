@@ -24,4 +24,18 @@ export interface LanguageOption {
   value: SupportedLanguage;
   label: string;
 }
-    
+
+export interface ChatMessage {
+  role: 'user' | 'model';
+  content: string;
+}
+
+export interface Version {
+  id: string;
+  name: string;
+  userCode: string;
+  fullPrompt: string;
+  feedback: string;
+  language: SupportedLanguage;
+  timestamp: number;
+}

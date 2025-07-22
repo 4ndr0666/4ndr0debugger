@@ -1,6 +1,6 @@
 # 4ndr0⫌ebugger (AI Code Reviewer)
 
-Welcome to 4ndr0⫌ebugger! This application leverages the power of Google's Gemini API, specifically the \`gemini-2.5-flash-preview-04-17\` model, to provide intelligent analysis and feedback on your code. Submit code snippets in various languages, and the AI will help you identify potential bugs, suggest improvements for quality and style, and offer insights based on best practices, aiming to guide you towards production-ready revisions.
+Welcome to 4ndr0⫌ebugger! This application leverages the power of Google's Gemini API, specifically the \`gemini-2.5-pro\` model, to provide intelligent analysis and feedback on your code. Submit code snippets in various languages, and the AI will help you identify potential bugs, suggest improvements for quality and style, and offer insights based on best practices, aiming to guide you towards production-ready revisions.
 
 The application features a sleek, cyan-centric and cyberpunk-inspired UI theme I call "electric glass".
 
@@ -14,6 +14,7 @@ Example:
 ## Features
 
 *   **AI-Powered Code Analysis & Feedback:** Get detailed feedback on code quality, bugs, style, and potential improvements using the Gemini API. For some languages, like Shell Script, the AI is prompted for a complete revision.
+*   **Follow-up Chat:** After receiving a review, use the "Follow-up" button to open a chat interface. This allows you to ask the AI questions about its feedback, maintaining the context of the original code and review for a persistent conversation.
 *   **Multiple Language Support:** Review code in JavaScript, Python, Java, C#, Shell Script, and many more, each with tailored review criteria.
 *   **Structured Feedback:** AI responses are formatted in markdown for clear readability, including code block examples.
 *   **Dynamic Language-Specific Templates:** Input your code into a predefined, language-specific template. This provides context to the AI for more targeted reviews based on established guidelines for each language.
@@ -115,6 +116,7 @@ The application should now load, and the API Key banner should indicate that the
 2.  **Paste Code:** The input area provides a template. Paste your code snippet into the section marked `PASTE CODE HERE` within the pre-filled template. The rest of the template provides language-specific instructions and context to the Gemini AI model.
 3.  **Submit for Review:** Click the "Review Code" button.
 4.  **View Feedback:** The AI's review will appear in the "Review Feedback" panel. This panel will show a loading indicator while the AI processes your request. Any errors during the API call will also be displayed here.
+5.  **Ask a Follow-up:** After a review is complete, click the "Follow-up" button. The code editor will be replaced by a chat window where you can ask questions about the review. The review panel on the right will update with the latest answer. Click "New Review" to exit the chat and start over.
 
 ## Code Input Template
 
@@ -122,7 +124,7 @@ The application uses language-specific templates for code input. The structure f
 *   Code fences (e.g., \`\`\`javascript ... \`\`\`) appropriate for the selected language, with a `PASTE CODE HERE` marker for your code.
 *   A "## Summary for [Language]" section with detailed, language-specific instructions and criteria for the AI reviewer, sourced from `LANGUAGE_SPECIFIC_INSTRUCTIONS` in `constants.ts`.
 
-Pasting your code within this template helps guide the Gemini model to provide more relevant and comprehensive feedback according to the established guidelines for each language. The user interface restricts editing to only the `PASTE CODE HERE` section.
+Pasting your code within this template helps guide the Gemini model to provide more relevant and comprehensive feedback according to the established guidelines for each language.
 
 ## Customization
 
@@ -130,7 +132,7 @@ You can customize various aspects of the AI's behavior:
 
 ### Gemini Model and Prompts
 
-*   **Model:** The Gemini model used is `gemini-2.5-flash-preview-04-17`, defined in `constants.ts` (`GEMINI_MODEL_NAME`). You can change this to other compatible models if needed.
+*   **Model:** The Gemini model used is `gemini-2.5-pro`, defined in `constants.ts` (`GEMINI_MODEL_NAME`). You can change this to other compatible models if needed.
 *   **System Instruction:** The high-level instruction given to the AI is defined in `constants.ts` (`SYSTEM_INSTRUCTION`).
 *   **Language-Specific Instructions:** The detailed review criteria and the prompt structure for each language are defined in `LANGUAGE_SPECIFIC_INSTRUCTIONS` and the `generateReviewerTemplate` function within `constants.ts`.
 
