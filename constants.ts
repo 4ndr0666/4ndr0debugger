@@ -1,10 +1,19 @@
 
-import { LanguageOption, SupportedLanguage } from './types';
+import { LanguageOption, SupportedLanguage, ProfileOption, ReviewProfile } from './types';
 
 export const GEMINI_MODEL_NAME = 'gemini-2.5-flash';
 
 // --- For Code Review ---
 export const SYSTEM_INSTRUCTION = "You are an expert AI code reviewer. Your feedback should be constructive, clear, precise, and actionable. Focus on code quality, best practices, potential bugs, security vulnerabilities, and performance optimizations. When suggesting changes, provide brief explanations and, if appropriate, example code snippets. Format your review clearly using markdown, including code blocks for examples.";
+
+export const PROFILE_SYSTEM_INSTRUCTIONS: Record<ReviewProfile, string> = {
+  [ReviewProfile.SECURITY]: "In addition to your standard review, pay special attention to security vulnerabilities. Analyze for common weaknesses like injection flaws, Cross-Site Scripting (XSS), insecure data handling, and secrets management. Provide specific, actionable advice to harden the code.",
+  [ReviewProfile.SUCKLESS]: "In addition to your standard review, analyze the code through the lens of the 'suckless' philosophy. Prioritize simplicity, clarity, and minimalism. Identify and suggest removing any unnecessary complexity, features, or abstractions. The goal is code that is simple, small, and does one thing well.",
+  [ReviewProfile.MODULAR]: "In addition to your standard review, focus on modularity and the Single Responsibility Principle. Identify areas where code could be better organized into smaller, reusable, and more focused functions, classes, or modules. Suggest improvements for decoupling and creating clearer APIs between components.",
+  [ReviewProfile.IDIOMATIC]: "In addition to your standard review, focus heavily on whether the code is 'idiomatic' for the selected language. Point out where language-specific features, conventions, and standard library functions could be used to make the code more concise, readable, and natural for an experienced developer in that language.",
+  [ReviewProfile.DRY]: "In addition to your standard review, perform a strict analysis based on the 'Don't Repeat Yourself' (DRY) principle. Identify any duplicated code, logic, or data. Suggest ways to abstract and consolidate this repetition into reusable functions, variables, or other structures."
+};
+
 
 // --- For Documentation Generation ---
 export const DOCS_SYSTEM_INSTRUCTION = "You are an expert technical writer AI. Your task is to generate clear, concise, and comprehensive documentation for the provided code snippet. The documentation should be easy for other developers to understand. Format your output in clean markdown.";
@@ -379,6 +388,15 @@ export const SUPPORTED_LANGUAGES: LanguageOption[] = [
   { value: SupportedLanguage.RUST, label: 'Rust' },
   { value: SupportedLanguage.OTHER, label: 'Other' },
 ];
+
+export const REVIEW_PROFILES: ProfileOption[] = [
+  { value: ReviewProfile.SECURITY, label: 'Focus: Security' },
+  { value: ReviewProfile.SUCKLESS, label: 'Focus: Suckless/Minimalism' },
+  { value: ReviewProfile.MODULAR, label: 'Focus: Modularity' },
+  { value: ReviewProfile.IDIOMATIC, label: 'Focus: Idiomatic Code' },
+  { value: ReviewProfile.DRY, label: 'Focus: DRY Principle' },
+];
+
 
 // Simple map for language tag in markdown
 export const LANGUAGE_TAG_MAP: Record<SupportedLanguage, string> = {

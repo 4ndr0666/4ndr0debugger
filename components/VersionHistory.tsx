@@ -12,9 +12,7 @@ interface VersionHistoryProps {
 
 const LoadIcon: React.FC<{className?: string}> = ({ className }) => (
     <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h5M20 20v-5h-5" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M4 9a8 8 0 0113.53-5.53l-2.06 2.06" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M20 15a8 8 0 01-13.53 5.53l2.06-2.06" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
     </svg>
 );
 

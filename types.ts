@@ -20,6 +20,19 @@ export enum SupportedLanguage {
   OTHER = 'Other (Generic)',
 }
 
+export enum ReviewProfile {
+  SECURITY = 'Security',
+  SUCKLESS = 'Suckless',
+  MODULAR = 'Modular',
+  IDIOMATIC = 'Idiomatic',
+  DRY = 'DRY',
+}
+
+export interface ProfileOption {
+  value: ReviewProfile;
+  label: string;
+}
+
 export interface LanguageOption {
   value: SupportedLanguage;
   label: string;

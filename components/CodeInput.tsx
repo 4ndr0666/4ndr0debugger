@@ -1,9 +1,8 @@
-
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { SupportedLanguage, ChatMessage, Version } from '../types';
+import { SupportedLanguage, ChatMessage, Version, ReviewProfile } from '../types';
 import { Button } from './Button';
 import { Select } from './Select';
-import { SUPPORTED_LANGUAGES, generateReviewerTemplate, PLACEHOLDER_MARKER, generateDocsTemplate } from '../constants';
+import { SUPPORTED_LANGUAGES, generateReviewerTemplate, PLACEHOLDER_MARKER, generateDocsTemplate, REVIEW_PROFILES } from '../constants';
 import { LoadingSpinner } from './LoadingSpinner';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { VersionHistory } from './VersionHistory';
@@ -16,6 +15,8 @@ interface CodeInputProps {
   setUserCode: (code: string) => void;
   language: SupportedLanguage;
   setLanguage: (language: SupportedLanguage) => void;
+  reviewProfile: ReviewProfile | 'none';
+  setReviewProfile: (profile: ReviewProfile | 'none') => void;
   onSubmit: (fullCode: string) => void;
   onGenerateDocs: (fullCode: string) => void;
   isLoading: boolean;
@@ -110,6 +111,8 @@ const EditorView: React.FC<Omit<CodeInputProps, 'activeTab' | 'setActiveTab' | '
   setUserCode,
   language,
   setLanguage,
+  reviewProfile,
+  setReviewProfile,
   onSubmit,
   onGenerateDocs,
   isLoading,
@@ -145,15 +148,33 @@ const EditorView: React.FC<Omit<CodeInputProps, 'activeTab' | 'setActiveTab' | '
           Code to Review
         </span>
       </h2>
-      <Select
-        id="language-select"
-        label="Select Language"
-        options={SUPPORTED_LANGUAGES}
-        value={language}
-        onChange={(newLang) => setLanguage(newLang as SupportedLanguage)}
-        disabled={isLoading}
-        aria-label="Select programming language"
-      />
+      <div className="flex flex-col sm:flex-row sm:space-x-4 space-y-4 sm:space-y-0">
+        <div className="w-full sm:w-1/2">
+            <Select
+                id="language-select"
+                label="Select Language"
+                options={SUPPORTED_LANGUAGES}
+                value={language}
+                onChange={(newLang) => setLanguage(newLang as SupportedLanguage)}
+                disabled={isLoading}
+                aria-label="Select programming language"
+            />
+        </div>
+        <div className="w-full sm:w-1/2">
+            <Select
+                id="review-profile-select"
+                label="Select Review Profile (Optional)"
+                options={[
+                { value: 'none', label: 'Default Review' },
+                ...REVIEW_PROFILES,
+                ]}
+                value={reviewProfile}
+                onChange={(newProfile) => setReviewProfile(newProfile as ReviewProfile | 'none')}
+                disabled={isLoading}
+                aria-label="Select review profile"
+            />
+        </div>
+      </div>
       <div className="flex-grow relative">
         <textarea
           id="code-input"

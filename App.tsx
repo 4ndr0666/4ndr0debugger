@@ -6,16 +6,94 @@ import { CodeInput } from './components/CodeInput';
 import { ReviewOutput } from './components/ReviewOutput';
 import { ApiKeyBanner } from './components/ApiKeyBanner';
 import { generateContent } from './services/geminiService';
-import { SupportedLanguage, ChatMessage, Version } from './types';
-import { SUPPORTED_LANGUAGES, GEMINI_MODEL_NAME, SYSTEM_INSTRUCTION, DOCS_SYSTEM_INSTRUCTION } from './constants';
+import { SupportedLanguage, ChatMessage, Version, ReviewProfile } from './types';
+import { SUPPORTED_LANGUAGES, GEMINI_MODEL_NAME, SYSTEM_INSTRUCTION, DOCS_SYSTEM_INSTRUCTION, PROFILE_SYSTEM_INSTRUCTIONS } from './constants';
+import { Button } from './components/Button';
 
 type CodeInputTab = 'editor' | 'chat' | 'history';
 type LoadingAction = 'review' | 'docs' | null;
+
+// --- Save Version Modal Component ---
+interface SaveVersionModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: () => void;
+  versionName: string;
+  setVersionName: (name: string) => void;
+}
+
+const SaveVersionModal: React.FC<SaveVersionModalProps> = ({ isOpen, onClose, onSave, versionName, setVersionName }) => {
+  if (!isOpen) return null;
+
+  const handleSaveClick = () => {
+    if (versionName.trim()) {
+      onSave();
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSaveClick();
+    }
+  };
+
+  return (
+    <div 
+      className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 transition-opacity duration-300"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="save-modal-title"
+    >
+      <div 
+        className="bg-[#101827] rounded-lg shadow-xl shadow-[#156464]/50 w-full max-w-md p-6 border border-[#15adad]/60"
+        onClick={e => e.stopPropagation()} // Prevent clicks inside from closing the modal
+      >
+        <h2 id="save-modal-title" className="text-xl font-semibold text-center mb-4">
+           <span style={{
+              background: 'linear-gradient(to right, #15fafa, #15adad, #157d7d)',
+              WebkitBackgroundClip: 'text',
+              backgroundClip: 'text',
+              color: 'transparent',
+            }}>
+            Save Version
+          </span>
+        </h2>
+        <div className="space-y-4">
+          <label htmlFor="version-name" className="block text-sm font-medium text-[#a0f0f0]">
+            Version Name
+          </label>
+          <input
+            id="version-name"
+            type="text"
+            value={versionName}
+            onChange={(e) => setVersionName(e.target.value)}
+            onKeyDown={handleKeyDown}
+            className="block w-full p-2.5 font-sans text-sm text-[#e0ffff] bg-[#070B14] border border-[#15adad]/70 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#15ffff] focus:border-[#15ffff]"
+            placeholder="e.g., Initial Refactor"
+            autoFocus
+          />
+        </div>
+        <div className="mt-6 flex justify-end space-x-3">
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={handleSaveClick} disabled={!versionName.trim()}>
+            Save
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 
 const App: React.FC = () => {
   // --- Working State ---
   const [userOnlyCode, setUserOnlyCode] = useState<string>('');
   const [language, setLanguage] = useState<SupportedLanguage>(SUPPORTED_LANGUAGES[0].value);
+  const [reviewProfile, setReviewProfile] = useState<ReviewProfile | 'none'>('none');
   const [fullCodeForReview, setFullCodeForReview] = useState<string>('');
   const [reviewFeedback, setReviewFeedback] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -30,6 +108,8 @@ const App: React.FC = () => {
   
   // --- Versioning State ---
   const [versions, setVersions] = useState<Version[]>([]);
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  const [versionName, setVersionName] = useState('');
   
   const [ai] = useState(() => process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null);
 
@@ -54,6 +134,14 @@ const App: React.FC = () => {
     }
   }, [versions]);
 
+  const getSystemInstructionForReview = useCallback(() => {
+    let instruction = SYSTEM_INSTRUCTION;
+    if (reviewProfile && reviewProfile !== 'none' && PROFILE_SYSTEM_INSTRUCTIONS[reviewProfile]) {
+        instruction += `\n\n## Special Focus: ${reviewProfile}\n${PROFILE_SYSTEM_INSTRUCTIONS[reviewProfile]}`;
+    }
+    return instruction;
+  }, [reviewProfile]);
+
 
   const handleReviewSubmit = useCallback(async (fullCodeToSubmit: string) => {
     setIsLoading(true);
@@ -66,7 +154,8 @@ const App: React.FC = () => {
     setFullCodeForReview(fullCodeToSubmit);
 
     try {
-      const feedback = await generateContent(fullCodeToSubmit, SYSTEM_INSTRUCTION);
+      const finalSystemInstruction = getSystemInstructionForReview();
+      const feedback = await generateContent(fullCodeToSubmit, finalSystemInstruction);
       if (feedback && feedback.toLowerCase().startsWith("error:")) {
         setError(feedback);
         setReviewFeedback(null);
@@ -82,7 +171,7 @@ const App: React.FC = () => {
       setIsLoading(false);
       setLoadingAction(null);
     }
-  }, [ai]);
+  }, [ai, getSystemInstructionForReview]);
 
   const handleGenerateDocs = useCallback(async (fullCodeToSubmit: string) => {
     setIsLoading(true);
@@ -157,14 +246,14 @@ const App: React.FC = () => {
       model: GEMINI_MODEL_NAME, 
       history: historyForAPI,
       config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
+        systemInstruction: getSystemInstructionForReview(),
       }
     });
 
     setChatSession(newChat);
     setChatHistory(historyForUI);
     setActiveCodeInputTab('chat');
-  }, [reviewFeedback, fullCodeForReview, ai]);
+  }, [reviewFeedback, fullCodeForReview, ai, getSystemInstructionForReview]);
 
   const handleFollowUpSubmit = useCallback(async (message: string) => {
     if (!chatSession) return;
@@ -190,33 +279,41 @@ const App: React.FC = () => {
     }
   }, [chatSession]);
 
-  const handleNewReview = useCallback(() => {
+  const handleNewReview = () => {
     setActiveCodeInputTab('editor');
     setReviewFeedback(null);
     setError(null);
     setChatSession(null);
     setChatHistory([]);
     setUserOnlyCode('');
-  }, []);
+  };
 
-  const handleSaveVersion = useCallback(() => {
+  const handleOpenSaveModal = () => {
     if (!reviewFeedback || !fullCodeForReview) return;
-    const name = prompt("Enter a name for this version:", `Result ${new Date().toLocaleString()}`);
-    if (name) {
-      const newVersion: Version = {
-        id: `v_${Date.now()}`,
-        name,
-        userCode: userOnlyCode,
-        fullPrompt: fullCodeForReview,
-        feedback: reviewFeedback,
-        language,
-        timestamp: Date.now(),
-      };
-      setVersions(prev => [newVersion, ...prev]);
-    }
-  }, [reviewFeedback, fullCodeForReview, userOnlyCode, language]);
+    setVersionName(`Result ${new Date().toLocaleString()}`);
+    setIsSaveModalOpen(true);
+  };
+
+  const handleConfirmSaveVersion = () => {
+    if (!versionName.trim() || !reviewFeedback || !fullCodeForReview) return;
+    
+    const newVersion: Version = {
+      id: `v_${Date.now()}`,
+      name: versionName.trim(),
+      userCode: userOnlyCode,
+      fullPrompt: fullCodeForReview,
+      feedback: reviewFeedback,
+      language,
+      timestamp: Date.now(),
+    };
+
+    setVersions(prevVersions => [newVersion, ...prevVersions]);
+    setIsSaveModalOpen(false);
+    setVersionName('');
+    setActiveCodeInputTab('history');
+  };
   
-  const handleLoadVersion = useCallback((version: Version) => {
+  const handleLoadVersion = (version: Version) => {
     setUserOnlyCode(version.userCode);
     setLanguage(version.language);
     setFullCodeForReview(version.fullPrompt);
@@ -225,13 +322,13 @@ const App: React.FC = () => {
     setChatSession(null);
     setChatHistory([]);
     setActiveCodeInputTab('editor');
-  }, []);
+  };
 
-  const handleDeleteVersion = useCallback((versionId: string) => {
-    if (window.confirm("Are you sure you want to delete this version?")) {
-      setVersions(prev => prev.filter(v => v.id !== versionId));
-    }
-  }, []);
+  const handleDeleteVersion = (versionId: string) => {
+    // Removed window.confirm to avoid potential event loop issues with React's update batching.
+    // The delete action is now immediate.
+    setVersions(prevVersions => prevVersions.filter(v => v.id !== versionId));
+  };
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -244,6 +341,8 @@ const App: React.FC = () => {
             setUserCode={setUserOnlyCode}
             language={language}
             setLanguage={setLanguage}
+            reviewProfile={reviewProfile}
+            setReviewProfile={setReviewProfile}
             onSubmit={handleReviewSubmit}
             onGenerateDocs={handleGenerateDocs}
             isLoading={isLoading}
@@ -266,13 +365,20 @@ const App: React.FC = () => {
             isChatLoading={isChatLoading}
             loadingAction={loadingAction}
             error={error}
-            onSaveVersion={handleSaveVersion}
+            onSaveVersion={handleOpenSaveModal}
           />
         </div>
       </main>
       <footer className="text-center py-4 text-sm text-[#70c0c0] border-t border-[#157d7d]/50">
         Powered by Gemini API & React.
       </footer>
+       <SaveVersionModal
+          isOpen={isSaveModalOpen}
+          onClose={() => setIsSaveModalOpen(false)}
+          onSave={handleConfirmSaveVersion}
+          versionName={versionName}
+          setVersionName={setVersionName}
+      />
     </div>
   );
 };
