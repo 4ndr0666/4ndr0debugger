@@ -1,3 +1,4 @@
+
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { SupportedLanguage, ChatMessage, Version, ReviewProfile } from '../types';
 import { Button } from './Button';
@@ -106,20 +107,121 @@ const ChatView: React.FC<{
   );
 };
 
-const EditorView: React.FC<Omit<CodeInputProps, 'activeTab' | 'setActiveTab' | 'versions' | 'onLoadVersion' | 'onDeleteVersion' | 'chatHistory' | 'onFollowUpSubmit' | 'isChatLoading'>> = ({
+const EditorView: React.FC<Pick<CodeInputProps, 'userCode' | 'setUserCode' | 'language' | 'setLanguage' | 'reviewProfile' | 'setReviewProfile' | 'isLoading' | 'onNewReview'>> = ({
   userCode,
   setUserCode,
   language,
   setLanguage,
   reviewProfile,
   setReviewProfile,
-  onSubmit,
-  onGenerateDocs,
   isLoading,
-  loadingAction,
   onNewReview,
 }) => {
-  
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    // When the editor is expanded, reset its scroll position to the top.
+    if (!isCollapsed && textareaRef.current) {
+        textareaRef.current.scrollTop = 0;
+    }
+  }, [isCollapsed]);
+
+  return (
+    <div className="flex flex-col h-full">
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={!isCollapsed}
+        aria-controls="code-editor-content"
+        onClick={() => setIsCollapsed(!isCollapsed)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setIsCollapsed(!isCollapsed); } }}
+        className="text-xl font-semibold text-center flex items-center justify-center cursor-pointer group rounded-md p-1 hover:bg-[#15fafa]/10 transition-colors"
+      >
+        <span style={{
+          background: 'linear-gradient(to right, #15fafa, #15adad, #157d7d)',
+          WebkitBackgroundClip: 'text',
+          backgroundClip: 'text',
+          color: 'transparent',
+        }}>
+          Code to Review
+        </span>
+         <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ml-2 text-[#15fafa] transition-transform duration-300 ${!isCollapsed ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </div>
+      
+      <div
+        id="code-editor-content"
+        className={`grid transition-[grid-template-rows] duration-500 ease-in-out ${isCollapsed ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]'}`}
+      >
+        <div className="overflow-hidden">
+          <div className="space-y-4 pt-4">
+            <div className="flex flex-col sm:flex-row sm:space-x-4 space-y-4 sm:space-y-0">
+              <div className="w-full sm:w-1/2">
+                  <Select
+                      id="language-select"
+                      label="Select Language"
+                      options={SUPPORTED_LANGUAGES}
+                      value={language}
+                      onChange={(newLang) => setLanguage(newLang as SupportedLanguage)}
+                      disabled={isLoading}
+                      aria-label="Select programming language"
+                  />
+              </div>
+              <div className="w-full sm:w-1/2">
+                  <Select
+                      id="review-profile-select"
+                      label="Select Review Profile (Optional)"
+                      options={[
+                      { value: 'none', label: 'Default Review' },
+                      ...REVIEW_PROFILES,
+                      ]}
+                      value={reviewProfile}
+                      onChange={(newProfile) => setReviewProfile(newProfile as ReviewProfile | 'none')}
+                      disabled={isLoading}
+                      aria-label="Select review profile"
+                  />
+              </div>
+            </div>
+            <div className="relative">
+              <textarea
+                ref={textareaRef}
+                id="code-input"
+                rows={15}
+                className="block w-full h-full p-3 pr-10 font-mono text-sm text-[#e0ffff] bg-[#070B14] border border-[#15adad]/70 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#15ffff] focus:border-[#15ffff] resize-y placeholder:text-[#60c0c0] placeholder:text-center"
+                value={userCode}
+                onChange={(e) => setUserCode(e.target.value)}
+                disabled={isLoading}
+                aria-label="Code input area"
+                placeholder=">> PASTE CODE HERE <<"
+              />
+              {userCode && !isLoading && (
+                <button
+                  onClick={onNewReview}
+                  className="absolute top-3 right-3 p-1 text-[#15FFFF] hover:text-white transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#070B14] focus:ring-[#15fafa] rounded-full"
+                  aria-label="Clear and start new review"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
+export const CodeInput: React.FC<CodeInputProps> = (props) => {
+  const { 
+    activeTab, setActiveTab, reviewAvailable, isLoading, onStartFollowUp,
+    userCode, language, onSubmit, onGenerateDocs, loadingAction,
+  } = props;
+
   const handleReviewSubmit = () => {
     if (userCode.trim()) {
       const template = generateReviewerTemplate(language);
@@ -135,99 +237,6 @@ const EditorView: React.FC<Omit<CodeInputProps, 'activeTab' | 'setActiveTab' | '
       onGenerateDocs(fullCode);
     }
   };
-
-  return (
-    <div className="flex flex-col h-full space-y-4">
-      <h2 className="text-xl font-semibold text-center">
-        <span style={{
-          background: 'linear-gradient(to right, #15fafa, #15adad, #157d7d)',
-          WebkitBackgroundClip: 'text',
-          backgroundClip: 'text',
-          color: 'transparent',
-        }}>
-          Code to Review
-        </span>
-      </h2>
-      <div className="flex flex-col sm:flex-row sm:space-x-4 space-y-4 sm:space-y-0">
-        <div className="w-full sm:w-1/2">
-            <Select
-                id="language-select"
-                label="Select Language"
-                options={SUPPORTED_LANGUAGES}
-                value={language}
-                onChange={(newLang) => setLanguage(newLang as SupportedLanguage)}
-                disabled={isLoading}
-                aria-label="Select programming language"
-            />
-        </div>
-        <div className="w-full sm:w-1/2">
-            <Select
-                id="review-profile-select"
-                label="Select Review Profile (Optional)"
-                options={[
-                { value: 'none', label: 'Default Review' },
-                ...REVIEW_PROFILES,
-                ]}
-                value={reviewProfile}
-                onChange={(newProfile) => setReviewProfile(newProfile as ReviewProfile | 'none')}
-                disabled={isLoading}
-                aria-label="Select review profile"
-            />
-        </div>
-      </div>
-      <div className="flex-grow relative">
-        <textarea
-          id="code-input"
-          rows={15}
-          className="block w-full h-full p-3 pr-10 font-mono text-sm text-[#e0ffff] bg-[#070B14] border border-[#15adad]/70 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#15ffff] focus:border-[#15ffff] resize-y placeholder:text-[#60c0c0] placeholder:text-center"
-          value={userCode}
-          onChange={(e) => setUserCode(e.target.value)}
-          disabled={isLoading}
-          aria-label="Code input area"
-          placeholder=">> PASTE CODE HERE <<"
-        />
-        {userCode && !isLoading && (
-          <button
-            onClick={onNewReview}
-            className="absolute top-3 right-3 p-1 text-[#15FFFF] hover:text-white transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#070B14] focus:ring-[#15fafa] rounded-full"
-            aria-label="Clear and start new review"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </button>
-        )}
-      </div>
-       <div className="pt-2 flex items-center space-x-3">
-         <Button 
-            onClick={handleReviewSubmit} 
-            isLoading={isLoading && loadingAction === 'review'}
-            disabled={!userCode.trim() || isLoading}
-            className="w-full"
-            aria-label={isLoading ? 'Reviewing code...' : 'Submit code for review'}
-          >
-            {isLoading && loadingAction === 'review' ? 'Reviewing...' : 'Review Code'}
-          </Button>
-          <Button 
-            onClick={handleDocsSubmit}
-            isLoading={isLoading && loadingAction === 'docs'}
-            disabled={!userCode.trim() || isLoading}
-            className="w-full"
-            variant="secondary"
-            aria-label={isLoading ? 'Generating docs...' : 'Generate documentation for the code'}
-          >
-            {isLoading && loadingAction === 'docs' ? 'Generating...' : 'Generate Docs'}
-          </Button>
-       </div>
-    </div>
-  );
-};
-
-
-export const CodeInput: React.FC<CodeInputProps> = (props) => {
-  const { 
-    activeTab, setActiveTab, reviewAvailable, isLoading, onStartFollowUp,
-  } = props;
 
   const getTabClass = (tabName: CodeInputTab) => {
     return `px-4 py-2 text-sm font-medium rounded-t-md cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#101827] focus:ring-[#15fafa] transition-colors duration-200 ${
@@ -255,24 +264,50 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
         {activeTab === 'history' && <VersionHistory {...props} />}
       </div>
 
-      {activeTab !== 'chat' && (
-        <div className="mt-auto pt-4 flex flex-col items-center space-y-2">
-          <Button
-            onClick={() => onStartFollowUp()}
-            disabled={!reviewAvailable || isLoading}
-            variant="secondary"
-            className="w-full"
-            aria-label="Ask follow-up questions about the review"
-          >
-            Follow-up on Current Output
-          </Button>
-          {reviewAvailable && activeTab === 'editor' && !isLoading && (
-            <p className="text-xs text-center text-[#70c0c0]/80 pt-1" aria-live="polite">
-              Tip: Select text in the output before clicking Follow-up to ask about a specific section.
-            </p>
-          )}
-        </div>
-      )}
+      <div className="mt-auto pt-4">
+        {activeTab === 'editor' && !reviewAvailable && (
+          <div className="flex flex-col sm:flex-row items-center space-y-3 sm:space-y-0 sm:space-x-3">
+            <Button 
+                onClick={handleReviewSubmit} 
+                isLoading={isLoading && loadingAction === 'review'}
+                disabled={!userCode.trim() || isLoading}
+                className="w-full"
+                aria-label={isLoading ? 'Reviewing code...' : 'Submit code for review'}
+              >
+                {isLoading && loadingAction === 'review' ? 'Reviewing...' : 'Review Code'}
+              </Button>
+              <Button 
+                onClick={handleDocsSubmit}
+                isLoading={isLoading && loadingAction === 'docs'}
+                disabled={!userCode.trim() || isLoading}
+                className="w-full"
+                variant="secondary"
+                aria-label={isLoading ? 'Generating docs...' : 'Generate documentation for the code'}
+              >
+                {isLoading && loadingAction === 'docs' ? 'Generating...' : 'Generate Docs'}
+              </Button>
+          </div>
+        )}
+
+        {activeTab !== 'chat' && reviewAvailable && (
+          <div className="flex flex-col items-center space-y-2">
+            <Button
+              onClick={() => onStartFollowUp()}
+              disabled={!reviewAvailable || isLoading}
+              variant="secondary"
+              className="w-full"
+              aria-label="Ask follow-up questions about the review"
+            >
+              Follow-up on Current Output
+            </Button>
+            {reviewAvailable && activeTab === 'editor' && !isLoading && (
+              <p className="text-xs text-center text-[#70c0c0]/80 pt-1" aria-live="polite">
+                Tip: Select text in the output before clicking Follow-up to ask about a specific section.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
