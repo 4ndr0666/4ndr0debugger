@@ -164,6 +164,7 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
       const template = generateReviewerTemplate(language);
       const fullCode = template.replace(PLACEHOLDER_MARKER, userCode);
       onSubmit(fullCode);
+      setIsCollapsed(true);
     }
   };
 
@@ -172,6 +173,7 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
       const template = generateDocsTemplate(language);
       const fullCode = template.replace(PLACEHOLDER_MARKER, userCode);
       onGenerateDocs(fullCode);
+      setIsCollapsed(true);
     }
   };
 
