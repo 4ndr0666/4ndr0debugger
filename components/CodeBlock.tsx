@@ -45,10 +45,12 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({ code, language }) => {
       fontSize: '0.875rem',
       whiteSpace: 'pre-wrap',
       wordBreak: 'break-word' as const,
+      fontFamily: "'Fira Code', monospace",
     },
      'code[class*="language-"]': {
       ...okaidia['code[class*="language-"]'],
-       fontFamily: "inherit"
+       fontFamily: "'Fira Code', monospace",
+       fontVariantLigatures: 'contextual',
     },
   };
 

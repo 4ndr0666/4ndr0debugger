@@ -47,7 +47,7 @@ export const VersionHistory: React.FC<VersionHistoryProps> = ({ versions, onLoad
   if (versions.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center text-gray-400">
-        <h3 className="text-lg font-semibold text-gray-300 mb-2">No Saved Versions</h3>
+        <h3 className="text-lg font-semibold text-gray-300 mb-2 font-heading">No Saved Versions</h3>
         <p>After you get a code review, you can save it as a version to revisit it later.</p>
       </div>
     );
@@ -55,7 +55,7 @@ export const VersionHistory: React.FC<VersionHistoryProps> = ({ versions, onLoad
 
   return (
     <div className="flex flex-col h-full">
-      <h3 className="text-lg font-semibold text-center text-[#e0ffff] mb-4">Saved Versions</h3>
+      <h3 className="text-lg font-semibold text-center text-[#e0ffff] mb-4 font-heading">Saved Versions</h3>
       <div className="flex-grow overflow-y-auto space-y-3 pr-2">
         {versions.map(version => (
           <div key={version.id} className="p-3 bg-[#070B14] border border-[#15adad]/70 rounded-md">

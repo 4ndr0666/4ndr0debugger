@@ -47,7 +47,7 @@ const SaveVersionModal: React.FC<SaveVersionModalProps> = ({ isOpen, onClose, on
         className="bg-[#101827] rounded-lg shadow-xl shadow-[#156464]/50 w-full max-w-md p-6 border border-[#15adad]/60"
         onClick={e => e.stopPropagation()} // Prevent clicks inside from closing the modal
       >
-        <h2 id="save-modal-title" className="text-xl font-semibold text-center mb-4">
+        <h2 id="save-modal-title" className="text-xl font-semibold text-center mb-4 font-heading">
            <span style={{
               background: 'linear-gradient(to right, #15fafa, #15adad, #157d7d)',
               WebkitBackgroundClip: 'text',
@@ -440,7 +440,7 @@ const App: React.FC = () => {
     <div className="min-h-screen flex flex-col">
       <Header />
       <main className="flex-grow container mx-auto p-4 sm:p-6 lg:p-8">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 animate-fade-in-up">
           <CodeInput
             userCode={userOnlyCode}
             setUserCode={setUserOnlyCode}

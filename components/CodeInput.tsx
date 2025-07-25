@@ -78,9 +78,9 @@ const ChatInterface: React.FC<{
   };
 
   return (
-    <div className="p-6 bg-[#101827] rounded-lg shadow-xl shadow-[#156464]/30 space-y-4 border border-[#15adad]/60 flex flex-col h-full">
+    <div className="p-6 bg-[#101827]/80 backdrop-blur-md rounded-lg shadow-xl shadow-[#156464]/30 space-y-4 border border-[#15adad]/40 flex flex-col h-full">
         <div className="flex justify-between items-center flex-shrink-0">
-          <h3 className="text-lg font-semibold text-[#e0ffff]">Follow-up Chat</h3>
+          <h3 className="text-lg font-semibold text-[#e0ffff] font-heading">Follow-up Chat</h3>
           <Button onClick={onEndChat} variant="secondary" className="py-1 px-3 text-xs">
             End Chat & Start New
           </Button>
@@ -193,7 +193,7 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
           aria-controls="code-editor-content"
           onClick={() => setIsCollapsed(!isCollapsed)}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setIsCollapsed(!isCollapsed); } }}
-          className="text-xl font-semibold text-center flex items-center justify-center cursor-pointer group rounded-md p-1"
+          className="text-xl font-semibold text-center flex items-center justify-center cursor-pointer group rounded-md p-1 font-heading"
         >
           <span
             className="transition-all duration-300 ease-in-out group-hover:[text-shadow:0_0_8px_#15fafaAA]"
@@ -248,12 +248,12 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
                   ref={textareaRef}
                   id="code-input"
                   rows={15}
-                  className="block w-full h-full p-3 pr-10 font-mono text-sm text-[#e0ffff] bg-[#070B14] border border-[#15adad]/70 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#15ffff] focus:border-[#15ffff] resize-y placeholder:text-[#60c0c0] placeholder:text-center"
+                  className="block w-full h-full p-3 pr-10 font-mono text-sm text-[#e0ffff] bg-[#070B14] border border-[#15adad]/70 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#15ffff] focus:border-[#15ffff] resize-y placeholder:text-[#60c0c0] placeholder:text-center placeholder:font-sans"
                   value={userCode}
                   onChange={(e) => setUserCode(e.target.value)}
                   disabled={isLoading}
                   aria-label="Code input area"
-                  placeholder=">> PASTE CODE HERE <<"
+                  placeholder=">> PASTE YOUR CODE, SELECT LANGUAGE, AND CLICK REVIEW <<"
                 />
                 {userCode && !isLoading && (
                   <button
@@ -275,7 +275,7 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
   }
 
   return (
-    <div className="p-6 bg-[#101827] rounded-lg shadow-xl shadow-[#156464]/30 space-y-4 border border-[#15adad]/60 flex flex-col">
+    <div className="p-6 bg-[#101827]/80 backdrop-blur-md rounded-lg shadow-xl shadow-[#156464]/30 space-y-4 border border-[#15adad]/40 flex flex-col">
        <div className="flex justify-between items-center border-b border-[#15adad]/40 mb-4">
           <div>
             <button onClick={() => setActiveTab('editor')} className={getTabClass('editor')}>Editor</button>

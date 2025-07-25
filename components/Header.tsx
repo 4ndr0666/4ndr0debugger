@@ -17,7 +17,7 @@ export const Header: React.FC = () => {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.828 14.828a4 4 0 01-5.656 0M9.172 9.172a4 4 0 015.656 0"></path>
         </svg>
-        <h1 className="text-3xl font-bold">
+        <h1 className="text-3xl font-bold font-heading">
             <span style={{
             background: 'linear-gradient(to right, #15fafa, #15adad, #157d7d)',
             WebkitBackgroundClip: 'text',

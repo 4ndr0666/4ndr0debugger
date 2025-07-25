@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { LoadingSpinner } from './LoadingSpinner';
 import { MarkdownRenderer } from './MarkdownRenderer';
 
@@ -29,6 +29,33 @@ export const ReviewOutput: React.FC<ReviewOutputProps> = ({ feedback, isLoading,
 
   const contentRef = useRef<HTMLDivElement>(null);
   const [isScrolled, setIsScrolled] = useState(false);
+  const [typedLoadingText, setTypedLoadingText] = useState('');
+
+  // Effect for the typing animation on loading text
+  const loadingText = useMemo(() => {
+    if (isChatLoading) return "Getting response...";
+    if (isLoading) {
+      if (loadingAction === 'docs') return "Generating documentation with Gemini...";
+      return "Analyzing your code with Gemini...";
+    }
+    return "";
+  }, [isLoading, isChatLoading, loadingAction]);
+  
+  useEffect(() => {
+    if (loadingText) {
+      let i = 0;
+      setTypedLoadingText('');
+      const typingInterval = setInterval(() => {
+        if (i < loadingText.length) {
+          setTypedLoadingText(prev => prev + loadingText.charAt(i));
+          i++;
+        } else {
+          clearInterval(typingInterval);
+        }
+      }, 50);
+      return () => clearInterval(typingInterval);
+    }
+  }, [loadingText]);
 
   // This effect handles both auto-scrolling for streaming responses and
   // attaching the scroll listener for the dynamic blur effect.
@@ -36,46 +63,27 @@ export const ReviewOutput: React.FC<ReviewOutputProps> = ({ feedback, isLoading,
     const contentElement = contentRef.current;
     if (!contentElement) return;
 
-    // --- Auto-scroll during streaming ---
-    // We only auto-scroll if the component is in a loading state, which indicates
-    // a streaming response is in progress.
     if (isLoading || isChatLoading) {
       contentElement.scrollTop = contentElement.scrollHeight;
     }
 
-    // --- Dynamic blur effect ---
     const handleScroll = () => {
-      // Show the blur effect if the user has scrolled more than 10px down.
       setIsScrolled(contentElement.scrollTop > 10);
     };
 
     contentElement.addEventListener('scroll', handleScroll);
-    
-    // Run once on setup to check initial scroll position
     handleScroll();
 
-    // Cleanup: remove the listener when the component/effect re-runs or unmounts.
     return () => {
       contentElement.removeEventListener('scroll', handleScroll);
     };
-    // This effect depends on 'feedback' to re-evaluate for auto-scrolling
-    // as new chunks arrive. It also depends on loading states.
   }, [feedback, isLoading, isChatLoading]);
 
 
-  const getLoadingText = () => {
-    if (isChatLoading) return "Getting response...";
-    if (isLoading) {
-      if (loadingAction === 'docs') return "Generating documentation with Gemini...";
-      return "Analyzing your code with Gemini...";
-    }
-    return "";
-  }
-
   return (
-    <div className="p-6 min-h-[200px] flex flex-col">
+    <div className="p-6 min-h-[200px] flex flex-col bg-[#101827]/80 backdrop-blur-md rounded-lg shadow-xl shadow-[#156464]/30 border border-[#15adad]/40">
       <div className="relative flex justify-center items-center mb-4">
-        <h2 className="text-xl font-semibold text-center">
+        <h2 className="text-xl font-semibold text-center font-heading">
           <span style={{
               background: 'linear-gradient(to right, #15fafa, #15adad, #157d7d)',
               WebkitBackgroundClip: 'text',
@@ -101,8 +109,8 @@ export const ReviewOutput: React.FC<ReviewOutputProps> = ({ feedback, isLoading,
         {showLoading && (
           <div className="flex flex-col items-center justify-center h-full py-10">
             <LoadingSpinner size="w-12 h-12" />
-            <p className="mt-4 text-[#a0f0f0]">
-              {getLoadingText()}
+            <p className="mt-4 text-[#a0f0f0] min-h-[1.25rem]">
+              {typedLoadingText}
             </p>
           </div>
         )}
@@ -122,7 +130,7 @@ export const ReviewOutput: React.FC<ReviewOutputProps> = ({ feedback, isLoading,
               <MarkdownRenderer markdown={feedback} />
             </div>
             <div 
-              className={`absolute top-0 left-0 right-0 h-16 bg-gradient-to-b from-[#0A0F1A] via-[#0A0F1A]/90 to-transparent pointer-events-none backdrop-blur-[2px] transition-opacity duration-300 ${isScrolled ? 'opacity-100' : 'opacity-0'}`}
+              className={`absolute top-0 left-0 right-0 h-16 bg-gradient-to-b from-[#101827]/80 via-[#101827]/70 to-transparent pointer-events-none backdrop-blur-[2px] transition-opacity duration-300 ${isScrolled ? 'opacity-100' : 'opacity-0'}`}
               aria-hidden="true"
             />
           </>

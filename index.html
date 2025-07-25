@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AI Code Reviewer</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Orbitron:wght@400;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
   <style>
     /* Custom scrollbar for webkit browsers */
     ::-webkit-scrollbar {
@@ -21,9 +24,35 @@
     ::-webkit-scrollbar-thumb:hover {
       background: #15fafa; /* Bright cyan */
     }
+
+    @keyframes pulse-glow {
+      0%, 100% { box-shadow: 0 10px 15px -3px rgba(21, 125, 125, 0.3), 0 4px 6px -4px rgba(21, 125, 125, 0.3); }
+      50% { box-shadow: 0 10px 15px -3px rgba(21, 250, 250, 0.5), 0 4px 6px -4px rgba(21, 250, 250, 0.5); }
+    }
+    .animate-pulse-glow {
+      animation: pulse-glow 2.5s infinite ease-in-out;
+    }
+
+    @keyframes fade-in-up {
+      from { opacity: 0; transform: translateY(20px); filter: blur(5px); }
+      to { opacity: 1; transform: translateY(0); filter: blur(0); }
+    }
+    .animate-fade-in-up {
+      animation: fade-in-up 0.8s ease-out forwards;
+    }
+
     body {
       background-color: #0A0F1A; /* Deep dark blue/grey */
+      background-image: 
+        radial-gradient(rgba(21, 250, 250, 0.1) 1px, transparent 1px),
+        radial-gradient(rgba(21, 250, 250, 0.05) 1px, transparent 1px);
+      background-size: 40px 40px;
+      background-position: 0 0, 20px 20px;
       color: #e0ffff; /* Light cyan text */
+      font-family: 'Share Tech Mono', monospace;
+    }
+    h1, h2, h3, h4, h5, h6, .font-heading {
+      font-family: 'Orbitron', sans-serif;
     }
     /* Themed list markers for markdown output */
     ul.themed-list li::marker {
