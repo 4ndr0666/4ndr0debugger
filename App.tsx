@@ -1,16 +1,13 @@
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { GoogleGenAI, Chat } from "@google/genai";
 import { Header } from './components/Header';
 import { CodeInput } from './components/CodeInput';
 import { ReviewOutput } from './components/ReviewOutput';
-import { ApiKeyBanner } from './components/ApiKeyBanner';
-import { generateContent } from './services/geminiService';
 import { SupportedLanguage, ChatMessage, Version, ReviewProfile } from './types';
 import { SUPPORTED_LANGUAGES, GEMINI_MODEL_NAME, SYSTEM_INSTRUCTION, DOCS_SYSTEM_INSTRUCTION, PROFILE_SYSTEM_INSTRUCTIONS } from './constants';
 import { Button } from './components/Button';
 
-type CodeInputTab = 'editor' | 'chat' | 'history';
 type LoadingAction = 'review' | 'docs' | null;
 
 // --- Save Version Modal Component ---
@@ -100,9 +97,10 @@ const App: React.FC = () => {
   const [isChatLoading, setIsChatLoading] = useState<boolean>(false);
   const [loadingAction, setLoadingAction] = useState<LoadingAction>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reviewedCode, setReviewedCode] = useState<string | null>(null);
 
   // --- View & Chat State ---
-  const [activeCodeInputTab, setActiveCodeInputTab] = useState<CodeInputTab>('editor');
+  const [isChatMode, setIsChatMode] = useState<boolean>(false);
   const [chatSession, setChatSession] = useState<Chat | null>(null);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   
@@ -112,6 +110,10 @@ const App: React.FC = () => {
   const [versionName, setVersionName] = useState('');
   
   const [ai] = useState(() => process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const isCodeUnchanged = reviewedCode !== null && userOnlyCode === reviewedCode;
+  const reviewAvailable = !!reviewFeedback && isCodeUnchanged;
 
   // Load versions from localStorage on initial render
   useEffect(() => {
@@ -143,64 +145,70 @@ const App: React.FC = () => {
   }, [reviewProfile]);
 
 
-  const handleReviewSubmit = useCallback(async (fullCodeToSubmit: string) => {
-    setIsLoading(true);
-    setLoadingAction('review');
-    setError(null);
-    setReviewFeedback(null);
-    setActiveCodeInputTab('editor');
-    setChatHistory([]);
-    setChatSession(null);
-    setFullCodeForReview(fullCodeToSubmit);
-
+  const performStreamingRequest = async (fullCode: string, systemInstruction: string) => {
+    if (!ai) {
+      setError("Error: API Key not configured.");
+      return;
+    }
     try {
-      const finalSystemInstruction = getSystemInstructionForReview();
-      const feedback = await generateContent(fullCodeToSubmit, finalSystemInstruction);
-      if (feedback && feedback.toLowerCase().startsWith("error:")) {
-        setError(feedback);
-        setReviewFeedback(null);
-      } else {
-        setReviewFeedback(feedback);
+      setReviewFeedback(''); // Start with an empty string for streaming
+      const responseStream = await ai.models.generateContentStream({
+        model: GEMINI_MODEL_NAME,
+        contents: fullCode,
+        config: {
+          systemInstruction: systemInstruction,
+          temperature: 0.3,
+        },
+      });
+
+      let fullResponse = "";
+      for await (const chunk of responseStream) {
+        fullResponse += chunk.text;
+        setReviewFeedback(fullResponse);
       }
     } catch (apiError) {
       console.error("API Error:", apiError);
       const message = apiError instanceof Error ? apiError.message : "An unexpected error occurred.";
       setError(`Failed to get review: ${message}`);
       setReviewFeedback(null);
-    } finally {
-      setIsLoading(false);
-      setLoadingAction(null);
+      setReviewedCode(null);
     }
-  }, [ai, getSystemInstructionForReview]);
+  };
+
+
+  const handleReviewSubmit = useCallback(async (fullCodeToSubmit: string) => {
+    setIsLoading(true);
+    setLoadingAction('review');
+    setError(null);
+    setReviewFeedback(null);
+    setIsChatMode(false);
+    setChatHistory([]);
+    setChatSession(null);
+    setFullCodeForReview(fullCodeToSubmit);
+    setReviewedCode(userOnlyCode);
+    
+    await performStreamingRequest(fullCodeToSubmit, getSystemInstructionForReview());
+
+    setIsLoading(false);
+    setLoadingAction(null);
+  }, [ai, getSystemInstructionForReview, userOnlyCode]);
 
   const handleGenerateDocs = useCallback(async (fullCodeToSubmit: string) => {
     setIsLoading(true);
     setLoadingAction('docs');
     setError(null);
     setReviewFeedback(null);
-    setActiveCodeInputTab('editor');
+    setIsChatMode(false);
     setChatHistory([]);
     setChatSession(null);
     setFullCodeForReview(fullCodeToSubmit);
+    setReviewedCode(userOnlyCode);
+    
+    await performStreamingRequest(fullCodeToSubmit, DOCS_SYSTEM_INSTRUCTION);
 
-    try {
-      const feedback = await generateContent(fullCodeToSubmit, DOCS_SYSTEM_INSTRUCTION);
-      if (feedback && feedback.toLowerCase().startsWith("error:")) {
-        setError(feedback);
-        setReviewFeedback(null);
-      } else {
-        setReviewFeedback(feedback);
-      }
-    } catch (apiError) {
-      console.error("API Error:", apiError);
-      const message = apiError instanceof Error ? apiError.message : "An unexpected error occurred.";
-      setError(`Failed to get documentation: ${message}`);
-      setReviewFeedback(null);
-    } finally {
-      setIsLoading(false);
-      setLoadingAction(null);
-    }
-  }, [ai]);
+    setIsLoading(false);
+    setLoadingAction(null);
+  }, [ai, userOnlyCode]);
 
 
   const handleStartFollowUp = useCallback((version?: Version) => {
@@ -210,7 +218,7 @@ const App: React.FC = () => {
     if (!contextFeedback || !contextCode || !ai) return;
 
     let selectionText = '';
-    if (!version) { // Selection only makes sense for the current, visible review
+    if (!version) {
       const selection = window.getSelection();
       if (selection && selection.toString().trim() !== '') {
         const selectedNode = selection.anchorNode;
@@ -252,7 +260,7 @@ const App: React.FC = () => {
 
     setChatSession(newChat);
     setChatHistory(historyForUI);
-    setActiveCodeInputTab('chat');
+    setIsChatMode(true);
   }, [reviewFeedback, fullCodeForReview, ai, getSystemInstructionForReview]);
 
   const handleFollowUpSubmit = useCallback(async (message: string) => {
@@ -260,32 +268,41 @@ const App: React.FC = () => {
     setIsChatLoading(true);
     setError(null);
     setChatHistory(prev => [...prev, { role: 'user', content: message }]);
-
+    
     try {
-      const response = await chatSession.sendMessage({ message });
-      const feedback = response.text;
-      if (feedback) {
-        setChatHistory(prev => [...prev, { role: 'model', content: feedback }]);
-        setReviewFeedback(feedback); // Update right panel with latest response
-      } else {
-        setError("Received an empty response from the AI.");
+      setChatHistory(prev => [...prev, { role: 'model', content: '' }]); // Add empty placeholder
+      
+      const responseStream = await chatSession.sendMessageStream({ message });
+      
+      let currentResponse = "";
+      for await (const chunk of responseStream) {
+        currentResponse += chunk.text;
+        setChatHistory(prev => {
+          const newHistory = [...prev];
+          newHistory[newHistory.length - 1] = { role: 'model', content: currentResponse };
+          return newHistory;
+        });
+        setReviewFeedback(currentResponse);
       }
+      
     } catch (apiError) {
       console.error("Chat API Error:", apiError);
       const message = apiError instanceof Error ? apiError.message : "An unexpected error occurred.";
       setError(`Failed to get response: ${message}`);
+      setChatHistory(prev => prev.slice(0, -1)); // Remove the empty placeholder on error
     } finally {
       setIsChatLoading(false);
     }
   }, [chatSession]);
 
   const handleNewReview = () => {
-    setActiveCodeInputTab('editor');
+    setIsChatMode(false);
     setReviewFeedback(null);
     setError(null);
     setChatSession(null);
     setChatHistory([]);
     setUserOnlyCode('');
+    setReviewedCode(null);
   };
 
   const handleOpenSaveModal = () => {
@@ -310,7 +327,6 @@ const App: React.FC = () => {
     setVersions(prevVersions => [newVersion, ...prevVersions]);
     setIsSaveModalOpen(false);
     setVersionName('');
-    setActiveCodeInputTab('history');
   };
   
   const handleLoadVersion = (version: Version) => {
@@ -318,22 +334,111 @@ const App: React.FC = () => {
     setLanguage(version.language);
     setFullCodeForReview(version.fullPrompt);
     setReviewFeedback(version.feedback);
+    setReviewedCode(version.userCode);
     setError(null);
     setChatSession(null);
     setChatHistory([]);
-    setActiveCodeInputTab('editor');
+    setIsChatMode(false);
   };
 
   const handleDeleteVersion = (versionId: string) => {
-    // Removed window.confirm to avoid potential event loop issues with React's update batching.
-    // The delete action is now immediate.
     setVersions(prevVersions => prevVersions.filter(v => v.id !== versionId));
+  };
+
+  const handleExportSession = () => {
+    const sessionData = {
+      versions,
+      userOnlyCode,
+      language,
+      reviewProfile,
+      fullCodeForReview,
+      reviewFeedback,
+      chatHistory,
+      reviewedCode,
+    };
+    const blob = new Blob([JSON.stringify(sessionData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `4ndroDebugger_session_${Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportSession = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const text = e.target?.result;
+        if (typeof text !== 'string') throw new Error("File is not a text file.");
+        const data = JSON.parse(text);
+
+        // Basic validation
+        if (!Array.isArray(data.versions)) throw new Error("Invalid session file format.");
+
+        // Reset state and load data
+        handleNewReview();
+        setVersions(data.versions ?? []);
+        setUserOnlyCode(data.userOnlyCode ?? '');
+        setLanguage(data.language ?? SUPPORTED_LANGUAGES[0].value);
+        setReviewProfile(data.reviewProfile ?? 'none');
+        setFullCodeForReview(data.fullCodeForReview ?? '');
+        setReviewFeedback(data.reviewFeedback ?? null);
+        setReviewedCode(data.reviewedCode ?? null);
+        setChatHistory(data.chatHistory ?? []);
+
+        // Re-create chat session if there's history
+        if (ai && data.chatHistory?.length > 0 && data.fullCodeForReview && data.reviewFeedback) {
+            const historyForAPI = [
+                { role: 'user' as const, parts: [{ text: data.fullCodeForReview }] },
+                { role: 'model' as const, parts: [{ text: data.reviewFeedback }] }
+            ];
+
+            // The UI chatHistory starts with the review, then Q&A.
+            // We need to add the actual Q&A pairs to the API history.
+            const qaPairs = data.chatHistory.slice(1);
+            qaPairs.forEach((msg: ChatMessage) => {
+                historyForAPI.push({ role: msg.role as 'user' | 'model', parts: [{ text: msg.content }] });
+            });
+
+            const newChat = ai.chats.create({
+                model: GEMINI_MODEL_NAME,
+                history: historyForAPI,
+                config: { systemInstruction: getSystemInstructionForReview() }
+            });
+            setChatSession(newChat);
+            setIsChatMode(true);
+        } else {
+            setIsChatMode(false);
+        }
+      } catch (err) {
+        console.error("Failed to import session:", err);
+        setError(err instanceof Error ? `Import failed: ${err.message}` : "Import failed: Invalid file.");
+      }
+    };
+    reader.onerror = () => {
+        setError("Failed to read the selected file.");
+    }
+    reader.readAsText(file);
+    
+    // Reset file input value to allow re-uploading the same file
+    if(event.target) {
+      event.target.value = '';
+    }
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
   };
 
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
-      <ApiKeyBanner /> 
       <main className="flex-grow container mx-auto p-4 sm:p-6 lg:p-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
           <CodeInput
@@ -348,9 +453,8 @@ const App: React.FC = () => {
             isLoading={isLoading}
             isChatLoading={isChatLoading}
             loadingAction={loadingAction}
-            reviewAvailable={!!reviewFeedback}
-            activeTab={activeCodeInputTab}
-            setActiveTab={setActiveCodeInputTab}
+            reviewAvailable={reviewAvailable && !isChatMode}
+            isChatMode={isChatMode}
             onStartFollowUp={handleStartFollowUp}
             onNewReview={handleNewReview}
             onFollowUpSubmit={handleFollowUpSubmit}
@@ -358,6 +462,8 @@ const App: React.FC = () => {
             versions={versions}
             onLoadVersion={handleLoadVersion}
             onDeleteVersion={handleDeleteVersion}
+            onImportClick={handleImportClick}
+            onExportSession={handleExportSession}
           />
           <ReviewOutput
             feedback={reviewFeedback}
@@ -366,11 +472,18 @@ const App: React.FC = () => {
             loadingAction={loadingAction}
             error={error}
             onSaveVersion={handleOpenSaveModal}
+            isChatMode={isChatMode}
           />
         </div>
       </main>
-      <footer className="text-center py-4 text-sm text-[#70c0c0] border-t border-[#157d7d]/50">
-        Powered by Gemini API & React.
+      <footer className="py-4">
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleImportSession}
+            style={{ display: 'none' }} 
+            accept=".json,application/json" 
+          />
       </footer>
        <SaveVersionModal
           isOpen={isSaveModalOpen}

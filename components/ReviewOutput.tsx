@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { LoadingSpinner } from './LoadingSpinner';
 import { MarkdownRenderer } from './MarkdownRenderer';
 
@@ -11,6 +11,7 @@ interface ReviewOutputProps {
   loadingAction: LoadingAction;
   error: string | null;
   onSaveVersion: () => void;
+  isChatMode: boolean;
 }
 
 const SaveIcon: React.FC<{ className?: string }> = ({ className }) => (
@@ -22,9 +23,45 @@ const SaveIcon: React.FC<{ className?: string }> = ({ className }) => (
 );
 
 
-export const ReviewOutput: React.FC<ReviewOutputProps> = ({ feedback, isLoading, isChatLoading, loadingAction, error, onSaveVersion }) => {
+export const ReviewOutput: React.FC<ReviewOutputProps> = ({ feedback, isLoading, isChatLoading, loadingAction, error, onSaveVersion, isChatMode }) => {
   const showLoading = isLoading || isChatLoading;
-  const canSave = !showLoading && !error && feedback;
+  const canSave = !showLoading && !error && feedback && !isChatMode;
+
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  // This effect handles both auto-scrolling for streaming responses and
+  // attaching the scroll listener for the dynamic blur effect.
+  useEffect(() => {
+    const contentElement = contentRef.current;
+    if (!contentElement) return;
+
+    // --- Auto-scroll during streaming ---
+    // We only auto-scroll if the component is in a loading state, which indicates
+    // a streaming response is in progress.
+    if (isLoading || isChatLoading) {
+      contentElement.scrollTop = contentElement.scrollHeight;
+    }
+
+    // --- Dynamic blur effect ---
+    const handleScroll = () => {
+      // Show the blur effect if the user has scrolled more than 10px down.
+      setIsScrolled(contentElement.scrollTop > 10);
+    };
+
+    contentElement.addEventListener('scroll', handleScroll);
+    
+    // Run once on setup to check initial scroll position
+    handleScroll();
+
+    // Cleanup: remove the listener when the component/effect re-runs or unmounts.
+    return () => {
+      contentElement.removeEventListener('scroll', handleScroll);
+    };
+    // This effect depends on 'feedback' to re-evaluate for auto-scrolling
+    // as new chunks arrive. It also depends on loading states.
+  }, [feedback, isLoading, isChatLoading]);
+
 
   const getLoadingText = () => {
     if (isChatLoading) return "Getting response...";
@@ -36,7 +73,7 @@ export const ReviewOutput: React.FC<ReviewOutputProps> = ({ feedback, isLoading,
   }
 
   return (
-    <div className="p-6 bg-[#101827] rounded-lg shadow-xl shadow-[#156464]/30 min-h-[200px] border border-[#15adad]/60 flex flex-col">
+    <div className="p-6 min-h-[200px] flex flex-col">
       <div className="relative flex justify-center items-center mb-4">
         <h2 className="text-xl font-semibold text-center">
           <span style={{
@@ -45,7 +82,7 @@ export const ReviewOutput: React.FC<ReviewOutputProps> = ({ feedback, isLoading,
               backgroundClip: 'text',
               color: 'transparent',
             }}>
-            Analysis
+            {isChatMode ? 'Live Response' : 'Analysis'}
           </span>
         </h2>
         {canSave && (
@@ -60,7 +97,7 @@ export const ReviewOutput: React.FC<ReviewOutputProps> = ({ feedback, isLoading,
         )}
       </div>
 
-      <div className="flex-grow overflow-hidden">
+      <div className="flex-grow overflow-hidden relative">
         {showLoading && (
           <div className="flex flex-col items-center justify-center h-full py-10">
             <LoadingSpinner size="w-12 h-12" />
@@ -76,9 +113,19 @@ export const ReviewOutput: React.FC<ReviewOutputProps> = ({ feedback, isLoading,
           </div>
         )}
         {!showLoading && !error && feedback && (
-          <div id="review-output-content" className="overflow-auto h-full max-h-[calc(100vh-320px)] sm:max-h-[60vh] pr-2 text-[#e0ffff] leading-relaxed space-y-4">
-            <MarkdownRenderer markdown={feedback} />
-          </div>
+          <>
+            <div 
+              id="review-output-content" 
+              ref={contentRef}
+              className="overflow-auto h-full max-h-[calc(100vh-320px)] sm:max-h-[60vh] pr-2 text-[#e0ffff] leading-relaxed space-y-4"
+            >
+              <MarkdownRenderer markdown={feedback} />
+            </div>
+            <div 
+              className={`absolute top-0 left-0 right-0 h-16 bg-gradient-to-b from-[#0A0F1A] via-[#0A0F1A]/90 to-transparent pointer-events-none backdrop-blur-[2px] transition-opacity duration-300 ${isScrolled ? 'opacity-100' : 'opacity-0'}`}
+              aria-hidden="true"
+            />
+          </>
         )}
         {!showLoading && !error && !feedback && (
           <div className="flex items-center justify-center h-full">

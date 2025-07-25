@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { okaidia } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -43,7 +44,7 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({ code, language }) => {
       padding: '1rem',
       fontSize: '0.875rem',
       whiteSpace: 'pre-wrap',
-      wordBreak: 'break-word',
+      wordBreak: 'break-word' as const,
     },
      'code[class*="language-"]': {
       ...okaidia['code[class*="language-"]'],
