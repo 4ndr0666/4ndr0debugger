@@ -3,7 +3,7 @@ import React from 'react';
 
 export const Header: React.FC = () => {
   return (
-    <header className="py-6 px-4 sm:px-6 lg:px-8 bg-[#101827] shadow-[0_4px_15px_rgba(21,250,250,0.2)] border-b-2 border-[#15fafa]">
+    <header className="py-6 px-4 sm:px-6 lg:px-8 bg-transparent shadow-[0_4px_15px_rgba(21,250,250,0.1)] border-b border-[#15fafa]/50">
       <div className="max-w-7xl mx-auto flex items-center justify-center space-x-3">
         {/* Title and Logo - Center */}
         <svg 

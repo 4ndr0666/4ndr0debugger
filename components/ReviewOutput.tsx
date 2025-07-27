@@ -1,3 +1,4 @@
+
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { LoadingSpinner } from './LoadingSpinner';
 import { MarkdownRenderer } from './MarkdownRenderer';
@@ -12,6 +13,7 @@ interface ReviewOutputProps {
   error: string | null;
   onSaveVersion: () => void;
   isChatMode: boolean;
+  isActive: boolean;
 }
 
 const SaveIcon: React.FC<{ className?: string }> = ({ className }) => (
@@ -23,9 +25,9 @@ const SaveIcon: React.FC<{ className?: string }> = ({ className }) => (
 );
 
 
-export const ReviewOutput: React.FC<ReviewOutputProps> = ({ feedback, isLoading, isChatLoading, loadingAction, error, onSaveVersion, isChatMode }) => {
+export const ReviewOutput: React.FC<ReviewOutputProps> = ({ feedback, isLoading, isChatLoading, loadingAction, error, onSaveVersion, isChatMode, isActive }) => {
   const showLoading = isLoading || isChatLoading;
-  const canSave = !showLoading && !error && feedback && !isChatMode;
+  const canSave = !showLoading && !error && feedback;
 
   const contentRef = useRef<HTMLDivElement>(null);
   const [isScrolled, setIsScrolled] = useState(false);
@@ -79,9 +81,10 @@ export const ReviewOutput: React.FC<ReviewOutputProps> = ({ feedback, isLoading,
     };
   }, [feedback, isLoading, isChatLoading]);
 
+  const borderClass = isActive ? 'border border-[#15adad]/60' : 'border border-transparent';
 
   return (
-    <div className="p-6 min-h-[200px] flex flex-col bg-[#101827]/80 backdrop-blur-md rounded-lg shadow-xl shadow-[#156464]/30 border border-[#15adad]/40">
+    <div className={`p-6 min-h-[200px] flex flex-col bg-[#101827]/60 backdrop-blur-lg rounded-lg shadow-xl shadow-[#156464]/30 transition-all duration-300 ${borderClass}`}>
       <div className="relative flex justify-center items-center mb-4">
         <h2 className="text-xl font-semibold text-center font-heading">
           <span style={{

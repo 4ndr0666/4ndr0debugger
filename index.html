@@ -42,12 +42,53 @@
     }
 
     body {
-      background-color: #0A0F1A; /* Deep dark blue/grey */
-      background-image: 
-        radial-gradient(rgba(21, 250, 250, 0.1) 1px, transparent 1px),
-        radial-gradient(rgba(21, 250, 250, 0.05) 1px, transparent 1px);
-      background-size: 40px 40px;
-      background-position: 0 0, 20px 20px;
+      --bg-color: #0A0F1A;
+      --line-color-faint: rgba(21, 154, 154, 0.05);
+      --line-color-medium: rgba(21, 154, 154, 0.1);
+      --glow-color: rgba(21, 250, 250, 0.08);
+
+      background-color: var(--bg-color);
+      background-image:
+        /* Top layer: vignette */
+        radial-gradient(ellipse at center, transparent 40%, var(--bg-color) 85%),
+        
+        /* Subtle glow effects */
+        radial-gradient(ellipse at 15% 85%, var(--glow-color) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, var(--glow-color) 0%, transparent 40%),
+
+        /* Fine diagonal cross-hatch for texture */
+        repeating-linear-gradient(
+          -45deg,
+          transparent,
+          transparent 3px,
+          var(--line-color-faint) 3px,
+          var(--line-color-faint) 4px
+        ),
+        repeating-linear-gradient(
+          45deg,
+          transparent,
+          transparent 3px,
+          var(--line-color-faint) 3px,
+          var(--line-color-faint) 4px
+        ),
+
+        /* Main grid lines for structure */
+        repeating-linear-gradient(
+          0deg,
+          transparent,
+          transparent 49px,
+          var(--line-color-medium) 49px,
+          var(--line-color-medium) 50px
+        ),
+        repeating-linear-gradient(
+          90deg,
+          transparent,
+          transparent 49px,
+          var(--line-color-medium) 49px,
+          var(--line-color-medium) 50px
+        );
+
+      background-attachment: fixed;
       color: #e0ffff; /* Light cyan text */
       font-family: 'Share Tech Mono', monospace;
     }

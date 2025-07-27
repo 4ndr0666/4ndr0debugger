@@ -45,6 +45,7 @@ interface CodeInputProps {
   onDeleteVersion: (versionId: string) => void;
   onImportClick: () => void;
   onExportSession: () => void;
+  isActive: boolean;
 }
 
 const ChatInterface: React.FC<{
@@ -128,7 +129,7 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
     reviewAvailable, isLoading, onStartFollowUp,
     userCode, language, onSubmit, onGenerateDocs, loadingAction,
     setUserCode, setLanguage, reviewProfile, setReviewProfile, onNewReview,
-    isChatMode,
+    isChatMode, isActive
   } = props;
 
   const [activeTab, setActiveTab] = useState<'editor' | 'versioning'>('editor');
@@ -218,32 +219,28 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
         >
           <div className="overflow-hidden">
             <div className="space-y-4 pt-4">
-              <div className="flex flex-col sm:flex-row sm:space-x-4 space-y-4 sm:space-y-0">
-                <div className="w-full sm:w-1/2">
-                    <Select
-                        id="language-select"
-                        label="Select Language"
-                        options={SUPPORTED_LANGUAGES}
-                        value={language}
-                        onChange={(newLang) => setLanguage(newLang as SupportedLanguage)}
-                        disabled={isLoading}
-                        aria-label="Select programming language"
-                    />
-                </div>
-                <div className="w-full sm:w-1/2">
-                    <Select
-                        id="review-profile-select"
-                        label="Select Review Profile (Optional)"
-                        options={[
-                        { value: 'none', label: 'Default Review' },
-                        ...REVIEW_PROFILES,
-                        ]}
-                        value={reviewProfile}
-                        onChange={(newProfile) => setReviewProfile(newProfile as ReviewProfile | 'none')}
-                        disabled={isLoading}
-                        aria-label="Select review profile"
-                    />
-                </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+                  <Select
+                      id="language-select"
+                      label="Select Language"
+                      options={SUPPORTED_LANGUAGES}
+                      value={language}
+                      onChange={(newLang) => setLanguage(newLang as SupportedLanguage)}
+                      disabled={isLoading}
+                      aria-label="Select programming language"
+                  />
+                  <Select
+                      id="review-profile-select"
+                      label="Select Optional Profile"
+                      options={[
+                      { value: 'none', label: 'Standard' },
+                      ...REVIEW_PROFILES,
+                      ]}
+                      value={reviewProfile}
+                      onChange={(newProfile) => setReviewProfile(newProfile as ReviewProfile | 'none')}
+                      disabled={isLoading}
+                      aria-label="Select review profile"
+                  />
               </div>
               <div className="relative">
                 <textarea
@@ -276,8 +273,10 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
     );
   }
 
+  const borderClass = isActive ? 'border border-[#15adad]/60' : 'border border-transparent';
+
   return (
-    <div className="p-6 bg-[#101827]/80 backdrop-blur-md rounded-lg shadow-xl shadow-[#156464]/30 space-y-4 border border-[#15adad]/40 flex flex-col">
+    <div className={`p-6 bg-[#101827]/60 backdrop-blur-lg rounded-lg shadow-xl shadow-[#156464]/30 space-y-4 flex flex-col transition-all duration-300 ${borderClass}`}>
        <div className="flex justify-between items-center border-b border-[#15adad]/40 mb-4">
           <div>
             <button onClick={() => setActiveTab('editor')} className={getTabClass('editor')}>Editor</button>

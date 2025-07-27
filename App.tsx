@@ -9,6 +9,7 @@ import { SUPPORTED_LANGUAGES, GEMINI_MODEL_NAME, SYSTEM_INSTRUCTION, DOCS_SYSTEM
 import { Button } from './components/Button';
 
 type LoadingAction = 'review' | 'docs' | null;
+type ActivePanel = 'input' | 'output';
 
 // --- Save Version Modal Component ---
 interface SaveVersionModalProps {
@@ -103,6 +104,7 @@ const App: React.FC = () => {
   const [isChatMode, setIsChatMode] = useState<boolean>(false);
   const [chatSession, setChatSession] = useState<Chat | null>(null);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+  const [activePanel, setActivePanel] = useState<ActivePanel>('input');
   
   // --- Versioning State ---
   const [versions, setVersions] = useState<Version[]>([]);
@@ -186,6 +188,7 @@ const App: React.FC = () => {
     setChatSession(null);
     setFullCodeForReview(fullCodeToSubmit);
     setReviewedCode(userOnlyCode);
+    setActivePanel('output');
     
     await performStreamingRequest(fullCodeToSubmit, getSystemInstructionForReview());
 
@@ -203,6 +206,7 @@ const App: React.FC = () => {
     setChatSession(null);
     setFullCodeForReview(fullCodeToSubmit);
     setReviewedCode(userOnlyCode);
+    setActivePanel('output');
     
     await performStreamingRequest(fullCodeToSubmit, DOCS_SYSTEM_INSTRUCTION);
 
@@ -216,6 +220,8 @@ const App: React.FC = () => {
     const contextCode = version ? version.fullPrompt : fullCodeForReview;
     
     if (!contextFeedback || !contextCode || !ai) return;
+
+    setActivePanel('input'); // Make chat panel active on start
 
     let selectionText = '';
     if (!version) {
@@ -268,6 +274,7 @@ const App: React.FC = () => {
     setIsChatLoading(true);
     setError(null);
     setChatHistory(prev => [...prev, { role: 'user', content: message }]);
+    setActivePanel('output');
     
     try {
       setChatHistory(prev => [...prev, { role: 'model', content: '' }]); // Add empty placeholder
@@ -303,6 +310,7 @@ const App: React.FC = () => {
     setChatHistory([]);
     setUserOnlyCode('');
     setReviewedCode(null);
+    setActivePanel('input');
   };
 
   const handleOpenSaveModal = () => {
@@ -339,6 +347,7 @@ const App: React.FC = () => {
     setChatSession(null);
     setChatHistory([]);
     setIsChatMode(false);
+    setActivePanel('output');
   };
 
   const handleDeleteVersion = (versionId: string) => {
@@ -441,39 +450,45 @@ const App: React.FC = () => {
       <Header />
       <main className="flex-grow container mx-auto p-4 sm:p-6 lg:p-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 animate-fade-in-up">
-          <CodeInput
-            userCode={userOnlyCode}
-            setUserCode={setUserOnlyCode}
-            language={language}
-            setLanguage={setLanguage}
-            reviewProfile={reviewProfile}
-            setReviewProfile={setReviewProfile}
-            onSubmit={handleReviewSubmit}
-            onGenerateDocs={handleGenerateDocs}
-            isLoading={isLoading}
-            isChatLoading={isChatLoading}
-            loadingAction={loadingAction}
-            reviewAvailable={reviewAvailable && !isChatMode}
-            isChatMode={isChatMode}
-            onStartFollowUp={handleStartFollowUp}
-            onNewReview={handleNewReview}
-            onFollowUpSubmit={handleFollowUpSubmit}
-            chatHistory={chatHistory}
-            versions={versions}
-            onLoadVersion={handleLoadVersion}
-            onDeleteVersion={handleDeleteVersion}
-            onImportClick={handleImportClick}
-            onExportSession={handleExportSession}
-          />
-          <ReviewOutput
-            feedback={reviewFeedback}
-            isLoading={isLoading}
-            isChatLoading={isChatLoading}
-            loadingAction={loadingAction}
-            error={error}
-            onSaveVersion={handleOpenSaveModal}
-            isChatMode={isChatMode}
-          />
+          <div onClick={() => !isChatMode && setActivePanel('input')}>
+            <CodeInput
+              userCode={userOnlyCode}
+              setUserCode={setUserOnlyCode}
+              language={language}
+              setLanguage={setLanguage}
+              reviewProfile={reviewProfile}
+              setReviewProfile={setReviewProfile}
+              onSubmit={handleReviewSubmit}
+              onGenerateDocs={handleGenerateDocs}
+              isLoading={isLoading}
+              isChatLoading={isChatLoading}
+              loadingAction={loadingAction}
+              reviewAvailable={reviewAvailable && !isChatMode}
+              isChatMode={isChatMode}
+              onStartFollowUp={handleStartFollowUp}
+              onNewReview={handleNewReview}
+              onFollowUpSubmit={handleFollowUpSubmit}
+              chatHistory={chatHistory}
+              versions={versions}
+              onLoadVersion={handleLoadVersion}
+              onDeleteVersion={handleDeleteVersion}
+              onImportClick={handleImportClick}
+              onExportSession={handleExportSession}
+              isActive={activePanel === 'input'}
+            />
+          </div>
+          <div onClick={() => setActivePanel('output')}>
+            <ReviewOutput
+              feedback={reviewFeedback}
+              isLoading={isLoading}
+              isChatLoading={isChatLoading}
+              loadingAction={loadingAction}
+              error={error}
+              onSaveVersion={handleOpenSaveModal}
+              isChatMode={isChatMode}
+              isActive={activePanel === 'output'}
+            />
+          </div>
         </div>
       </main>
       <footer className="py-4">

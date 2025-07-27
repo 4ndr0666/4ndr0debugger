@@ -149,7 +149,7 @@ export const Select: React.FC<SelectProps> = ({
       {isOpen && (
         <ul
           ref={listRef}
-          className="absolute z-10 w-full mt-1 bg-[#101827]/80 backdrop-blur-sm border border-[#15fafa] rounded-md shadow-lg max-h-60 overflow-auto focus:outline-none text-base sm:text-sm p-1"
+          className="absolute z-10 w-full mt-1 bg-[#101827]/70 backdrop-blur-md border border-[#15fafa] rounded-md shadow-lg max-h-60 overflow-auto focus:outline-none text-base sm:text-sm p-1"
           role="listbox"
           aria-activedescendant={id && highlightedIndex >= 0 ? `${id}-option-${highlightedIndex}` : undefined}
           tabIndex={-1}
