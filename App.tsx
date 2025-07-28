@@ -1,14 +1,15 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { GoogleGenAI, Chat } from "@google/genai";
+import { GoogleGenAI, Chat, Type } from "@google/genai";
 import { Header } from './components/Header';
 import { CodeInput } from './components/CodeInput';
 import { ReviewOutput } from './components/ReviewOutput';
 import { SupportedLanguage, ChatMessage, Version, ReviewProfile } from './types';
-import { SUPPORTED_LANGUAGES, GEMINI_MODEL_NAME, SYSTEM_INSTRUCTION, DOCS_SYSTEM_INSTRUCTION, PROFILE_SYSTEM_INSTRUCTIONS } from './constants';
+import { SUPPORTED_LANGUAGES, GEMINI_MODEL_NAME, SYSTEM_INSTRUCTION, DOCS_SYSTEM_INSTRUCTION, PROFILE_SYSTEM_INSTRUCTIONS, GENERATE_TESTS_INSTRUCTION, EXPLAIN_CODE_INSTRUCTION, REVIEW_SELECTION_INSTRUCTION, COMMIT_MESSAGE_SYSTEM_INSTRUCTION, DOCS_INSTRUCTION } from './constants';
 import { Button } from './components/Button';
 
-type LoadingAction = 'review' | 'docs' | null;
+type LoadingAction = 'review' | 'docs' | 'tests' | 'commit' | 'explain-selection' | 'review-selection' | null;
+type OutputType = LoadingAction;
 type ActivePanel = 'input' | 'output';
 
 // --- Save Version Modal Component ---
@@ -97,8 +98,10 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isChatLoading, setIsChatLoading] = useState<boolean>(false);
   const [loadingAction, setLoadingAction] = useState<LoadingAction>(null);
+  const [outputType, setOutputType] = useState<OutputType>(null);
   const [error, setError] = useState<string | null>(null);
-  const [reviewedCode, setReviewedCode] = useState<string | null>(null);
+  const [reviewedCode, setReviewedCode] = useState<string | null>(null); // The "before" code for a review
+  const [revisedCode, setRevisedCode] = useState<string | null>(null); // The "after" code from a review
 
   // --- View & Chat State ---
   const [isChatMode, setIsChatMode] = useState<boolean>(false);
@@ -114,8 +117,9 @@ const App: React.FC = () => {
   const [ai] = useState(() => process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const isCodeUnchanged = reviewedCode !== null && userOnlyCode === reviewedCode;
-  const reviewAvailable = !!reviewFeedback && isCodeUnchanged;
+  const isReviewContextCurrent = reviewedCode !== null && userOnlyCode === reviewedCode;
+  const reviewAvailable = !!reviewFeedback && isReviewContextCurrent;
+  const commitMessageAvailable = !!reviewedCode && !!revisedCode && reviewedCode !== revisedCode;
 
   // Load versions from localStorage on initial render
   useEffect(() => {
@@ -150,6 +154,8 @@ const App: React.FC = () => {
   const performStreamingRequest = async (fullCode: string, systemInstruction: string) => {
     if (!ai) {
       setError("Error: API Key not configured.");
+      setIsLoading(false);
+      setLoadingAction(null);
       return;
     }
     try {
@@ -168,29 +174,45 @@ const App: React.FC = () => {
         fullResponse += chunk.text;
         setReviewFeedback(fullResponse);
       }
+      return fullResponse;
     } catch (apiError) {
       console.error("API Error:", apiError);
       const message = apiError instanceof Error ? apiError.message : "An unexpected error occurred.";
       setError(`Failed to get review: ${message}`);
       setReviewFeedback(null);
       setReviewedCode(null);
+      setRevisedCode(null);
+      return null;
     }
   };
 
-
-  const handleReviewSubmit = useCallback(async (fullCodeToSubmit: string) => {
-    setIsLoading(true);
-    setLoadingAction('review');
+  const resetForNewRequest = () => {
     setError(null);
     setReviewFeedback(null);
     setIsChatMode(false);
     setChatHistory([]);
     setChatSession(null);
+    setActivePanel('output');
+  }
+
+  const handleReviewSubmit = useCallback(async (fullCodeToSubmit: string) => {
+    setIsLoading(true);
+    setLoadingAction('review');
+    setOutputType('review');
+    resetForNewRequest();
     setFullCodeForReview(fullCodeToSubmit);
     setReviewedCode(userOnlyCode);
-    setActivePanel('output');
+    setRevisedCode(null);
     
-    await performStreamingRequest(fullCodeToSubmit, getSystemInstructionForReview());
+    const fullResponse = await performStreamingRequest(fullCodeToSubmit, getSystemInstructionForReview());
+
+    if (fullResponse) {
+        const finalCodeRegex = /```(?:[a-zA-Z0-9-]*)\n([\s\S]*?)\n```$/;
+        const match = finalCodeRegex.exec(fullResponse);
+        if (match && match[1]) {
+            setRevisedCode(match[1].trim());
+        }
+    }
 
     setIsLoading(false);
     setLoadingAction(null);
@@ -199,20 +221,114 @@ const App: React.FC = () => {
   const handleGenerateDocs = useCallback(async (fullCodeToSubmit: string) => {
     setIsLoading(true);
     setLoadingAction('docs');
-    setError(null);
-    setReviewFeedback(null);
-    setIsChatMode(false);
-    setChatHistory([]);
-    setChatSession(null);
+    setOutputType('docs');
+    resetForNewRequest();
     setFullCodeForReview(fullCodeToSubmit);
     setReviewedCode(userOnlyCode);
-    setActivePanel('output');
+    setRevisedCode(null);
     
     await performStreamingRequest(fullCodeToSubmit, DOCS_SYSTEM_INSTRUCTION);
 
     setIsLoading(false);
     setLoadingAction(null);
   }, [ai, userOnlyCode]);
+
+  const handleGenerateTests = useCallback(async () => {
+    setIsLoading(true);
+    setLoadingAction('tests');
+    setOutputType('tests');
+    resetForNewRequest();
+    setReviewedCode(userOnlyCode);
+    setRevisedCode(null);
+
+    const prompt = `${GENERATE_TESTS_INSTRUCTION}\n\n\`\`\`${language}\n${userOnlyCode}\n\`\`\``;
+    await performStreamingRequest(prompt, SYSTEM_INSTRUCTION);
+
+    setIsLoading(false);
+    setLoadingAction(null);
+  }, [ai, userOnlyCode, language]);
+  
+  const handleExplainSelection = useCallback(async (selection: string) => {
+    setIsLoading(true);
+    setLoadingAction('explain-selection');
+    setOutputType('explain-selection');
+    resetForNewRequest();
+
+    const prompt = `${EXPLAIN_CODE_INSTRUCTION}\n\n\`\`\`${language}\n${selection}\n\`\`\``;
+    await performStreamingRequest(prompt, SYSTEM_INSTRUCTION);
+
+    setIsLoading(false);
+    setLoadingAction(null);
+  }, [ai, language]);
+  
+  const handleReviewSelection = useCallback(async (selection: string) => {
+    setIsLoading(true);
+    setLoadingAction('review-selection');
+    setOutputType('review-selection');
+    resetForNewRequest();
+
+    const prompt = `${REVIEW_SELECTION_INSTRUCTION}\n\n\`\`\`${language}\n${selection}\n\`\`\``;
+    await performStreamingRequest(prompt, getSystemInstructionForReview());
+
+    setIsLoading(false);
+    setLoadingAction(null);
+  }, [ai, language, getSystemInstructionForReview]);
+
+  const handleGenerateCommitMessage = useCallback(async () => {
+      if (!ai || !reviewedCode || !revisedCode) {
+          setError("Cannot generate commit message. Original or revised code is missing.");
+          return;
+      }
+      
+      setIsLoading(true);
+      setLoadingAction('commit');
+      setOutputType('commit');
+      resetForNewRequest();
+
+      const schema = {
+          type: Type.OBJECT,
+          properties: {
+              type: { type: Type.STRING, description: "The conventional commit type (e.g., feat, fix, chore, refactor)." },
+              scope: { type: Type.STRING, description: "Optional scope of the change (e.g., api, db, ui)."},
+              subject: { type: Type.STRING, description: "A short, imperative-mood summary of the change, under 50 chars." },
+              body: { type: Type.STRING, description: "A longer, detailed description of the changes and motivation. Use markdown newlines." }
+          },
+          required: ['type', 'subject', 'body']
+      };
+
+      const prompt = `Based on the following code changes, generate a conventional commit message.\n\n### Original Code:\n\`\`\`${language}\n${reviewedCode}\n\`\`\`\n\n### Revised Code:\n\`\`\`${language}\n${revisedCode}\n\`\`\``;
+
+      try {
+          const response = await ai.models.generateContent({
+              model: GEMINI_MODEL_NAME,
+              contents: prompt,
+              config: {
+                  systemInstruction: COMMIT_MESSAGE_SYSTEM_INSTRUCTION,
+                  responseMimeType: 'application/json',
+                  responseSchema: schema,
+              }
+          });
+          
+          const jsonResponse = JSON.parse(response.text);
+          const { type, scope, subject, body } = jsonResponse;
+          const scopeText = scope ? `(${scope})` : '';
+          
+          const header = `${type}${scopeText}: ${subject}`;
+          const fullGitCommand = `git commit -m "${header}" -m "${body.replace(/"/g, '\\"')}"`;
+
+          const formattedMarkdown = `### Suggested Commit Message\n\n**${header}**\n\n${body.replace(/\n/g, '\n\n')}\n\n---\n\n#### As a git command:\n\`\`\`bash\n${fullGitCommand}\n\`\`\``;
+          setReviewFeedback(formattedMarkdown);
+
+      } catch (apiError) {
+          console.error("Commit Message API Error:", apiError);
+          const message = apiError instanceof Error ? apiError.message : "An unexpected error occurred.";
+          setError(`Failed to generate commit message: ${message}`);
+          setReviewFeedback(null);
+      } finally {
+          setIsLoading(false);
+          setLoadingAction(null);
+      }
+  }, [ai, reviewedCode, revisedCode, language]);
 
 
   const handleStartFollowUp = useCallback((version?: Version) => {
@@ -306,10 +422,12 @@ const App: React.FC = () => {
     setIsChatMode(false);
     setReviewFeedback(null);
     setError(null);
+    setOutputType(null);
     setChatSession(null);
     setChatHistory([]);
     setUserOnlyCode('');
     setReviewedCode(null);
+    setRevisedCode(null);
     setActivePanel('input');
   };
 
@@ -343,11 +461,24 @@ const App: React.FC = () => {
     setFullCodeForReview(version.fullPrompt);
     setReviewFeedback(version.feedback);
     setReviewedCode(version.userCode);
+    setRevisedCode(null); // Cannot determine revised code from old version
     setError(null);
     setChatSession(null);
     setChatHistory([]);
     setIsChatMode(false);
     setActivePanel('output');
+    
+    if (version.fullPrompt.includes(DOCS_INSTRUCTION)) {
+      setOutputType('docs');
+    } else if (version.fullPrompt.includes(GENERATE_TESTS_INSTRUCTION)) {
+      setOutputType('tests');
+    } else if (version.fullPrompt.includes(EXPLAIN_CODE_INSTRUCTION)) {
+      setOutputType('explain-selection');
+    } else if (version.fullPrompt.includes(REVIEW_SELECTION_INSTRUCTION)) {
+      setOutputType('review-selection');
+    } else {
+      setOutputType('review');
+    }
   };
 
   const handleDeleteVersion = (versionId: string) => {
@@ -364,6 +495,7 @@ const App: React.FC = () => {
       reviewFeedback,
       chatHistory,
       reviewedCode,
+      revisedCode,
     };
     const blob = new Blob([JSON.stringify(sessionData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -399,6 +531,7 @@ const App: React.FC = () => {
         setFullCodeForReview(data.fullCodeForReview ?? '');
         setReviewFeedback(data.reviewFeedback ?? null);
         setReviewedCode(data.reviewedCode ?? null);
+        setRevisedCode(data.revisedCode ?? null);
         setChatHistory(data.chatHistory ?? []);
 
         // Re-create chat session if there's history
@@ -460,10 +593,15 @@ const App: React.FC = () => {
               setReviewProfile={setReviewProfile}
               onSubmit={handleReviewSubmit}
               onGenerateDocs={handleGenerateDocs}
+              onGenerateTests={handleGenerateTests}
+              onGenerateCommitMessage={handleGenerateCommitMessage}
+              onExplainSelection={handleExplainSelection}
+              onReviewSelection={handleReviewSelection}
               isLoading={isLoading}
               isChatLoading={isChatLoading}
               loadingAction={loadingAction}
               reviewAvailable={reviewAvailable && !isChatMode}
+              commitMessageAvailable={commitMessageAvailable}
               isChatMode={isChatMode}
               onStartFollowUp={handleStartFollowUp}
               onNewReview={handleNewReview}
@@ -483,6 +621,7 @@ const App: React.FC = () => {
               isLoading={isLoading}
               isChatLoading={isChatLoading}
               loadingAction={loadingAction}
+              outputType={outputType}
               error={error}
               onSaveVersion={handleOpenSaveModal}
               isChatMode={isChatMode}

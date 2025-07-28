@@ -8,7 +8,7 @@ import { LoadingSpinner } from './LoadingSpinner';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { VersionHistory } from './VersionHistory';
 
-type LoadingAction = 'review' | 'docs' | null;
+type LoadingAction = 'review' | 'docs' | 'tests' | 'commit' | 'explain-selection' | 'review-selection' | null;
 
 const ImportIcon: React.FC<{className?: string}> = ({ className }) => (
     <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -31,10 +31,15 @@ interface CodeInputProps {
   setReviewProfile: (profile: ReviewProfile | 'none') => void;
   onSubmit: (fullCode: string) => void;
   onGenerateDocs: (fullCode: string) => void;
+  onGenerateTests: () => void;
+  onGenerateCommitMessage: () => void;
+  onExplainSelection: (selection: string) => void;
+  onReviewSelection: (selection: string) => void;
   isLoading: boolean;
   isChatLoading: boolean;
   loadingAction: LoadingAction;
   reviewAvailable: boolean;
+  commitMessageAvailable: boolean;
   isChatMode: boolean;
   onStartFollowUp: (version?: Version) => void;
   onNewReview: () => void;
@@ -126,29 +131,31 @@ const ChatInterface: React.FC<{
 
 export const CodeInput: React.FC<CodeInputProps> = (props) => {
   const { 
-    reviewAvailable, isLoading, onStartFollowUp,
+    reviewAvailable, isLoading, onStartFollowUp, commitMessageAvailable,
     userCode, language, onSubmit, onGenerateDocs, loadingAction,
     setUserCode, setLanguage, reviewProfile, setReviewProfile, onNewReview,
+    onGenerateTests, onGenerateCommitMessage, onExplainSelection, onReviewSelection,
     isChatMode, isActive
   } = props;
 
   const [activeTab, setActiveTab] = useState<'editor' | 'versioning'>('editor');
   
-  // --- State and logic from former EditorView component ---
+  // --- State and logic for EditorView ---
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [selectedText, setSelectedText] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    if (activeTab === 'versioning') {
-      setIsCollapsed(true);
-    } else { // activeTab === 'editor'
-      // When on the editor tab, the collapsed state should directly reflect
-      // whether a review is available for the current code. This makes the
-      // state predictable and fixes bugs related to it becoming out of sync.
-      setIsCollapsed(reviewAvailable);
-    }
-  }, [activeTab, reviewAvailable]);
+    // Collapse the editor content when switching to versioning,
+    // and expand it when switching back to the editor.
+    setIsCollapsed(activeTab === 'versioning');
+  }, [activeTab]);
 
+  const handleSelect = (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
+    const target = e.currentTarget;
+    const selection = target.value.substring(target.selectionStart, target.selectionEnd);
+    setSelectedText(selection);
+  };
 
   if (isChatMode) {
     return <ChatInterface 
@@ -158,7 +165,6 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
       isChatLoading={props.isChatLoading}
     />;
   }
-
 
   const handleReviewSubmit = () => {
     if (userCode.trim()) {
@@ -250,13 +256,16 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
                   className="block w-full h-full p-3 pr-10 font-mono text-sm text-[#e0ffff] bg-[#070B14] border border-[#15adad]/70 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#15ffff] focus:border-[#15ffff] resize-y placeholder:text-[#60c0c0] placeholder:text-center placeholder:font-sans"
                   value={userCode}
                   onChange={(e) => setUserCode(e.target.value)}
+                  onSelect={handleSelect}
+                  onMouseUp={handleSelect} // Capture selection on mouse up as well
+                  onKeyUp={handleSelect} // Capture selection on key up
                   disabled={isLoading}
                   aria-label="Code input area"
                   placeholder=">> PASTE YOUR CODE, SELECT LANGUAGE, AND CLICK REVIEW <<"
                 />
                 {userCode && !isLoading && (
                   <button
-                    onClick={onNewReview}
+                    onClick={(e) => { e.preventDefault(); onNewReview(); }}
                     className="absolute top-3 right-3 p-1 text-[#15FFFF] hover:text-white transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#070B14] focus:ring-[#15fafa] rounded-full"
                     aria-label="Clear and start new review"
                   >
@@ -266,6 +275,20 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
                   </button>
                 )}
               </div>
+              
+               {selectedText && !isLoading && (
+                    <div className="bg-[#070B14]/50 border border-[#15adad]/50 rounded-lg p-3 space-y-2 animate-fade-in-up">
+                        <p className="text-xs text-center text-[#a0f0f0]">Action for selected code:</p>
+                        <div className="flex items-center justify-center space-x-3">
+                            <Button onClick={() => onExplainSelection(selectedText)} variant="secondary" className="text-xs py-1.5 px-3">
+                                Explain Selection
+                            </Button>
+                            <Button onClick={() => onReviewSelection(selectedText)} variant="secondary" className="text-xs py-1.5 px-3">
+                                Review Selection
+                            </Button>
+                        </div>
+                    </div>
+                )}
             </div>
           </div>
         </div>
@@ -307,34 +330,66 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
         {activeTab === 'versioning' && <VersionHistory {...props} />}
       </div>
 
-      <div className="mt-auto pt-4">
-        <div className="flex flex-col items-center space-y-4">
+      <div className="mt-auto pt-4 space-y-4">
           {activeTab === 'editor' && (
-            <div className="w-full flex flex-col sm:flex-row items-center space-y-3 sm:space-y-0 sm:space-x-3">
-              <Button 
-                  onClick={handleReviewSubmit} 
-                  isLoading={isLoading && loadingAction === 'review'}
-                  disabled={!userCode.trim() || isLoading}
-                  className="w-full"
-                  aria-label={isLoading ? 'Reviewing code...' : 'Submit code for review'}
-                >
-                  {isLoading && loadingAction === 'review' ? 'Reviewing...' : 'Review Code'}
-                </Button>
-                <Button 
-                  onClick={handleDocsSubmit}
-                  isLoading={isLoading && loadingAction === 'docs'}
-                  disabled={!userCode.trim() || isLoading}
-                  className="w-full"
-                  variant="secondary"
-                  aria-label={isLoading ? 'Generating docs...' : 'Generate documentation for the code'}
-                >
-                  {isLoading && loadingAction === 'docs' ? 'Generating...' : 'Generate Docs'}
-                </Button>
-            </div>
+             <>
+                <div className="w-full flex flex-wrap items-center justify-center gap-3">
+                    <Button 
+                        onClick={handleReviewSubmit} 
+                        isLoading={isLoading && loadingAction === 'review'}
+                        disabled={!userCode.trim() || isLoading}
+                        className="w-full sm:w-auto flex-grow"
+                        aria-label={isLoading ? 'Reviewing code...' : 'Submit code for review'}
+                    >
+                        {isLoading && loadingAction === 'review' ? 'Reviewing...' : 'Review Code'}
+                    </Button>
+                    <Button 
+                        onClick={handleDocsSubmit}
+                        isLoading={isLoading && loadingAction === 'docs'}
+                        disabled={!userCode.trim() || isLoading}
+                        className="w-full sm:w-auto flex-grow"
+                        variant="secondary"
+                        aria-label={isLoading ? 'Generating docs...' : 'Generate documentation for the code'}
+                    >
+                        {isLoading && loadingAction === 'docs' ? 'Generating...' : 'Generate Docs'}
+                    </Button>
+                </div>
+                {/* --- Additional Tools --- */}
+                {!isCollapsed && (userCode.trim() || commitMessageAvailable) && (
+                    <div className="border-t border-[#15adad]/30 pt-4 space-y-3">
+                        <h4 className="text-center text-sm font-semibold text-[#a0f0f0] font-heading">Additional Tools</h4>
+                        <div className="w-full flex flex-wrap items-center justify-center gap-3">
+                            {userCode.trim() && (
+                                <Button
+                                    onClick={onGenerateTests}
+                                    isLoading={isLoading && loadingAction === 'tests'}
+                                    disabled={isLoading}
+                                    variant="primary"
+                                    className="w-full sm:w-auto flex-grow"
+                                >
+                                    {isLoading && loadingAction === 'tests' ? 'Generating...' : 'Generate Unit Tests'}
+                                </Button>
+                            )}
+                            {commitMessageAvailable && (
+                                <Button
+                                    onClick={onGenerateCommitMessage}
+                                    isLoading={isLoading && loadingAction === 'commit'}
+                                    disabled={isLoading}
+                                    variant="primary"
+                                    className="w-full sm:w-auto flex-grow"
+                                    title="Generate a commit message from the last review's changes"
+                                >
+                                    {isLoading && loadingAction === 'commit' ? 'Generating...' : 'Generate Commit Msg'}
+                                </Button>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </>
           )}
 
           {reviewAvailable && (
-            <div className="w-full flex flex-col items-center space-y-2">
+            <div className="w-full flex flex-col items-center space-y-2 border-t border-[#15adad]/30 pt-4">
               <Button
                 onClick={() => onStartFollowUp()}
                 disabled={!reviewAvailable || isLoading}
@@ -351,7 +406,6 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
               )}
             </div>
           )}
-        </div>
       </div>
     </div>
   );

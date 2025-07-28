@@ -26,6 +26,8 @@ export enum ReviewProfile {
   MODULAR = 'Modular',
   IDIOMATIC = 'Idiomatic',
   DRY = 'DRY',
+  CTF = 'CTF',
+  REDTEAM = 'Red Team',
 }
 
 export interface ProfileOption {
