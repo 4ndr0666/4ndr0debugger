@@ -54,3 +54,5 @@ export interface Version {
   language: SupportedLanguage;
   timestamp: number;
 }
+
+export type LoadingAction = 'review' | 'docs' | 'tests' | 'commit' | 'explain-selection' | 'review-selection' | 'comparison' | null;

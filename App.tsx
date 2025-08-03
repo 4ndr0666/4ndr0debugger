@@ -1,16 +1,19 @@
-
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { GoogleGenAI, Chat, Type } from "@google/genai";
 import { Header } from './components/Header';
 import { CodeInput } from './components/CodeInput';
 import { ReviewOutput } from './components/ReviewOutput';
-import { SupportedLanguage, ChatMessage, Version, ReviewProfile } from './types';
-import { SUPPORTED_LANGUAGES, GEMINI_MODEL_NAME, SYSTEM_INSTRUCTION, DOCS_SYSTEM_INSTRUCTION, PROFILE_SYSTEM_INSTRUCTIONS, GENERATE_TESTS_INSTRUCTION, EXPLAIN_CODE_INSTRUCTION, REVIEW_SELECTION_INSTRUCTION, COMMIT_MESSAGE_SYSTEM_INSTRUCTION, DOCS_INSTRUCTION } from './constants';
+import { SupportedLanguage, ChatMessage, Version, ReviewProfile, LoadingAction } from './types';
+import { SUPPORTED_LANGUAGES, GEMINI_MODEL_NAME, SYSTEM_INSTRUCTION, DOCS_SYSTEM_INSTRUCTION, PROFILE_SYSTEM_INSTRUCTIONS, GENERATE_TESTS_INSTRUCTION, EXPLAIN_CODE_INSTRUCTION, REVIEW_SELECTION_INSTRUCTION, COMMIT_MESSAGE_SYSTEM_INSTRUCTION, DOCS_INSTRUCTION, COMPARISON_SYSTEM_INSTRUCTION, generateComparisonTemplate, generateDocsTemplate } from './constants';
 import { Button } from './components/Button';
+import { DiffViewer } from './components/DiffViewer';
+import { ChatContext } from './components/ChatContext';
+import { ComparisonInput } from './components/ComparisonInput';
+import { VersionHistoryModal } from './components/VersionHistoryModal';
 
-type LoadingAction = 'review' | 'docs' | 'tests' | 'commit' | 'explain-selection' | 'review-selection' | null;
 type OutputType = LoadingAction;
 type ActivePanel = 'input' | 'output';
+type AppMode = 'single' | 'comparison';
 
 // --- Save Version Modal Component ---
 interface SaveVersionModalProps {
@@ -89,11 +92,11 @@ const SaveVersionModal: React.FC<SaveVersionModalProps> = ({ isOpen, onClose, on
 
 
 const App: React.FC = () => {
-  // --- Working State ---
-  const [userOnlyCode, setUserOnlyCode] = useState<string>('');
+  // --- Mode State ---
+  const [appMode, setAppMode] = useState<AppMode>('single');
+  
+  // --- Working State (shared across modes) ---
   const [language, setLanguage] = useState<SupportedLanguage>(SUPPORTED_LANGUAGES[0].value);
-  const [reviewProfile, setReviewProfile] = useState<ReviewProfile | 'none'>('none');
-  const [fullCodeForReview, setFullCodeForReview] = useState<string>('');
   const [reviewFeedback, setReviewFeedback] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isChatLoading, setIsChatLoading] = useState<boolean>(false);
@@ -102,6 +105,15 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [reviewedCode, setReviewedCode] = useState<string | null>(null); // The "before" code for a review
   const [revisedCode, setRevisedCode] = useState<string | null>(null); // The "after" code from a review
+  const [fullCodeForReview, setFullCodeForReview] = useState<string>('');
+  
+  // --- Single Review Mode State ---
+  const [userOnlyCode, setUserOnlyCode] = useState<string>('');
+  const [reviewProfile, setReviewProfile] = useState<ReviewProfile | 'none'>('none');
+
+  // --- Comparison Mode State ---
+  const [codeB, setCodeB] = useState<string>('');
+  const [comparisonGoal, setComparisonGoal] = useState<string>('');
 
   // --- View & Chat State ---
   const [isChatMode, setIsChatMode] = useState<boolean>(false);
@@ -112,14 +124,17 @@ const App: React.FC = () => {
   // --- Versioning State ---
   const [versions, setVersions] = useState<Version[]>([]);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  const [isDiffModalOpen, setIsDiffModalOpen] = useState(false);
+  const [isVersionHistoryModalOpen, setIsVersionHistoryModalOpen] = useState(false);
   const [versionName, setVersionName] = useState('');
   
   const [ai] = useState(() => process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const isReviewContextCurrent = reviewedCode !== null && userOnlyCode === reviewedCode;
+  const isReviewContextCurrent = reviewedCode !== null && (appMode === 'single' ? userOnlyCode === reviewedCode : true);
   const reviewAvailable = !!reviewFeedback && isReviewContextCurrent;
   const commitMessageAvailable = !!reviewedCode && !!revisedCode && reviewedCode !== revisedCode;
+  const canSaveReview = !!reviewFeedback && !isChatMode && !isLoading && !error;
 
   // Load versions from localStorage on initial render
   useEffect(() => {
@@ -193,6 +208,14 @@ const App: React.FC = () => {
     setChatHistory([]);
     setChatSession(null);
     setActivePanel('output');
+    setReviewedCode(null);
+    setRevisedCode(null);
+  }
+
+  const extractFinalCodeBlock = (response: string) => {
+    const finalCodeRegex = /```(?:[a-zA-Z0-9-]*)\n([\s\S]*?)\n```$/;
+    const match = finalCodeRegex.exec(response);
+    return match && match[1] ? match[1].trim() : null;
   }
 
   const handleReviewSubmit = useCallback(async (fullCodeToSubmit: string) => {
@@ -202,51 +225,71 @@ const App: React.FC = () => {
     resetForNewRequest();
     setFullCodeForReview(fullCodeToSubmit);
     setReviewedCode(userOnlyCode);
-    setRevisedCode(null);
     
     const fullResponse = await performStreamingRequest(fullCodeToSubmit, getSystemInstructionForReview());
 
     if (fullResponse) {
-        const finalCodeRegex = /```(?:[a-zA-Z0-9-]*)\n([\s\S]*?)\n```$/;
-        const match = finalCodeRegex.exec(fullResponse);
-        if (match && match[1]) {
-            setRevisedCode(match[1].trim());
-        }
+        setRevisedCode(extractFinalCodeBlock(fullResponse));
     }
 
     setIsLoading(false);
     setLoadingAction(null);
   }, [ai, getSystemInstructionForReview, userOnlyCode]);
 
-  const handleGenerateDocs = useCallback(async (fullCodeToSubmit: string) => {
+  const handleCompareAndOptimize = useCallback(async () => {
+    setIsLoading(true);
+    setLoadingAction('comparison');
+    setOutputType('comparison');
+    resetForNewRequest();
+
+    const prompt = generateComparisonTemplate(language, comparisonGoal, userOnlyCode, codeB);
+    setFullCodeForReview(prompt); // Save for versioning
+    setReviewedCode(userOnlyCode); // Set Code A as the "before" for diffing
+
+    const fullResponse = await performStreamingRequest(prompt, COMPARISON_SYSTEM_INSTRUCTION);
+    
+    if (fullResponse) {
+        setRevisedCode(extractFinalCodeBlock(fullResponse));
+    }
+    
+    setIsLoading(false);
+    setLoadingAction(null);
+  }, [ai, language, comparisonGoal, userOnlyCode, codeB]);
+
+
+  const handleGenerateDocs = useCallback(async () => {
+    if (appMode !== 'single' || !userOnlyCode.trim() || isChatMode) return;
     setIsLoading(true);
     setLoadingAction('docs');
     setOutputType('docs');
     resetForNewRequest();
+    
+    const template = generateDocsTemplate(language);
+    const fullCodeToSubmit = template.replace('PASTE CODE HERE', userOnlyCode);
+
     setFullCodeForReview(fullCodeToSubmit);
     setReviewedCode(userOnlyCode);
-    setRevisedCode(null);
     
     await performStreamingRequest(fullCodeToSubmit, DOCS_SYSTEM_INSTRUCTION);
 
     setIsLoading(false);
     setLoadingAction(null);
-  }, [ai, userOnlyCode]);
+  }, [ai, userOnlyCode, language, appMode, isChatMode]);
 
   const handleGenerateTests = useCallback(async () => {
+    if (appMode !== 'single' || !userOnlyCode.trim() || isChatMode) return;
     setIsLoading(true);
     setLoadingAction('tests');
     setOutputType('tests');
     resetForNewRequest();
     setReviewedCode(userOnlyCode);
-    setRevisedCode(null);
 
     const prompt = `${GENERATE_TESTS_INSTRUCTION}\n\n\`\`\`${language}\n${userOnlyCode}\n\`\`\``;
     await performStreamingRequest(prompt, SYSTEM_INSTRUCTION);
 
     setIsLoading(false);
     setLoadingAction(null);
-  }, [ai, userOnlyCode, language]);
+  }, [ai, userOnlyCode, language, appMode, isChatMode]);
   
   const handleExplainSelection = useCallback(async (selection: string) => {
     setIsLoading(true);
@@ -334,11 +377,14 @@ const App: React.FC = () => {
   const handleStartFollowUp = useCallback((version?: Version) => {
     const contextFeedback = version ? version.feedback : reviewFeedback;
     const contextCode = version ? version.fullPrompt : fullCodeForReview;
+    const contextUserCode = version ? version.userCode : userOnlyCode;
     
     if (!contextFeedback || !contextCode || !ai) return;
 
-    setActivePanel('input'); // Make chat panel active on start
-
+    // Set the state needed for the chat context panel
+    setReviewedCode(contextUserCode);
+    setReviewFeedback(contextFeedback);
+    
     let selectionText = '';
     if (!version) {
       const selection = window.getSelection();
@@ -359,16 +405,12 @@ const App: React.FC = () => {
     
     if (version) {
         historyForUI.push({ role: 'model', content: `Starting a follow-up about version: **"${version.name}"**.\n\nWhat would you like to ask?` });
-    } else {
-        historyForUI.push({ role: 'model', content: contextFeedback });
-    }
-    
-    if (selectionText) {
+    } else if (selectionText) {
       const followUpContext = `My follow-up question is about this specific part of your code revision:\n\n\`\`\`\n${selectionText}\n\`\`\``;
       historyForAPI.push({ role: 'user' as const, parts: [{ text: followUpContext }] });
       const uiConfirmation = `Okay, let's talk about this snippet:\n\n\`\`\`\n${selectionText}\n\`\`\``;
       historyForUI.push({ role: 'model', content: uiConfirmation });
-    } else if (!version) {
+    } else {
       historyForUI.push({ role: 'model', content: "What would you like to ask about the review?" });
     }
 
@@ -383,14 +425,15 @@ const App: React.FC = () => {
     setChatSession(newChat);
     setChatHistory(historyForUI);
     setIsChatMode(true);
-  }, [reviewFeedback, fullCodeForReview, ai, getSystemInstructionForReview]);
+    setActivePanel('input');
+  }, [reviewFeedback, fullCodeForReview, ai, getSystemInstructionForReview, userOnlyCode]);
 
   const handleFollowUpSubmit = useCallback(async (message: string) => {
     if (!chatSession) return;
     setIsChatLoading(true);
     setError(null);
     setChatHistory(prev => [...prev, { role: 'user', content: message }]);
-    setActivePanel('output');
+    setActivePanel('input');
     
     try {
       setChatHistory(prev => [...prev, { role: 'model', content: '' }]); // Add empty placeholder
@@ -405,7 +448,6 @@ const App: React.FC = () => {
           newHistory[newHistory.length - 1] = { role: 'model', content: currentResponse };
           return newHistory;
         });
-        setReviewFeedback(currentResponse);
       }
       
     } catch (apiError) {
@@ -419,6 +461,7 @@ const App: React.FC = () => {
   }, [chatSession]);
 
   const handleNewReview = () => {
+    setAppMode('single');
     setIsChatMode(false);
     setReviewFeedback(null);
     setError(null);
@@ -429,10 +472,16 @@ const App: React.FC = () => {
     setReviewedCode(null);
     setRevisedCode(null);
     setActivePanel('input');
+    setCodeB('');
+    setComparisonGoal('');
+  };
+
+  const handleStartComparison = () => {
+    setAppMode('comparison');
   };
 
   const handleOpenSaveModal = () => {
-    if (!reviewFeedback || !fullCodeForReview) return;
+    if (!canSaveReview) return;
     setVersionName(`Result ${new Date().toLocaleString()}`);
     setIsSaveModalOpen(true);
   };
@@ -443,7 +492,7 @@ const App: React.FC = () => {
     const newVersion: Version = {
       id: `v_${Date.now()}`,
       name: versionName.trim(),
-      userCode: userOnlyCode,
+      userCode: userOnlyCode, // In comparison mode, this is Code A
       fullPrompt: fullCodeForReview,
       feedback: reviewFeedback,
       language,
@@ -456,18 +505,23 @@ const App: React.FC = () => {
   };
   
   const handleLoadVersion = (version: Version) => {
+    handleNewReview(); // Reset everything first
+
     setUserOnlyCode(version.userCode);
     setLanguage(version.language);
     setFullCodeForReview(version.fullPrompt);
     setReviewFeedback(version.feedback);
     setReviewedCode(version.userCode);
     setRevisedCode(null); // Cannot determine revised code from old version
-    setError(null);
-    setChatSession(null);
-    setChatHistory([]);
-    setIsChatMode(false);
     setActivePanel('output');
     
+    // Determine which mode this version was from
+    if (version.fullPrompt.includes('### Codebase B')) {
+      setAppMode('comparison');
+    } else {
+      setAppMode('single');
+    }
+
     if (version.fullPrompt.includes(DOCS_INSTRUCTION)) {
       setOutputType('docs');
     } else if (version.fullPrompt.includes(GENERATE_TESTS_INSTRUCTION)) {
@@ -496,6 +550,9 @@ const App: React.FC = () => {
       chatHistory,
       reviewedCode,
       revisedCode,
+      appMode,
+      codeB,
+      comparisonGoal,
     };
     const blob = new Blob([JSON.stringify(sessionData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -533,6 +590,9 @@ const App: React.FC = () => {
         setReviewedCode(data.reviewedCode ?? null);
         setRevisedCode(data.revisedCode ?? null);
         setChatHistory(data.chatHistory ?? []);
+        setAppMode(data.appMode ?? 'single');
+        setCodeB(data.codeB ?? '');
+        setComparisonGoal(data.comparisonGoal ?? '');
 
         // Re-create chat session if there's history
         if (ai && data.chatHistory?.length > 0 && data.fullCodeForReview && data.reviewFeedback) {
@@ -541,8 +601,6 @@ const App: React.FC = () => {
                 { role: 'model' as const, parts: [{ text: data.reviewFeedback }] }
             ];
 
-            // The UI chatHistory starts with the review, then Q&A.
-            // We need to add the actual Q&A pairs to the API history.
             const qaPairs = data.chatHistory.slice(1);
             qaPairs.forEach((msg: ChatMessage) => {
                 historyForAPI.push({ role: msg.role as 'user' | 'model', parts: [{ text: msg.content }] });
@@ -568,7 +626,6 @@ const App: React.FC = () => {
     }
     reader.readAsText(file);
     
-    // Reset file input value to allow re-uploading the same file
     if(event.target) {
       event.target.value = '';
     }
@@ -580,53 +637,92 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <Header />
-      <main className="flex-grow container mx-auto p-4 sm:p-6 lg:p-8">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 animate-fade-in-up">
-          <div onClick={() => !isChatMode && setActivePanel('input')}>
-            <CodeInput
-              userCode={userOnlyCode}
-              setUserCode={setUserOnlyCode}
-              language={language}
-              setLanguage={setLanguage}
-              reviewProfile={reviewProfile}
-              setReviewProfile={setReviewProfile}
-              onSubmit={handleReviewSubmit}
-              onGenerateDocs={handleGenerateDocs}
-              onGenerateTests={handleGenerateTests}
-              onGenerateCommitMessage={handleGenerateCommitMessage}
-              onExplainSelection={handleExplainSelection}
-              onReviewSelection={handleReviewSelection}
-              isLoading={isLoading}
-              isChatLoading={isChatLoading}
-              loadingAction={loadingAction}
-              reviewAvailable={reviewAvailable && !isChatMode}
-              commitMessageAvailable={commitMessageAvailable}
-              isChatMode={isChatMode}
-              onStartFollowUp={handleStartFollowUp}
-              onNewReview={handleNewReview}
-              onFollowUpSubmit={handleFollowUpSubmit}
-              chatHistory={chatHistory}
-              versions={versions}
-              onLoadVersion={handleLoadVersion}
-              onDeleteVersion={handleDeleteVersion}
-              onImportClick={handleImportClick}
-              onExportSession={handleExportSession}
-              isActive={activePanel === 'input'}
-            />
+      <Header 
+        onSaveVersion={handleOpenSaveModal}
+        onImportClick={handleImportClick}
+        onExportSession={handleExportSession}
+        isSaveEnabled={canSaveReview}
+        onGenerateTests={handleGenerateTests}
+        onGenerateDocs={handleGenerateDocs}
+        onToggleVersionHistory={() => setIsVersionHistoryModalOpen(true)}
+        isToolsEnabled={userOnlyCode.trim() !== '' && !isChatMode && appMode === 'single'}
+        isLoading={isLoading}
+      />
+      <main className="flex-grow container mx-auto p-4 sm:p-6 lg:p-8 flex flex-col">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 animate-fade-in-up flex-grow">
+          <div className="flex flex-col min-h-0" onClick={() => !isChatMode && setActivePanel('input')}>
+            {appMode === 'single' ? (
+                <CodeInput
+                  userCode={userOnlyCode}
+                  setUserCode={setUserOnlyCode}
+                  language={language}
+                  setLanguage={setLanguage}
+                  reviewProfile={reviewProfile}
+                  setReviewProfile={setReviewProfile}
+                  onSubmit={handleReviewSubmit}
+                  onGenerateDocs={handleGenerateDocs}
+                  onStartComparison={handleStartComparison}
+                  onGenerateCommitMessage={handleGenerateCommitMessage}
+                  onExplainSelection={handleExplainSelection}
+                  onReviewSelection={handleReviewSelection}
+                  isLoading={isLoading}
+                  isChatLoading={isChatLoading}
+                  loadingAction={loadingAction}
+                  reviewAvailable={reviewAvailable && !isChatMode}
+                  commitMessageAvailable={commitMessageAvailable}
+                  isChatMode={isChatMode}
+                  onStartFollowUp={handleStartFollowUp}
+                  onNewReview={handleNewReview}
+                  onFollowUpSubmit={handleFollowUpSubmit}
+                  chatHistory={chatHistory}
+                  isActive={activePanel === 'input'}
+                />
+            ) : (
+                <ComparisonInput 
+                  codeA={userOnlyCode}
+                  setCodeA={setUserOnlyCode}
+                  codeB={codeB}
+                  setCodeB={setCodeB}
+                  language={language}
+                  setLanguage={setLanguage}
+                  goal={comparisonGoal}
+                  setGoal={setComparisonGoal}
+                  onSubmit={handleCompareAndOptimize}
+                  isLoading={isLoading}
+                  isChatLoading={isChatLoading}
+                  isActive={activePanel === 'input'}
+                  onNewReview={handleNewReview}
+                  isChatMode={isChatMode}
+                  onStartFollowUp={handleStartFollowUp}
+                  reviewAvailable={reviewAvailable}
+                  onFollowUpSubmit={handleFollowUpSubmit}
+                  chatHistory={chatHistory}
+                />
+            )}
           </div>
-          <div onClick={() => setActivePanel('output')}>
-            <ReviewOutput
-              feedback={reviewFeedback}
-              isLoading={isLoading}
-              isChatLoading={isChatLoading}
-              loadingAction={loadingAction}
-              outputType={outputType}
-              error={error}
-              onSaveVersion={handleOpenSaveModal}
-              isChatMode={isChatMode}
-              isActive={activePanel === 'output'}
-            />
+          <div className="flex flex-col min-h-0" onClick={() => setActivePanel('output')}>
+             {isChatMode ? (
+                <ChatContext 
+                    codeA={reviewedCode || ''}
+                    codeB={appMode === 'comparison' ? codeB : undefined}
+                    originalFeedback={reviewFeedback || ''}
+                    language={language}
+                    isActive={activePanel === 'output'}
+                />
+            ) : (
+                <ReviewOutput
+                  feedback={reviewFeedback}
+                  isLoading={isLoading}
+                  isChatLoading={isChatLoading}
+                  loadingAction={loadingAction}
+                  outputType={outputType}
+                  error={error}
+                  onSaveVersion={handleOpenSaveModal}
+                  onShowDiff={() => setIsDiffModalOpen(true)}
+                  canCompare={commitMessageAvailable}
+                  isActive={activePanel === 'output'}
+                />
+            )}
           </div>
         </div>
       </main>
@@ -645,6 +741,21 @@ const App: React.FC = () => {
           onSave={handleConfirmSaveVersion}
           versionName={versionName}
           setVersionName={setVersionName}
+      />
+      {isDiffModalOpen && reviewedCode && revisedCode && (
+          <DiffViewer 
+              oldCode={reviewedCode}
+              newCode={revisedCode}
+              onClose={() => setIsDiffModalOpen(false)}
+          />
+      )}
+      <VersionHistoryModal
+        isOpen={isVersionHistoryModalOpen}
+        onClose={() => setIsVersionHistoryModalOpen(false)}
+        versions={versions}
+        onLoadVersion={handleLoadVersion}
+        onDeleteVersion={handleDeleteVersion}
+        onStartFollowUp={handleStartFollowUp}
       />
     </div>
   );
