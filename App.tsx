@@ -3,93 +3,18 @@ import { GoogleGenAI, Chat, Type } from "@google/genai";
 import { Header } from './components/Header';
 import { CodeInput } from './components/CodeInput';
 import { ReviewOutput } from './components/ReviewOutput';
-import { SupportedLanguage, ChatMessage, Version, ReviewProfile, LoadingAction } from './types';
+import { SupportedLanguage, ChatMessage, Version, ReviewProfile, LoadingAction, Toast } from './types';
 import { SUPPORTED_LANGUAGES, GEMINI_MODEL_NAME, SYSTEM_INSTRUCTION, DOCS_SYSTEM_INSTRUCTION, PROFILE_SYSTEM_INSTRUCTIONS, GENERATE_TESTS_INSTRUCTION, EXPLAIN_CODE_INSTRUCTION, REVIEW_SELECTION_INSTRUCTION, COMMIT_MESSAGE_SYSTEM_INSTRUCTION, DOCS_INSTRUCTION, COMPARISON_SYSTEM_INSTRUCTION, generateComparisonTemplate, generateDocsTemplate } from './constants';
-import { Button } from './components/Button';
 import { DiffViewer } from './components/DiffViewer';
 import { ChatContext } from './components/ChatContext';
 import { ComparisonInput } from './components/ComparisonInput';
 import { VersionHistoryModal } from './components/VersionHistoryModal';
+import { SaveVersionModal } from './components/SaveVersionModal';
+import { ToastContainer } from './components/ToastContainer';
 
 type OutputType = LoadingAction;
 type ActivePanel = 'input' | 'output';
 type AppMode = 'single' | 'comparison';
-
-// --- Save Version Modal Component ---
-interface SaveVersionModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSave: () => void;
-  versionName: string;
-  setVersionName: (name: string) => void;
-}
-
-const SaveVersionModal: React.FC<SaveVersionModalProps> = ({ isOpen, onClose, onSave, versionName, setVersionName }) => {
-  if (!isOpen) return null;
-
-  const handleSaveClick = () => {
-    if (versionName.trim()) {
-      onSave();
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      handleSaveClick();
-    }
-  };
-
-  return (
-    <div 
-      className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 transition-opacity duration-300"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="save-modal-title"
-    >
-      <div 
-        className="bg-[#101827] rounded-lg shadow-xl shadow-[#156464]/50 w-full max-w-md p-6 border border-[#15adad]/60"
-        onClick={e => e.stopPropagation()} // Prevent clicks inside from closing the modal
-      >
-        <h2 id="save-modal-title" className="text-xl font-semibold text-center mb-4 font-heading">
-           <span style={{
-              background: 'linear-gradient(to right, #15fafa, #15adad, #157d7d)',
-              WebkitBackgroundClip: 'text',
-              backgroundClip: 'text',
-              color: 'transparent',
-            }}>
-            Save Version
-          </span>
-        </h2>
-        <div className="space-y-4">
-          <label htmlFor="version-name" className="block text-sm font-medium text-[#a0f0f0]">
-            Version Name
-          </label>
-          <input
-            id="version-name"
-            type="text"
-            value={versionName}
-            onChange={(e) => setVersionName(e.target.value)}
-            onKeyDown={handleKeyDown}
-            className="block w-full p-2.5 font-sans text-sm text-[#e0ffff] bg-[#070B14] border border-[#15adad]/70 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#15ffff] focus:border-[#15ffff]"
-            placeholder="e.g., Initial Refactor"
-            autoFocus
-          />
-        </div>
-        <div className="mt-6 flex justify-end space-x-3">
-          <Button variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button onClick={handleSaveClick} disabled={!versionName.trim()}>
-            Save
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 
 const App: React.FC = () => {
   // --- Mode State ---
@@ -127,14 +52,19 @@ const App: React.FC = () => {
   const [isDiffModalOpen, setIsDiffModalOpen] = useState(false);
   const [isVersionHistoryModalOpen, setIsVersionHistoryModalOpen] = useState(false);
   const [versionName, setVersionName] = useState('');
+
+  // --- Toast State ---
+  const [toasts, setToasts] = useState<Toast[]>([]);
   
   const [ai] = useState(() => process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const abortStreamRef = useRef(false);
 
   const isReviewContextCurrent = reviewedCode !== null && (appMode === 'single' ? userOnlyCode === reviewedCode : true);
   const reviewAvailable = !!reviewFeedback && isReviewContextCurrent;
   const commitMessageAvailable = !!reviewedCode && !!revisedCode && reviewedCode !== revisedCode;
   const canSaveReview = !!reviewFeedback && !isChatMode && !isLoading && !error;
+  const showOutputPanel = isChatMode || isLoading || !!reviewFeedback || !!error;
 
   // Load versions from localStorage on initial render
   useEffect(() => {
@@ -157,6 +87,16 @@ const App: React.FC = () => {
     }
   }, [versions]);
 
+  const addToast = (message: string, type: Toast['type']) => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, message, type }]);
+  };
+
+  const removeToast = (id: number) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  };
+
+
   const getSystemInstructionForReview = useCallback(() => {
     let instruction = SYSTEM_INSTRUCTION;
     if (reviewProfile && reviewProfile !== 'none' && PROFILE_SYSTEM_INSTRUCTIONS[reviewProfile]) {
@@ -168,11 +108,16 @@ const App: React.FC = () => {
 
   const performStreamingRequest = async (fullCode: string, systemInstruction: string) => {
     if (!ai) {
-      setError("Error: API Key not configured.");
+      const msg = "Error: API Key not configured.";
+      setError(msg);
+      addToast(msg, 'error');
       setIsLoading(false);
       setLoadingAction(null);
       return;
     }
+    
+    abortStreamRef.current = false;
+    
     try {
       setReviewFeedback(''); // Start with an empty string for streaming
       const responseStream = await ai.models.generateContentStream({
@@ -186,20 +131,34 @@ const App: React.FC = () => {
 
       let fullResponse = "";
       for await (const chunk of responseStream) {
+        if (abortStreamRef.current) break;
         fullResponse += chunk.text;
         setReviewFeedback(fullResponse);
       }
       return fullResponse;
     } catch (apiError) {
+      if (abortStreamRef.current) {
+        console.log("Stream aborted by user.");
+        return null;
+      }
       console.error("API Error:", apiError);
       const message = apiError instanceof Error ? apiError.message : "An unexpected error occurred.";
       setError(`Failed to get review: ${message}`);
+      addToast(`API Error: ${message}`, 'error');
       setReviewFeedback(null);
       setReviewedCode(null);
       setRevisedCode(null);
       return null;
     }
   };
+
+  const handleStopGenerating = () => {
+    abortStreamRef.current = true;
+    setIsLoading(false);
+    setLoadingAction(null);
+    addToast("Generation stopped.", "info");
+  };
+
 
   const resetForNewRequest = () => {
     setError(null);
@@ -319,7 +278,9 @@ const App: React.FC = () => {
 
   const handleGenerateCommitMessage = useCallback(async () => {
       if (!ai || !reviewedCode || !revisedCode) {
-          setError("Cannot generate commit message. Original or revised code is missing.");
+          const msg = "Cannot generate commit message. Original or revised code is missing.";
+          setError(msg);
+          addToast(msg, 'error');
           return;
       }
       
@@ -366,6 +327,7 @@ const App: React.FC = () => {
           console.error("Commit Message API Error:", apiError);
           const message = apiError instanceof Error ? apiError.message : "An unexpected error occurred.";
           setError(`Failed to generate commit message: ${message}`);
+          addToast(`Error: ${message}`, 'error');
           setReviewFeedback(null);
       } finally {
           setIsLoading(false);
@@ -454,6 +416,7 @@ const App: React.FC = () => {
       console.error("Chat API Error:", apiError);
       const message = apiError instanceof Error ? apiError.message : "An unexpected error occurred.";
       setError(`Failed to get response: ${message}`);
+      addToast(`Chat Error: ${message}`, 'error');
       setChatHistory(prev => prev.slice(0, -1)); // Remove the empty placeholder on error
     } finally {
       setIsChatLoading(false);
@@ -502,6 +465,7 @@ const App: React.FC = () => {
     setVersions(prevVersions => [newVersion, ...prevVersions]);
     setIsSaveModalOpen(false);
     setVersionName('');
+    addToast('Version saved successfully!', 'success');
   };
   
   const handleLoadVersion = (version: Version) => {
@@ -533,10 +497,12 @@ const App: React.FC = () => {
     } else {
       setOutputType('review');
     }
+    addToast(`Version "${version.name}" loaded.`, 'info');
   };
 
   const handleDeleteVersion = (versionId: string) => {
     setVersions(prevVersions => prevVersions.filter(v => v.id !== versionId));
+    addToast('Version deleted.', 'info');
   };
 
   const handleExportSession = () => {
@@ -593,6 +559,8 @@ const App: React.FC = () => {
         setAppMode(data.appMode ?? 'single');
         setCodeB(data.codeB ?? '');
         setComparisonGoal(data.comparisonGoal ?? '');
+        
+        addToast('Session imported successfully!', 'success');
 
         // Re-create chat session if there's history
         if (ai && data.chatHistory?.length > 0 && data.fullCodeForReview && data.reviewFeedback) {
@@ -612,17 +580,21 @@ const App: React.FC = () => {
                 config: { systemInstruction: getSystemInstructionForReview() }
             });
             setChatSession(newChat);
-            setIsChatMode(true);
+setIsChatMode(true);
         } else {
             setIsChatMode(false);
         }
       } catch (err) {
+        const msg = err instanceof Error ? `Import failed: ${err.message}` : "Import failed: Invalid file.";
         console.error("Failed to import session:", err);
-        setError(err instanceof Error ? `Import failed: ${err.message}` : "Import failed: Invalid file.");
+        setError(msg);
+        addToast(msg, 'error');
       }
     };
     reader.onerror = () => {
-        setError("Failed to read the selected file.");
+        const msg = "Failed to read the selected file.";
+        setError(msg);
+        addToast(msg, 'error');
     }
     reader.readAsText(file);
     
@@ -647,10 +619,10 @@ const App: React.FC = () => {
         onToggleVersionHistory={() => setIsVersionHistoryModalOpen(true)}
         isToolsEnabled={userOnlyCode.trim() !== '' && !isChatMode && appMode === 'single'}
         isLoading={isLoading}
+        addToast={addToast}
       />
-      <main className="flex-grow container mx-auto p-4 sm:p-6 lg:p-8 flex flex-col">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 animate-fade-in-up flex-grow">
-          <div className="flex flex-col min-h-0" onClick={() => !isChatMode && setActivePanel('input')}>
+      <main className={`flex-grow container mx-auto p-4 sm:p-6 lg:p-8 grid grid-cols-1 ${showOutputPanel ? 'lg:grid-cols-2' : ''} gap-6 lg:gap-8 animate-fade-in-up`}>
+          <div className="min-h-0" onClick={() => !isChatMode && setActivePanel('input')}>
             {appMode === 'single' ? (
                 <CodeInput
                   userCode={userOnlyCode}
@@ -676,6 +648,7 @@ const App: React.FC = () => {
                   onFollowUpSubmit={handleFollowUpSubmit}
                   chatHistory={chatHistory}
                   isActive={activePanel === 'input'}
+                  onStopGenerating={handleStopGenerating}
                 />
             ) : (
                 <ComparisonInput 
@@ -697,36 +670,43 @@ const App: React.FC = () => {
                   reviewAvailable={reviewAvailable}
                   onFollowUpSubmit={handleFollowUpSubmit}
                   chatHistory={chatHistory}
+                  onStopGenerating={handleStopGenerating}
                 />
             )}
           </div>
-          <div className="flex flex-col min-h-0" onClick={() => setActivePanel('output')}>
-             {isChatMode ? (
-                <ChatContext 
-                    codeA={reviewedCode || ''}
-                    codeB={appMode === 'comparison' ? codeB : undefined}
-                    originalFeedback={reviewFeedback || ''}
-                    language={language}
+          
+          {showOutputPanel && (
+            <div className="min-h-0" onClick={() => setActivePanel('output')}>
+              {isChatMode ? (
+                  <ChatContext 
+                      codeA={reviewedCode || ''}
+                      codeB={appMode === 'comparison' ? codeB : undefined}
+                      originalFeedback={reviewFeedback || ''}
+                      language={language}
+                      isActive={activePanel === 'output'}
+                  />
+              ) : (
+                  <ReviewOutput
+                    feedback={reviewFeedback}
+                    isLoading={isLoading}
+                    isChatLoading={isChatLoading}
+                    loadingAction={loadingAction}
+                    outputType={outputType}
+                    error={error}
+                    onSaveVersion={handleOpenSaveModal}
+                    onShowDiff={() => setIsDiffModalOpen(true)}
+                    canCompare={commitMessageAvailable}
                     isActive={activePanel === 'output'}
-                />
-            ) : (
-                <ReviewOutput
-                  feedback={reviewFeedback}
-                  isLoading={isLoading}
-                  isChatLoading={isChatLoading}
-                  loadingAction={loadingAction}
-                  outputType={outputType}
-                  error={error}
-                  onSaveVersion={handleOpenSaveModal}
-                  onShowDiff={() => setIsDiffModalOpen(true)}
-                  canCompare={commitMessageAvailable}
-                  isActive={activePanel === 'output'}
-                />
-            )}
-          </div>
-        </div>
+                    addToast={addToast}
+                  />
+              )}
+            </div>
+          )}
       </main>
-      <footer className="py-4">
+      <footer className="py-4 text-center">
+          <div className="flex justify-center items-center space-x-6 text-xs text-[#70c0c0]/80">
+            <span>4ndr0⫌ebugger &copy; 2024</span>
+          </div>
           <input 
             type="file" 
             ref={fileInputRef} 
@@ -734,6 +714,7 @@ const App: React.FC = () => {
             style={{ display: 'none' }} 
             accept=".json,application/json" 
           />
+          <ToastContainer toasts={toasts} onDismiss={removeToast} />
       </footer>
        <SaveVersionModal
           isOpen={isSaveModalOpen}

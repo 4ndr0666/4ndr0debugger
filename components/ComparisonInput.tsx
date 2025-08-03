@@ -1,9 +1,11 @@
+
 import React, { useState } from 'react';
 import { SupportedLanguage, ChatMessage, Version } from '../types';
 import { Button } from './Button';
 import { Select } from './Select';
 import { SUPPORTED_LANGUAGES } from '../constants';
 import { ChatInterface } from './ChatInterface';
+import { StopIcon } from './Icons';
 
 interface ComparisonInputProps {
   codeA: string;
@@ -24,6 +26,7 @@ interface ComparisonInputProps {
   reviewAvailable: boolean;
   onFollowUpSubmit: (message: string) => void;
   chatHistory: ChatMessage[];
+  onStopGenerating: () => void;
 }
 
 const CodeEditor: React.FC<{
@@ -32,27 +35,38 @@ const CodeEditor: React.FC<{
   setCode: (code: string) => void;
   isLoading: boolean;
   language: SupportedLanguage;
-}> = ({ title, code, setCode, isLoading, language }) => (
-    <div className="flex flex-col">
-        <h3 className="text-lg font-semibold text-center mb-2 text-[#e0ffff] font-heading">{title}</h3>
-        <textarea
-            rows={15}
-            className="block w-full p-3 font-mono text-sm text-[#e0ffff] bg-[#070B14] border border-[#15adad]/70 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#15ffff] focus:border-[#15ffff] resize-y placeholder:text-[#60c0c0] placeholder:font-sans"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            disabled={isLoading}
-            aria-label={`${title} code input area`}
-            placeholder={`Paste code for ${title} here...`}
-        />
-    </div>
-);
+}> = ({ title, code, setCode, isLoading, language }) => {
+    const textareaClasses = `
+        block w-full p-3 font-mono text-sm text-[#e0ffff] bg-transparent rounded-md shadow-sm 
+        focus:outline-none focus:ring-2 focus:ring-[#15ffff] focus:border-[#15ffff] 
+        resize-y placeholder:text-[#60c0c0] placeholder:font-sans transition-colors duration-300
+        ${code ? 'border border-[#15adad]/70' : 'border border-transparent'}
+        ${!code ? 'blinking-placeholder' : ''}
+    `.trim().replace(/\s+/g, ' ');
+
+    return (
+        <div className="flex flex-col">
+            <h3 className="text-lg font-semibold text-center mb-2 text-[#e0ffff] font-heading">{title}</h3>
+            <textarea
+                rows={15}
+                className={textareaClasses}
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                disabled={isLoading}
+                aria-label={`${title} code input area`}
+                placeholder="❯ "
+                title="Paste code here."
+            />
+        </div>
+    );
+};
 
 
 export const ComparisonInput: React.FC<ComparisonInputProps> = (props) => {
     const {
         codeA, setCodeA, codeB, setCodeB, language, setLanguage, goal, setGoal,
         onSubmit, isLoading, isActive, onNewReview, isChatMode, reviewAvailable,
-        onStartFollowUp
+        onStartFollowUp, onStopGenerating
     } = props;
 
     const [isCollapsed, setIsCollapsed] = useState(false);
@@ -65,6 +79,10 @@ export const ComparisonInput: React.FC<ComparisonInputProps> = (props) => {
             onSubmit();
         }
     };
+
+    if (isLoading && !isChatMode) {
+        setIsCollapsed(true);
+    }
     
     if (isChatMode) {
         return (
@@ -77,6 +95,33 @@ export const ComparisonInput: React.FC<ComparisonInputProps> = (props) => {
                 />
             </div>
         );
+    }
+    
+    const renderPrimaryAction = () => {
+        if (isLoading) {
+             return (
+                <Button 
+                  onClick={onStopGenerating} 
+                  variant="danger"
+                  className="w-full"
+                  aria-label="Stop generating analysis"
+                  title="Stop the current analysis."
+                >
+                  <StopIcon className="w-5 h-5 mr-2" />
+                  Stop Generating
+                </Button>
+             )
+        }
+        return (
+            <Button 
+                onClick={handleSubmit} 
+                disabled={!canSubmit || isLoading}
+                className="w-full"
+                aria-label={isLoading ? 'Analyzing...' : 'Compare and optimize the codebases'}
+            >
+                Compare & Optimize
+            </Button>
+        )
     }
 
     return (
@@ -94,7 +139,7 @@ export const ComparisonInput: React.FC<ComparisonInputProps> = (props) => {
                  </h2>
                  <button
                     onClick={(e) => { e.preventDefault(); onNewReview(); }}
-                    className="p-1 text-[#15FFFF] hover:text-white transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#070B14] focus:ring-[#15fafa] rounded-full"
+                    className="p-1 text-[#15FFFF] hover:text-white transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#101827] focus:ring-[#15fafa] rounded-full"
                     aria-label="Back to Single Review"
                     title="Back to Single Review"
                 >
@@ -111,16 +156,18 @@ export const ComparisonInput: React.FC<ComparisonInputProps> = (props) => {
                     <div className="overflow-hidden">
                         <div className="space-y-4 py-2">
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
-                                <Select
-                                    id="language-select"
-                                    label="Select Language"
-                                    options={SUPPORTED_LANGUAGES}
-                                    value={language}
-                                    onChange={(newLang) => setLanguage(newLang as SupportedLanguage)}
-                                    disabled={isLoading}
-                                    aria-label="Select programming language for comparison"
-                                />
-                                <div>
+                                <div title="Select the language for an accurate comparison.">
+                                    <Select
+                                        id="language-select"
+                                        label="Select Language"
+                                        options={SUPPORTED_LANGUAGES}
+                                        value={language}
+                                        onChange={(newLang) => setLanguage(newLang as SupportedLanguage)}
+                                        disabled={isLoading}
+                                        aria-label="Select programming language for comparison"
+                                    />
+                                </div>
+                                <div title="Briefly describe the common goal of both codebases (optional).">
                                     <label htmlFor="comparison-goal" className="block text-sm font-medium text-[#a0f0f0] mb-1">
                                         Shared Goal (Optional)
                                     </label>
@@ -146,15 +193,7 @@ export const ComparisonInput: React.FC<ComparisonInputProps> = (props) => {
             </div>
             
             <div className="flex-shrink-0 pt-4 space-y-4">
-                <Button 
-                    onClick={handleSubmit} 
-                    isLoading={isLoading}
-                    disabled={!canSubmit || isLoading}
-                    className="w-full"
-                    aria-label={isLoading ? 'Analyzing...' : 'Compare and optimize the codebases'}
-                >
-                    {isLoading ? 'Analyzing...' : 'Compare & Optimize'}
-                </Button>
+                {renderPrimaryAction()}
                 {reviewAvailable && (
                     <div className="w-full flex flex-col items-center space-y-2 border-t border-[#15adad]/30 pt-4">
                       <Button

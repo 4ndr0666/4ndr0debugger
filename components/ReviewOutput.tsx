@@ -1,9 +1,8 @@
-
-
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { LoadingSpinner } from './LoadingSpinner';
 import { MarkdownRenderer } from './MarkdownRenderer';
-import { LoadingAction } from '../types';
+import { LoadingAction, Toast } from '../types';
+import { SaveIcon, CopyIcon, CheckIcon, CompareIcon } from './Icons';
 
 interface ReviewOutputProps {
   feedback: string | null;
@@ -16,51 +15,28 @@ interface ReviewOutputProps {
   onShowDiff: () => void;
   canCompare: boolean;
   isActive: boolean;
+  addToast: (message: string, type: Toast['type']) => void;
 }
 
-const SaveIcon: React.FC<{ className?: string }> = ({ className }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-    <polyline strokeLinecap="round" strokeLinejoin="round" points="17 21 17 13 7 13 7 21" />
-    <polyline strokeLinecap="round" strokeLinejoin="round" points="7 3 7 8 15 8" />
-  </svg>
-);
-
-const CopyIcon: React.FC<{ className?: string }> = ({ className }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" className={className || "h-5 w-5"} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-  </svg>
-);
-
-const CheckIcon: React.FC<{ className?: string }> = ({ className }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" className={className || "h-5 w-5"} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-    </svg>
-);
-
-const CompareIcon: React.FC<{ className?: string }> = ({ className }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-    </svg>
-);
-
-
-export const ReviewOutput: React.FC<ReviewOutputProps> = ({ feedback, isLoading, isChatLoading, loadingAction, error, onSaveVersion, isActive, outputType, onShowDiff, canCompare }) => {
+export const ReviewOutput: React.FC<ReviewOutputProps> = ({ 
+    feedback, isLoading, isChatLoading, loadingAction, error, 
+    onSaveVersion, isActive, outputType, onShowDiff, canCompare,
+    addToast
+}) => {
   const showLoading = isLoading || isChatLoading;
   const canSave = !showLoading && !error && feedback;
   const canCopy = !showLoading && !error && feedback;
 
   const contentRef = useRef<HTMLDivElement>(null);
   const [isScrolled, setIsScrolled] = useState(false);
-  const [isCopied, setIsCopied] = useState(false);
-
+  
   const handleCopy = () => {
     if (!feedback) return;
     navigator.clipboard.writeText(feedback).then(() => {
-      setIsCopied(true);
-      setTimeout(() => setIsCopied(false), 2500);
+      addToast('Copied to clipboard!', 'success');
     }).catch(err => {
       console.error('Failed to copy markdown: ', err);
+      addToast('Failed to copy to clipboard.', 'error');
     });
   };
 
@@ -139,10 +115,10 @@ export const ReviewOutput: React.FC<ReviewOutputProps> = ({ feedback, isLoading,
             <button
               onClick={handleCopy}
               className="p-2 text-[#a0f0f0] rounded-full transition-all duration-200 hover:bg-[#15fafa]/30 hover:text-white focus:outline-none focus:ring-2 focus:ring-[#15fafa]"
-              aria-label={isCopied ? "Copied" : "Copy Markdown"}
+              aria-label={"Copy Markdown"}
               title="Copy Markdown"
             >
-              {isCopied ? <CheckIcon className="w-5 h-5 text-green-400" /> : <CopyIcon className="w-5 h-5" />}
+              <CopyIcon className="w-5 h-5" />
             </button>
           )}
           {canSave && (
@@ -185,11 +161,6 @@ export const ReviewOutput: React.FC<ReviewOutputProps> = ({ feedback, isLoading,
               aria-hidden="true"
             />
           </>
-        )}
-        {!showLoading && !error && !feedback && (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-gray-400 italic text-center">Submit code to see results.</p>
-          </div>
         )}
       </div>
     </div>

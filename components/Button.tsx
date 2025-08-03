@@ -3,7 +3,7 @@ import React from 'react';
 import { LoadingSpinner } from './LoadingSpinner'; // Assuming LoadingSpinner might be used here
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary';
+  variant?: 'primary' | 'secondary' | 'danger';
   isLoading?: boolean;
   children: React.ReactNode;
 }
@@ -20,6 +20,7 @@ export const Button: React.FC<ButtonProps> = ({
   const variantStyles = {
     primary: "bg-[#101827] text-[#e0ffff] border border-[#15adad]/60 shadow-xl shadow-[#156464]/30 hover:border-[#15fafa]/80 hover:shadow-lg hover:shadow-[#15fafa]/50 focus:ring-[#15adad] focus:ring-offset-[#0A0F1A] animate-pulse-glow",
     secondary: "bg-[#157d7d] hover:bg-[#159a9a] text-[#e0ffff] focus:ring-[#157d7d] focus:ring-offset-[#0A0F1A] shadow-[#157d7d]/30 hover:shadow-lg hover:shadow-[#157d7d]/50",
+    danger: "bg-red-900/50 hover:bg-red-900/70 text-red-200 border border-red-500/80 focus:ring-red-500 focus:ring-offset-[#0A0F1A] shadow-red-500/30 hover:shadow-lg hover:shadow-red-500/50",
   };
 
   const disabledStyles = "opacity-60 cursor-not-allowed";
