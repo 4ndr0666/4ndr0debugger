@@ -10,22 +10,22 @@ interface ToastProps {
 const toastConfig = {
   success: {
     Icon: ToastSuccessIcon,
-    iconClass: 'text-green-300',
-    borderClass: 'border-green-500/60',
+    iconClass: 'text-green-400',
+    borderClass: 'border-green-500',
   },
   error: {
     Icon: ToastErrorIcon,
-    iconClass: 'text-red-300',
-    borderClass: 'border-red-500/60',
+    iconClass: 'text-[var(--red-color)]',
+    borderClass: 'border-[var(--red-color)]',
   },
   info: {
     Icon: ToastInfoIcon,
-    iconClass: 'text-cyan-300',
-    borderClass: 'border-cyan-500/60',
+    iconClass: 'text-[var(--hud-color)]',
+    borderClass: 'border-[var(--hud-color)]',
   },
 };
 
-export const ToastComponent: React.FC<ToastProps> = ({ toast, onDismiss }) => {
+export const ToastComponent = ({ toast, onDismiss }: ToastProps) => {
   const [isFadingOut, setIsFadingOut] = useState(false);
 
   useEffect(() => {
@@ -49,17 +49,17 @@ export const ToastComponent: React.FC<ToastProps> = ({ toast, onDismiss }) => {
 
   return (
     <div
-      className={`w-full max-w-sm p-4 rounded-lg shadow-2xl shadow-black/50 bg-[#101827]/80 backdrop-blur-md border ${borderClass} flex items-start space-x-4 animate-toast-in transition-opacity duration-500 ${isFadingOut ? 'opacity-0' : 'opacity-100'}`}
+      className={`w-full max-w-sm p-4 bg-black/90 backdrop-blur-sm border-l-4 ${borderClass} flex items-start space-x-4 transition-all duration-500 ${isFadingOut ? 'opacity-0 translate-x-full' : 'opacity-100 translate-x-0'}`}
       role="alert"
     >
       <div className="flex-shrink-0">
         <Icon className={`w-6 h-6 ${iconClass}`} />
       </div>
-      <div className="flex-grow text-sm text-[#e0ffff]">{toast.message}</div>
+      <div className="flex-grow text-sm text-[var(--hud-color)] uppercase tracking-wider">{toast.message}</div>
       <div className="flex-shrink-0">
         <button
           onClick={handleDismiss}
-          className="p-1 -m-1 rounded-full text-gray-400 hover:text-white hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white"
+          className="p-1 -m-1 rounded-full text-gray-400 hover:text-white hover:bg-white/10 focus:outline-none focus:ring-1 focus:ring-inset focus:ring-white"
           aria-label="Dismiss"
         >
           <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">

@@ -1,9 +1,8 @@
-
 # 4ndr0⫌ebugger (AI Code Reviewer)
 
 Welcome to 4ndr0⫌ebugger! This application leverages the power of Google's Gemini API, specifically the `gemini-2.5-flash` model, to provide intelligent analysis and feedback on your code. Submit code snippets in various languages, and the AI will help you identify potential bugs, suggest improvements for quality and style, and offer insights based on best practices, aiming to guide you towards production-ready revisions.
 
-The application features a sleek, cyan-centric and cyberpunk-inspired UI theme I call "electric glass".
+The application features a sleek, futuristic HUD (Heads-Up Display) inspired UI theme with glowing cyan elements on a black background.
 
 <!--
 **Screenshot Placeholder:**
@@ -26,7 +25,7 @@ Example:
 *   **Dynamic Language-Specific Templates:** Input your code into a predefined, language-specific template. This provides context to the AI for more targeted reviews based on established guidelines for each language.
 *   **Customizable AI Behavior:** The underlying system instructions and language-specific review criteria for the AI can be modified (see `constants.ts`).
 *   **Responsive Design:** User interface adapts to various screen sizes.
-*   **Thematic UI:** My unique "electric glass" dark theme provides a visually appealing experience.
+*   **Thematic UI:** A unique, futuristic HUD dark theme provides a visually appealing experience.
 *   **API Key Status Banner:** Informs the user if the Gemini API key is configured.
 
 ## Tech Stack

@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { GoogleGenAI, Chat, Type } from "@google/genai";
 import { Header } from './components/Header';
@@ -11,6 +12,7 @@ import { ComparisonInput } from './components/ComparisonInput';
 import { VersionHistoryModal } from './components/VersionHistoryModal';
 import { SaveVersionModal } from './components/SaveVersionModal';
 import { ToastContainer } from './components/ToastContainer';
+import { ApiKeyBanner } from './components/ApiKeyBanner';
 
 type OutputType = LoadingAction;
 type ActivePanel = 'input' | 'output';
@@ -132,7 +134,8 @@ const App: React.FC = () => {
       let fullResponse = "";
       for await (const chunk of responseStream) {
         if (abortStreamRef.current) break;
-        fullResponse += chunk.text;
+        const chunkText = chunk.text;
+        fullResponse += chunkText;
         setReviewFeedback(fullResponse);
       }
       return fullResponse;
@@ -155,6 +158,7 @@ const App: React.FC = () => {
   const handleStopGenerating = () => {
     abortStreamRef.current = true;
     setIsLoading(false);
+    setIsChatLoading(false); // also stop chat loading if applicable
     setLoadingAction(null);
     addToast("Generation stopped.", "info");
   };
@@ -358,24 +362,24 @@ const App: React.FC = () => {
       }
     }
 
-    const historyForAPI = [
-      { role: 'user' as const, parts: [{ text: contextCode }] },
-      { role: 'model' as const, parts: [{ text: contextFeedback }] }
+    const historyForAPI: {role: 'user' | 'model', parts: {text: string}[]}[] = [
+      { role: 'user', parts: [{ text: contextCode }] },
+      { role: 'model', parts: [{ text: contextFeedback }] }
     ];
 
     const historyForUI: ChatMessage[] = [];
     
     if (version) {
-        historyForUI.push({ role: 'model', content: `Starting a follow-up about version: **"${version.name}"**.\n\nWhat would you like to ask?` });
+        historyForUI.push({ id: `chat_${Date.now()}`, role: 'model', content: `Starting a follow-up about version: **"${version.name}"**.\n\nWhat would you like to ask?` });
     } else if (selectionText) {
       const followUpContext = `My follow-up question is about this specific part of your code revision:\n\n\`\`\`\n${selectionText}\n\`\`\``;
-      historyForAPI.push({ role: 'user' as const, parts: [{ text: followUpContext }] });
+      historyForAPI.push({ role: 'user', parts: [{ text: followUpContext }] });
       const uiConfirmation = `Okay, let's talk about this snippet:\n\n\`\`\`\n${selectionText}\n\`\`\``;
-      historyForUI.push({ role: 'model', content: uiConfirmation });
+      historyForUI.push({ id: `chat_${Date.now()}`, role: 'model', content: uiConfirmation });
     } else {
-      historyForUI.push({ role: 'model', content: "What would you like to ask about the review?" });
+      historyForUI.push({ id: `chat_${Date.now()}`, role: 'model', content: "What would you like to ask about the review?" });
     }
-
+    
     const newChat = ai.chats.create({ 
       model: GEMINI_MODEL_NAME, 
       history: historyForAPI,
@@ -394,30 +398,39 @@ const App: React.FC = () => {
     if (!chatSession) return;
     setIsChatLoading(true);
     setError(null);
-    setChatHistory(prev => [...prev, { role: 'user', content: message }]);
+    setChatHistory(prev => [...prev, { id: `chat_user_${Date.now()}`, role: 'user', content: message }]);
     setActivePanel('input');
+    abortStreamRef.current = false;
+    
+    const modelMessageId = `chat_model_${Date.now()}`;
     
     try {
-      setChatHistory(prev => [...prev, { role: 'model', content: '' }]); // Add empty placeholder
+      setChatHistory(prev => [...prev, { id: modelMessageId, role: 'model', content: '' }]); // Add empty placeholder
       
       const responseStream = await chatSession.sendMessageStream({ message });
       
       let currentResponse = "";
       for await (const chunk of responseStream) {
-        currentResponse += chunk.text;
+        if (abortStreamRef.current) break;
+        const chunkText = chunk.text;
+        currentResponse += chunkText;
         setChatHistory(prev => {
           const newHistory = [...prev];
-          newHistory[newHistory.length - 1] = { role: 'model', content: currentResponse };
+          newHistory[newHistory.length - 1] = { id: modelMessageId, role: 'model', content: currentResponse };
           return newHistory;
         });
       }
       
     } catch (apiError) {
-      console.error("Chat API Error:", apiError);
-      const message = apiError instanceof Error ? apiError.message : "An unexpected error occurred.";
-      setError(`Failed to get response: ${message}`);
-      addToast(`Chat Error: ${message}`, 'error');
-      setChatHistory(prev => prev.slice(0, -1)); // Remove the empty placeholder on error
+      if (abortStreamRef.current) {
+        console.log("Chat stream aborted.");
+      } else {
+        console.error("Chat API Error:", apiError);
+        const errorMsg = apiError instanceof Error ? apiError.message : "An unexpected error occurred.";
+        setError(`Failed to get response: ${errorMsg}`);
+        addToast(`Chat Error: ${errorMsg}`, 'error');
+        setChatHistory(prev => prev.slice(0, -1)); // Remove the empty placeholder on error
+      }
     } finally {
       setIsChatLoading(false);
     }
@@ -445,7 +458,7 @@ const App: React.FC = () => {
 
   const handleOpenSaveModal = () => {
     if (!canSaveReview) return;
-    setVersionName(`Result ${new Date().toLocaleString()}`);
+    setVersionName(`SYS_SAVE // ${new Date().toLocaleString()}`);
     setIsSaveModalOpen(true);
   };
 
@@ -555,7 +568,13 @@ const App: React.FC = () => {
         setReviewFeedback(data.reviewFeedback ?? null);
         setReviewedCode(data.reviewedCode ?? null);
         setRevisedCode(data.revisedCode ?? null);
-        setChatHistory(data.chatHistory ?? []);
+        
+        const chatHistoryWithIds = (data.chatHistory ?? []).map((msg: Omit<ChatMessage, 'id'>, index: number) => ({
+          ...msg,
+          id: `imported_${Date.now()}_${index}`
+        }));
+        setChatHistory(chatHistoryWithIds);
+
         setAppMode(data.appMode ?? 'single');
         setCodeB(data.codeB ?? '');
         setComparisonGoal(data.comparisonGoal ?? '');
@@ -563,13 +582,13 @@ const App: React.FC = () => {
         addToast('Session imported successfully!', 'success');
 
         // Re-create chat session if there's history
-        if (ai && data.chatHistory?.length > 0 && data.fullCodeForReview && data.reviewFeedback) {
-            const historyForAPI = [
-                { role: 'user' as const, parts: [{ text: data.fullCodeForReview }] },
-                { role: 'model' as const, parts: [{ text: data.reviewFeedback }] }
+        if (ai && chatHistoryWithIds.length > 0 && data.fullCodeForReview && data.reviewFeedback) {
+            const historyForAPI: {role: 'user' | 'model', parts: {text: string}[]}[] = [
+                { role: 'user', parts: [{ text: data.fullCodeForReview }] },
+                { role: 'model', parts: [{ text: data.reviewFeedback }] }
             ];
 
-            const qaPairs = data.chatHistory.slice(1);
+            const qaPairs = chatHistoryWithIds.slice(1);
             qaPairs.forEach((msg: ChatMessage) => {
                 historyForAPI.push({ role: msg.role as 'user' | 'model', parts: [{ text: msg.content }] });
             });
@@ -580,7 +599,7 @@ const App: React.FC = () => {
                 config: { systemInstruction: getSystemInstructionForReview() }
             });
             setChatSession(newChat);
-setIsChatMode(true);
+            setIsChatMode(true);
         } else {
             setIsChatMode(false);
         }
@@ -608,7 +627,13 @@ setIsChatMode(true);
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col relative">
+      {/* Decorative Elements */}
+      <div className="fixed top-1/4 left-8 w-1/4 h-px bg-[var(--hud-color-darker)] opacity-50"></div>
+      <div className="fixed bottom-1/4 right-8 w-1/4 h-px bg-[var(--hud-color-darker)] opacity-50"></div>
+      <div className="fixed top-1/2 right-12 w-px h-1/4 bg-[var(--hud-color-darker)] opacity-50"></div>
+      <div className="fixed bottom-1/3 left-12 w-px h-1/4 bg-[var(--hud-color-darker)] opacity-50"></div>
+
       <Header 
         onSaveVersion={handleOpenSaveModal}
         onImportClick={handleImportClick}
@@ -618,10 +643,11 @@ setIsChatMode(true);
         onGenerateDocs={handleGenerateDocs}
         onToggleVersionHistory={() => setIsVersionHistoryModalOpen(true)}
         isToolsEnabled={userOnlyCode.trim() !== '' && !isChatMode && appMode === 'single'}
-        isLoading={isLoading}
+        isLoading={isLoading || isChatLoading}
         addToast={addToast}
       />
-      <main className={`flex-grow container mx-auto p-4 sm:p-6 lg:p-8 grid grid-cols-1 ${showOutputPanel ? 'lg:grid-cols-2' : ''} gap-6 lg:gap-8 animate-fade-in-up`}>
+      <ApiKeyBanner />
+      <main className={`flex-grow container mx-auto p-4 sm:p-6 lg:p-8 grid grid-cols-1 ${showOutputPanel ? 'lg:grid-cols-2' : ''} gap-6 lg:gap-8 animate-fade-in`}>
           <div className="min-h-0" onClick={() => !isChatMode && setActivePanel('input')}>
             {appMode === 'single' ? (
                 <CodeInput
@@ -704,7 +730,7 @@ setIsChatMode(true);
           )}
       </main>
       <footer className="py-4 text-center">
-          <div className="flex justify-center items-center space-x-6 text-xs text-[#70c0c0]/80">
+          <div className="flex justify-center items-center space-x-6 text-xs text-[var(--hud-color-darker)]">
             <span>4ndr0⫌ebugger &copy; 2024</span>
           </div>
           <input 

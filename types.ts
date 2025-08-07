@@ -1,4 +1,5 @@
 
+
 export enum SupportedLanguage {
   JAVASCRIPT = 'JavaScript',
   TYPESCRIPT = 'TypeScript',
@@ -41,6 +42,7 @@ export interface LanguageOption {
 }
 
 export interface ChatMessage {
+  id: string;
   role: 'user' | 'model';
   content: string;
 }

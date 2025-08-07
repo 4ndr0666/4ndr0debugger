@@ -1,4 +1,5 @@
 
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 
 interface SelectOption {
@@ -17,7 +18,7 @@ interface SelectProps {
   'aria-label'?: string;
 }
 
-export const Select: React.FC<SelectProps> = ({
+export const Select = ({
   options,
   label,
   id,
@@ -26,7 +27,7 @@ export const Select: React.FC<SelectProps> = ({
   onChange,
   disabled = false,
   'aria-label': ariaLabel,
-}) => {
+}: SelectProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -122,7 +123,7 @@ export const Select: React.FC<SelectProps> = ({
         <label
           onClick={toggleOpen}
           id={id ? `${id}-label` : undefined}
-          className="block text-sm font-medium text-[#a0f0f0] mb-1 cursor-pointer"
+          className="block text-sm uppercase tracking-wider text-[var(--hud-color-darker)] mb-1 cursor-pointer"
         >
           {label}
         </label>
@@ -130,7 +131,7 @@ export const Select: React.FC<SelectProps> = ({
       <button
         type="button"
         id={id}
-        className={`relative w-full pl-3 pr-10 py-2.5 text-left border border-[#15adad]/60 bg-[#101827] text-[#e0ffff] focus:outline-none focus:ring-2 focus:ring-[#15ffff] sm:text-sm rounded-md cursor-pointer transition-all duration-150 shadow-xl shadow-[#156464]/30 hover:border-[#15fafa]/80 hover:shadow-lg hover:shadow-[#15fafa]/50 ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+        className={`relative w-full pl-3 pr-10 py-2.5 text-left border border-[var(--hud-color-darker)] bg-black text-[var(--hud-color)] focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)] focus:border-[var(--hud-color)] sm:text-sm cursor-pointer transition-all duration-150 hover:border-[var(--hud-color)] hover:text-white ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         onClick={toggleOpen}
         disabled={disabled}
         aria-haspopup="listbox"
@@ -140,7 +141,7 @@ export const Select: React.FC<SelectProps> = ({
       >
         <span className="block truncate">{selectedOption?.label || 'Select an option'}</span>
         <span className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="#15fafa" className={`w-5 h-5 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 transition-transform duration-200 text-[var(--hud-color)] ${isOpen ? 'rotate-180' : ''}`}>
             <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
           </svg>
         </span>
@@ -149,7 +150,7 @@ export const Select: React.FC<SelectProps> = ({
       {isOpen && (
         <ul
           ref={listRef}
-          className="absolute z-10 w-full mt-1 bg-[#101827]/70 backdrop-blur-md border border-[#15fafa] rounded-md shadow-lg max-h-60 overflow-auto focus:outline-none text-base sm:text-sm p-1"
+          className="absolute z-10 w-full mt-1 bg-black/90 backdrop-blur-sm border border-[var(--hud-color)] max-h-60 overflow-auto focus:outline-none text-base sm:text-sm p-1"
           role="listbox"
           aria-activedescendant={id && highlightedIndex >= 0 ? `${id}-option-${highlightedIndex}` : undefined}
           tabIndex={-1}
@@ -160,19 +161,19 @@ export const Select: React.FC<SelectProps> = ({
               <li
                 key={option.value}
                 id={id ? `${id}-option-${index}` : undefined}
-                className={`cursor-pointer select-none relative p-2 rounded-md transition-all duration-150 ${
-                  isHighlighted ? 'bg-transparent border border-[#15FFFF]' : 'border border-transparent'
+                className={`cursor-pointer select-none relative p-2 transition-all duration-150 ${
+                  isHighlighted ? 'bg-[var(--hud-color)]/20' : 'bg-transparent'
                 }`}
                 role="option"
                 aria-selected={value === option.value}
                 onClick={() => handleSelectOption(option)}
                 onMouseEnter={() => setHighlightedIndex(index)}
               >
-                <span className={`block truncate ${value === option.value ? 'font-semibold text-[#15fafa]' : 'font-normal text-[#e0ffff]'}`}>
+                <span className={`block truncate ${value === option.value ? 'font-semibold text-[var(--hud-color)]' : 'font-normal text-[var(--hud-color-darker)]'}`}>
                   {option.label}
                 </span>
                 {value === option.value && (
-                  <span className="absolute inset-y-0 right-0 flex items-center pr-3 text-[#15fafa]">
+                  <span className="absolute inset-y-0 right-0 flex items-center pr-3 text-[var(--hud-color)]">
                     <svg className="w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>

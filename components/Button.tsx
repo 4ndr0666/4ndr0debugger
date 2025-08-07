@@ -1,6 +1,7 @@
 
+
 import React from 'react';
-import { LoadingSpinner } from './LoadingSpinner'; // Assuming LoadingSpinner might be used here
+import { LoadingSpinner } from './LoadingSpinner';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'danger';
@@ -8,22 +9,22 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   children: React.ReactNode;
 }
 
-export const Button: React.FC<ButtonProps> = ({ 
+export const Button = ({ 
   children, 
   variant = 'primary', 
   isLoading = false, 
   className, 
   ...props 
-}) => {
-  const baseStyle = "px-6 py-2.5 rounded-md font-semibold text-sm focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-150 flex items-center justify-center";
+}: ButtonProps) => {
+  const baseStyle = "px-6 py-2.5 font-semibold text-sm uppercase tracking-wider focus:outline-none transition-all duration-150 flex items-center justify-center border";
   
   const variantStyles = {
-    primary: "bg-[#101827] text-[#e0ffff] border border-[#15adad]/60 shadow-xl shadow-[#156464]/30 hover:border-[#15fafa]/80 hover:shadow-lg hover:shadow-[#15fafa]/50 focus:ring-[#15adad] focus:ring-offset-[#0A0F1A] animate-pulse-glow",
-    secondary: "bg-[#157d7d] hover:bg-[#159a9a] text-[#e0ffff] focus:ring-[#157d7d] focus:ring-offset-[#0A0F1A] shadow-[#157d7d]/30 hover:shadow-lg hover:shadow-[#157d7d]/50",
-    danger: "bg-red-900/50 hover:bg-red-900/70 text-red-200 border border-red-500/80 focus:ring-red-500 focus:ring-offset-[#0A0F1A] shadow-red-500/30 hover:shadow-lg hover:shadow-red-500/50",
+    primary: "bg-transparent border-[var(--hud-color)] text-[var(--hud-color)] hover:bg-[var(--hud-color)] hover:text-[var(--hud-bg-color)] focus:bg-[var(--hud-color)] focus:text-[var(--hud-bg-color)]",
+    secondary: "bg-[var(--hud-color-darkest)] border-[var(--hud-color-darker)] text-[var(--hud-color-darker)] hover:border-[var(--hud-color)] hover:text-[var(--hud-color)] focus:border-[var(--hud-color)] focus:text-[var(--hud-color)]",
+    danger: "bg-transparent border-[var(--red-color)] text-[var(--red-color)] hover:bg-[var(--red-color)] hover:text-[var(--hud-bg-color)] focus:bg-[var(--red-color)] focus:text-[var(--hud-bg-color)]",
   };
 
-  const disabledStyles = "opacity-60 cursor-not-allowed";
+  const disabledStyles = "opacity-50 cursor-not-allowed border-[var(--hud-color-darker)] text-[var(--hud-color-darker)] hover:bg-transparent hover:text-[var(--hud-color-darker)]";
 
   return (
     <button
@@ -33,7 +34,7 @@ export const Button: React.FC<ButtonProps> = ({
       {...props}
     >
       {isLoading && (
-        <LoadingSpinner size="w-5 h-5" color={variant === 'primary' ? 'text-[#e0ffff]' : 'text-[#e0ffff]'} className="-ml-1 mr-3" />
+        <LoadingSpinner size="w-5 h-5" color={variant === 'primary' ? 'text-[var(--hud-color)]' : 'text-current'} className="-ml-1 mr-3" />
       )}
       {children}
     </button>

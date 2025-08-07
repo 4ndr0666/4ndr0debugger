@@ -1,2 +1,3 @@
-// This file is no longer used and has been deleted.
-// The streaming API logic was moved into App.tsx to allow for direct state updates.
+// This file is deprecated and its contents have been removed.
+// The canonical version of App.tsx now handles all Gemini API logic internally,
+// making this service layer unnecessary for the stable application architecture.

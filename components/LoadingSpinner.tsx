@@ -8,7 +8,7 @@ interface LoadingSpinnerProps {
 
 const spinnerChars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
-export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({ size = 'w-8 h-8', color = 'text-[#15fafa]', className = '' }) => {
+export const LoadingSpinner = ({ size = 'w-8 h-8', color = 'text-[#15fafa]', className = '' }: LoadingSpinnerProps) => {
   const [charIndex, setCharIndex] = useState(0);
 
   useEffect(() => {

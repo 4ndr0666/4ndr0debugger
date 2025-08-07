@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { SupportedLanguage, ChatMessage, Version } from '../types';
 import { Button } from './Button';
@@ -37,16 +36,16 @@ const CodeEditor: React.FC<{
   language: SupportedLanguage;
 }> = ({ title, code, setCode, isLoading, language }) => {
     const textareaClasses = `
-        block w-full p-3 font-mono text-sm text-[#e0ffff] bg-transparent rounded-md shadow-sm 
-        focus:outline-none focus:ring-2 focus:ring-[#15ffff] focus:border-[#15ffff] 
-        resize-y placeholder:text-[#60c0c0] placeholder:font-sans transition-colors duration-300
-        ${code ? 'border border-[#15adad]/70' : 'border border-transparent'}
+        block w-full p-3 font-mono text-sm text-[var(--hud-color)] bg-black/70
+        focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)]
+        resize-y placeholder:text-[var(--hud-color-darker)] transition-colors duration-300
+        border border-[var(--hud-color-darker)]
         ${!code ? 'blinking-placeholder' : ''}
     `.trim().replace(/\s+/g, ' ');
 
     return (
         <div className="flex flex-col">
-            <h3 className="text-lg font-semibold text-center mb-2 text-[#e0ffff] font-heading">{title}</h3>
+            <h3 className="text-lg text-center mb-2">{title}</h3>
             <textarea
                 rows={15}
                 className={textareaClasses}
@@ -54,7 +53,7 @@ const CodeEditor: React.FC<{
                 onChange={(e) => setCode(e.target.value)}
                 disabled={isLoading}
                 aria-label={`${title} code input area`}
-                placeholder="❯ "
+                placeholder="Awaiting data stream..."
                 title="Paste code here."
             />
         </div>
@@ -79,14 +78,14 @@ export const ComparisonInput: React.FC<ComparisonInputProps> = (props) => {
             onSubmit();
         }
     };
-
-    if (isLoading && !isChatMode) {
-        setIsCollapsed(true);
-    }
     
     if (isChatMode) {
         return (
-            <div className={`bg-[#101827]/60 backdrop-blur-lg rounded-lg shadow-xl shadow-[#156464]/30 h-full flex flex-col transition-all duration-300 animated-border-container ${activeClass}`}>
+            <div className={`hud-container h-full flex flex-col ${activeClass}`}>
+                <div className="hud-corner corner-top-left"></div>
+                <div className="hud-corner corner-top-right"></div>
+                <div className="hud-corner corner-bottom-left"></div>
+                <div className="hud-corner corner-bottom-right"></div>
                 <ChatInterface
                     onEndChat={onNewReview}
                     chatHistory={props.chatHistory}
@@ -108,7 +107,7 @@ export const ComparisonInput: React.FC<ComparisonInputProps> = (props) => {
                   title="Stop the current analysis."
                 >
                   <StopIcon className="w-5 h-5 mr-2" />
-                  Stop Generating
+                  Stop
                 </Button>
              )
         }
@@ -125,21 +124,18 @@ export const ComparisonInput: React.FC<ComparisonInputProps> = (props) => {
     }
 
     return (
-        <div className={`p-6 bg-[#101827]/60 backdrop-blur-lg rounded-lg shadow-xl shadow-[#156464]/30 h-full flex flex-col overflow-hidden transition-all duration-300 animated-border-container ${activeClass}`}>
+        <div className={`hud-container h-full flex flex-col overflow-hidden ${activeClass}`}>
+            <div className="hud-corner corner-top-left"></div>
+            <div className="hud-corner corner-top-right"></div>
+            <div className="hud-corner corner-bottom-left"></div>
+            <div className="hud-corner corner-bottom-right"></div>
             <div className="flex-shrink-0 flex justify-between items-center mb-2">
-                 <h2 className="text-xl font-semibold text-center font-heading">
-                    <span style={{
-                        background: 'linear-gradient(to right, #15fafa, #15adad, #157d7d)',
-                        WebkitBackgroundClip: 'text',
-                        backgroundClip: 'text',
-                        color: 'transparent',
-                    }}>
-                        Comparative Analysis
-                    </span>
+                 <h2 className="text-xl text-center">
+                    Comparative Analysis
                  </h2>
                  <button
                     onClick={(e) => { e.preventDefault(); onNewReview(); }}
-                    className="p-1 text-[#15FFFF] hover:text-white transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#101827] focus:ring-[#15fafa] rounded-full"
+                    className="p-1 text-[var(--hud-color)] hover:text-white transition-colors duration-200 focus:outline-none focus:ring-1 focus:ring-offset-2 focus:ring-offset-transparent focus:ring-[var(--hud-color)] rounded-full"
                     aria-label="Back to Single Review"
                     title="Back to Single Review"
                 >
@@ -159,7 +155,7 @@ export const ComparisonInput: React.FC<ComparisonInputProps> = (props) => {
                                 <div title="Select the language for an accurate comparison.">
                                     <Select
                                         id="language-select"
-                                        label="Select Language"
+                                        label="Language"
                                         options={SUPPORTED_LANGUAGES}
                                         value={language}
                                         onChange={(newLang) => setLanguage(newLang as SupportedLanguage)}
@@ -168,7 +164,7 @@ export const ComparisonInput: React.FC<ComparisonInputProps> = (props) => {
                                     />
                                 </div>
                                 <div title="Briefly describe the common goal of both codebases (optional).">
-                                    <label htmlFor="comparison-goal" className="block text-sm font-medium text-[#a0f0f0] mb-1">
+                                    <label htmlFor="comparison-goal" className="block text-sm uppercase tracking-wider text-[var(--hud-color-darker)] mb-1">
                                         Shared Goal (Optional)
                                     </label>
                                     <input
@@ -177,8 +173,8 @@ export const ComparisonInput: React.FC<ComparisonInputProps> = (props) => {
                                         value={goal}
                                         onChange={(e) => setGoal(e.target.value)}
                                         disabled={isLoading}
-                                        className="block w-full p-2.5 font-sans text-sm text-[#e0ffff] bg-[#101827] border border-[#15adad]/60 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#15ffff] focus:border-[#15ffff]"
-                                        placeholder="e.g., 'Sort an array of numbers'"
+                                        className="block w-full p-2.5 font-mono text-sm text-[var(--hud-color)] bg-black border border-[var(--hud-color-darker)] focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)] focus:border-[var(--hud-color)]"
+                                        placeholder="e.g., 'Sort an array'"
                                     />
                                 </div>
                             </div>
@@ -195,7 +191,7 @@ export const ComparisonInput: React.FC<ComparisonInputProps> = (props) => {
             <div className="flex-shrink-0 pt-4 space-y-4">
                 {renderPrimaryAction()}
                 {reviewAvailable && (
-                    <div className="w-full flex flex-col items-center space-y-2 border-t border-[#15adad]/30 pt-4">
+                    <div className="w-full flex flex-col items-center space-y-2 border-t border-[var(--hud-color-darker)] pt-4">
                       <Button
                         onClick={() => onStartFollowUp()}
                         disabled={!reviewAvailable || isLoading}

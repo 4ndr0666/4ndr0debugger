@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { SupportedLanguage, ChatMessage, Version, ReviewProfile, LoadingAction } from '../types';
 import { Button } from './Button';
@@ -74,17 +73,21 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
   };
   
   const textareaClasses = `
-    block w-full h-full p-3 pr-10 font-mono text-sm text-[#e0ffff] rounded-md shadow-sm
-    focus:outline-none focus:ring-2 focus:ring-[#15ffff] focus:border-[#15ffff]
-    resize-y placeholder:text-[#60c0c0] placeholder:font-sans bg-transparent transition-colors duration-300
-    ${userCode ? 'border border-[#15adad]/70' : 'border border-transparent'}
+    block w-full h-full p-3 pr-10 font-mono text-sm text-[var(--hud-color)]
+    focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)] focus:border-[var(--hud-color)]
+    resize-y placeholder:text-[var(--hud-color-darker)] bg-black/70 border border-[var(--hud-color-darker)]
+    transition-colors duration-300
     ${!userCode ? 'blinking-placeholder' : ''}
   `.trim().replace(/\s+/g, ' ');
 
   // --- Collapsed State View ---
   if (isCollapsed && !isChatMode) {
     return (
-      <div key="collapsed-view" className="h-full flex items-center justify-center">
+      <div key="collapsed-view" className="h-full flex items-center justify-center hud-container">
+        <div className="hud-corner corner-top-left"></div>
+        <div className="hud-corner corner-top-right"></div>
+        <div className="hud-corner corner-bottom-left"></div>
+        <div className="hud-corner corner-bottom-right"></div>
         <div 
           onClick={() => setIsCollapsed(false)} 
           className="flex flex-col items-center cursor-pointer group p-6"
@@ -92,20 +95,11 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
           role="button"
           aria-label="Expand code editor"
         >
-          <h2 className="text-xl font-semibold text-center font-heading mb-4">
-            <span style={{
-              background: 'linear-gradient(to right, #15fafa, #15adad, #157d7d)',
-              WebkitBackgroundClip: 'text',
-              backgroundClip: 'text',
-              color: 'transparent',
-            }}>
-              Code to Review
-            </span>
+          <h2 className="text-xl text-center mb-4">
+            Awaiting Input
           </h2>
-          <span 
-            className={`text-2xl text-[#15fafa] font-mono transition-transform duration-200 group-hover:scale-110 blinking-prompt`}
-          >
-            ❯
+          <span className="text-2xl font-mono transition-transform duration-200 group-hover:scale-110 blinking-prompt">
+            &gt;
           </span>
         </div>
       </div>
@@ -126,14 +120,14 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
               title="Stop the current analysis."
             >
               <StopIcon className="w-5 h-5 mr-2" />
-              Stop Generating
+              Stop
             </Button>
           )
       }
       return (
         <Button 
           onClick={handleReviewSubmit} 
-          isLoading={false} // Loading state is handled by button replacement
+          isLoading={false}
           disabled={!userCode.trim() || isLoading}
           className="w-full sm:w-auto flex-grow"
           aria-label="Submit code for review"
@@ -145,7 +139,11 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
   }
 
   return (
-    <div key="expanded-view" className={`bg-[#101827]/60 backdrop-blur-lg rounded-lg shadow-xl shadow-[#156464]/30 h-full flex flex-col transition-all duration-300 animated-border-container ${activeClass} animate-fade-in-up`}>
+    <div key="expanded-view" className={`hud-container h-full flex flex-col ${activeClass} animate-fade-in`}>
+      <div className="hud-corner corner-top-left"></div>
+      <div className="hud-corner corner-top-right"></div>
+      <div className="hud-corner corner-bottom-left"></div>
+      <div className="hud-corner corner-bottom-right"></div>
       {isChatMode ? (
         <ChatInterface 
           onEndChat={onNewReview}
@@ -154,37 +152,30 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
           isChatLoading={props.isChatLoading}
         />
       ) : (
-        <div className="p-6 flex flex-col flex-grow overflow-hidden">
-          <div className="flex-grow overflow-y-auto pr-2">
-            <div className="flex flex-col space-y-4">
-              <div className="flex items-center justify-center relative">
-                <h2 className="text-xl font-semibold text-center font-heading">
-                  <span style={{
-                    background: 'linear-gradient(to right, #15fafa, #15adad, #157d7d)',
-                    WebkitBackgroundClip: 'text',
-                    backgroundClip: 'text',
-                    color: 'transparent',
-                  }}>
-                    Code to Review
-                  </span>
-                </h2>
-                <button
-                  onClick={() => setIsCollapsed(true)}
-                  aria-label="Collapse code editor"
-                  title="Collapse"
-                  className="absolute right-0 p-1 text-[#15fafa] rounded-full hover:bg-[#15fafa]/20"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
-                  </svg>
-                </button>
-              </div>
+        <div className="flex flex-col flex-grow overflow-hidden">
+          <div className="flex items-center justify-center relative flex-shrink-0">
+            <h2 className="text-xl text-center">
+              Code Input
+            </h2>
+            <button
+              onClick={() => setIsCollapsed(true)}
+              aria-label="Collapse code editor"
+              title="Collapse"
+              className="absolute right-0 p-1 text-[var(--hud-color)] rounded-full hover:bg-[var(--hud-color)]/20"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+              </svg>
+            </button>
+          </div>
               
+          <div className="flex-grow overflow-y-auto pr-2 mt-4">
+            <div className="flex flex-col space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
                 <div title="Select the language of your code for an accurate review.">
                   <Select
                     id="language-select"
-                    label="Select Language"
+                    label="Language"
                     options={SUPPORTED_LANGUAGES}
                     value={language}
                     onChange={(newLang) => setLanguage(newLang as SupportedLanguage)}
@@ -195,7 +186,7 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
                 <div title="Select an optional profile to focus the AI's analysis on specific criteria.">
                   <Select
                     id="review-profile-select"
-                    label="Select Optional Profile"
+                    label="Profile"
                     options={[{ value: 'none', label: 'Standard' }, ...REVIEW_PROFILES]}
                     value={reviewProfile}
                     onChange={(newProfile) => setReviewProfile(newProfile as ReviewProfile | 'none')}
@@ -209,7 +200,7 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
                 {renderPrimaryAction()}
                 <Button
                   onClick={onStartComparison}
-                  variant="primary"
+                  variant="secondary"
                   disabled={isLoading}
                   className="w-full sm:w-auto flex-grow"
                   aria-label="Switch to comparative analysis mode"
@@ -232,13 +223,13 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
                   onKeyUp={handleSelect}
                   disabled={isLoading}
                   aria-label="Code input area"
-                  placeholder="❯ "
+                  placeholder="Awaiting data stream..."
                   title="Paste code here."
                 />
                 {userCode && !isLoading && (
                   <button
                     onClick={(e) => { e.preventDefault(); onNewReview(); }}
-                    className="absolute top-3 right-3 p-1 text-[#15FFFF] hover:text-white transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-transparent focus:ring-[#15fafa] rounded-full"
+                    className="absolute top-3 right-3 p-1 text-[var(--hud-color)] hover:text-white transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-transparent focus:ring-[var(--hud-color)] rounded-full"
                     aria-label="Clear and start new review"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -249,14 +240,14 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
               </div>
               
               {selectedText && !isLoading && (
-                <div className="bg-[#070B14]/50 border border-[#15adad]/50 rounded-lg p-3 space-y-2 animate-fade-in-up">
-                  <p className="text-xs text-center text-[#a0f0f0]">Action for selected code:</p>
+                <div className="bg-black/50 border border-[var(--hud-color-darkest)] p-3 space-y-2 animate-fade-in">
+                  <p className="text-xs text-center text-[var(--hud-color-darker)] uppercase tracking-wider">Action for selection:</p>
                   <div className="flex items-center justify-center space-x-3">
                     <Button onClick={() => onExplainSelection(selectedText)} variant="secondary" className="text-xs py-1.5 px-3">
-                      {isLoading && loadingAction === 'explain-selection' ? 'Explaining...' : 'Explain Selection'}
+                      {isLoading && loadingAction === 'explain-selection' ? '...' : 'Explain'}
                     </Button>
                     <Button onClick={() => onReviewSelection(selectedText)} variant="secondary" className="text-xs py-1.5 px-3">
-                      {isLoading && loadingAction === 'review-selection' ? 'Reviewing...' : 'Review Selection'}
+                      {isLoading && loadingAction === 'review-selection' ? '...' : 'Review'}
                     </Button>
                   </div>
                 </div>
@@ -264,12 +255,12 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
             </div>
           </div>
           
-          <div className="flex-shrink-0 pt-4 space-y-4 animate-fade-in-up">
+          <div className="flex-shrink-0 pt-4 space-y-4 animate-fade-in">
             {(commitMessageAvailable || reviewAvailable) && (
-              <div className="border-t border-[#15adad]/30 pt-4 space-y-4">
+              <div className="border-t border-[var(--hud-color-darker)] pt-4 space-y-4">
                 {commitMessageAvailable && (
                   <div className="space-y-3">
-                    <h4 className="text-center text-sm font-semibold text-[#a0f0f0] font-heading">Additional Tools</h4>
+                    <h4 className="text-center text-sm font-semibold text-[var(--hud-color-darker)]">Additional Tools</h4>
                     <div className="w-full flex flex-wrap items-center justify-center gap-3">
                       <Button
                         onClick={() => onGenerateCommitMessage()}
@@ -296,7 +287,7 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
                       Follow-up on Current Output
                     </Button>
                     {reviewAvailable && !isLoading && (
-                      <p className="text-xs text-center text-[#70c0c0]/80 pt-1" aria-live="polite">
+                      <p className="text-xs text-center text-[var(--hud-color-darker)] pt-1" aria-live="polite">
                         Tip: Select text in the output before clicking Follow-up to ask about a specific section.
                       </p>
                     )}

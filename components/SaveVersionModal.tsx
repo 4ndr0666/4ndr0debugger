@@ -9,7 +9,7 @@ interface SaveVersionModalProps {
   setVersionName: (name: string) => void;
 }
 
-export const SaveVersionModal: React.FC<SaveVersionModalProps> = ({ isOpen, onClose, onSave, versionName, setVersionName }) => {
+export const SaveVersionModal = ({ isOpen, onClose, onSave, versionName, setVersionName }: SaveVersionModalProps) => {
   if (!isOpen) return null;
 
   const handleSaveClick = () => {
@@ -27,28 +27,26 @@ export const SaveVersionModal: React.FC<SaveVersionModalProps> = ({ isOpen, onCl
 
   return (
     <div 
-      className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 transition-opacity duration-300"
+      className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4 transition-opacity duration-300 animate-fade-in"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-labelledby="save-modal-title"
     >
       <div 
-        className="bg-[#101827] rounded-lg shadow-xl shadow-[#156464]/50 w-full max-w-md p-6 border border-[#15adad]/60"
-        onClick={e => e.stopPropagation()} // Prevent clicks inside from closing the modal
+        className="hud-container w-full max-w-md"
+        onClick={e => e.stopPropagation()}
       >
-        <h2 id="save-modal-title" className="text-xl font-semibold text-center mb-4 font-heading">
-           <span style={{
-              background: 'linear-gradient(to right, #15fafa, #15adad, #157d7d)',
-              WebkitBackgroundClip: 'text',
-              backgroundClip: 'text',
-              color: 'transparent',
-            }}>
+        <div className="hud-corner corner-top-left"></div>
+        <div className="hud-corner corner-top-right"></div>
+        <div className="hud-corner corner-bottom-left"></div>
+        <div className="hud-corner corner-bottom-right"></div>
+
+        <h2 id="save-modal-title" className="text-xl text-center mb-4">
             Save Version
-          </span>
         </h2>
         <div className="space-y-4">
-          <label htmlFor="version-name" className="block text-sm font-medium text-[#a0f0f0]">
+          <label htmlFor="version-name" className="block text-sm uppercase tracking-wider text-[var(--hud-color-darker)]">
             Version Name
           </label>
           <input
@@ -57,7 +55,7 @@ export const SaveVersionModal: React.FC<SaveVersionModalProps> = ({ isOpen, onCl
             value={versionName}
             onChange={(e) => setVersionName(e.target.value)}
             onKeyDown={handleKeyDown}
-            className="block w-full p-2.5 font-sans text-sm text-[#e0ffff] bg-[#070B14] border border-[#15adad]/70 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#15ffff] focus:border-[#15ffff]"
+            className="block w-full p-2.5 font-mono text-sm text-[var(--hud-color)] bg-black border border-[var(--hud-color-darker)] focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)] focus:border-[var(--hud-color)]"
             placeholder="e.g., Initial Refactor"
             autoFocus
           />

@@ -18,22 +18,24 @@ interface ReviewOutputProps {
   addToast: (message: string, type: Toast['type']) => void;
 }
 
-export const ReviewOutput: React.FC<ReviewOutputProps> = ({ 
+export const ReviewOutput = ({ 
     feedback, isLoading, isChatLoading, loadingAction, error, 
     onSaveVersion, isActive, outputType, onShowDiff, canCompare,
     addToast
-}) => {
+}: ReviewOutputProps) => {
+  const [copied, setCopied] = useState(false);
   const showLoading = isLoading || isChatLoading;
   const canSave = !showLoading && !error && feedback;
   const canCopy = !showLoading && !error && feedback;
 
   const contentRef = useRef<HTMLDivElement>(null);
-  const [isScrolled, setIsScrolled] = useState(false);
   
   const handleCopy = () => {
     if (!feedback) return;
     navigator.clipboard.writeText(feedback).then(() => {
+      setCopied(true);
       addToast('Copied to clipboard!', 'success');
+      setTimeout(() => setCopied(false), 2500);
     }).catch(err => {
       console.error('Failed to copy markdown: ', err);
       addToast('Failed to copy to clipboard.', 'error');
@@ -63,48 +65,40 @@ export const ReviewOutput: React.FC<ReviewOutputProps> = ({
     }
   }, [showLoading, loadingAction, outputType]);
 
-  // This effect handles both auto-scrolling for streaming responses and
-  // attaching the scroll listener for the dynamic blur effect.
+  // This effect handles auto-scrolling for streaming responses
   useEffect(() => {
     const contentElement = contentRef.current;
     if (!contentElement) return;
 
     if (isLoading || isChatLoading) {
-      contentElement.scrollTop = contentElement.scrollHeight;
+      if (contentElement.scrollHeight - contentElement.scrollTop < contentElement.clientHeight + 100) {
+        contentElement.scrollTop = contentElement.scrollHeight;
+      }
     }
-
-    const handleScroll = () => {
-      setIsScrolled(contentElement.scrollTop > 10);
-    };
-
-    contentElement.addEventListener('scroll', handleScroll);
-    handleScroll();
-
-    return () => {
-      contentElement.removeEventListener('scroll', handleScroll);
-    };
   }, [feedback, isLoading, isChatLoading]);
+  
+  // Reset copied state if feedback changes
+  useEffect(() => {
+      setCopied(false);
+  },[feedback]);
 
   const activeClass = isActive ? 'active' : '';
 
   return (
-    <div className={`p-6 min-h-[200px] flex flex-col bg-[#101827]/60 backdrop-blur-lg rounded-lg shadow-xl shadow-[#156464]/30 transition-all duration-300 animated-border-container ${activeClass}`}>
-      <div className="relative flex justify-center items-center mb-4">
-        <h2 className="text-xl font-semibold text-center font-heading">
-          <span style={{
-              background: 'linear-gradient(to right, #15fafa, #15adad, #157d7d)',
-              WebkitBackgroundClip: 'text',
-              backgroundClip: 'text',
-              color: 'transparent',
-            }}>
+    <div className={`hud-container min-h-[200px] flex flex-col ${activeClass}`}>
+      <div className="hud-corner corner-top-left"></div>
+      <div className="hud-corner corner-top-right"></div>
+      <div className="hud-corner corner-bottom-left"></div>
+      <div className="hud-corner corner-bottom-right"></div>
+      <div className="relative flex justify-center items-center mb-4 flex-shrink-0">
+        <h2 className="text-xl text-center">
             {title}
-          </span>
         </h2>
         <div className="absolute right-0 flex items-center space-x-1">
           {canCompare && (
              <button
               onClick={onShowDiff}
-              className="p-2 text-[#a0f0f0] rounded-full transition-all duration-200 hover:bg-[#15fafa]/30 hover:text-white focus:outline-none focus:ring-2 focus:ring-[#15fafa]"
+              className="p-2 text-[var(--hud-color)] rounded-full transition-all duration-200 hover:bg-[var(--hud-color)]/30 hover:text-white focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)]"
               aria-label="Compare changes"
               title="Compare Changes"
             >
@@ -114,17 +108,17 @@ export const ReviewOutput: React.FC<ReviewOutputProps> = ({
           {canCopy && (
             <button
               onClick={handleCopy}
-              className="p-2 text-[#a0f0f0] rounded-full transition-all duration-200 hover:bg-[#15fafa]/30 hover:text-white focus:outline-none focus:ring-2 focus:ring-[#15fafa]"
-              aria-label={"Copy Markdown"}
-              title="Copy Markdown"
+              className="p-2 text-[var(--hud-color)] rounded-full transition-all duration-200 hover:bg-[var(--hud-color)]/30 hover:text-white focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)]"
+              aria-label={copied ? "Copied!" : "Copy Markdown"}
+              title={copied ? "Copied!" : "Copy Markdown"}
             >
-              <CopyIcon className="w-5 h-5" />
+              {copied ? <CheckIcon className="w-5 h-5 text-green-400" /> : <CopyIcon className="w-5 h-5" />}
             </button>
           )}
           {canSave && (
             <button
               onClick={onSaveVersion}
-              className="p-2 text-[#a0f0f0] rounded-full transition-all duration-200 hover:bg-[#15fafa]/30 hover:text-white focus:outline-none focus:ring-2 focus:ring-[#15fafa]"
+              className="p-2 text-[var(--hud-color)] rounded-full transition-all duration-200 hover:bg-[var(--hud-color)]/30 hover:text-white focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)]"
               aria-label="Save this output as a version"
               title="Save Version"
             >
@@ -135,31 +129,28 @@ export const ReviewOutput: React.FC<ReviewOutputProps> = ({
       </div>
 
       <div className="flex-grow overflow-hidden relative">
-        {showLoading && !feedback && (
+        {isLoading && !feedback && (
           <div className="flex flex-col items-center justify-center h-full py-10">
             <LoadingSpinner size="w-12 h-12" />
+            <p className="mt-4 uppercase tracking-widest text-sm animate-pulse">Analyzing...</p>
           </div>
         )}
-        {error && !showLoading && (
-          <div className="p-4 bg-red-600/50 border border-red-400 text-red-200 rounded-md">
-            <p className="font-semibold">Error:</p>
-            <p className="whitespace-pre-wrap">{error}</p>
+        {error && !isLoading && (
+          <div className="p-4 bg-[var(--red-color)]/20 border border-[var(--red-color)] text-[var(--red-color)]">
+            <p className="font-semibold uppercase">Error:</p>
+            <p className="whitespace-pre-wrap font-mono mt-2">{error}</p>
           </div>
         )}
-        {!error && (feedback || showLoading) && (
+        {!error && (feedback || isLoading) && (
           <>
             <div 
               id="review-output-content" 
               ref={contentRef}
-              className="overflow-auto h-full pr-2 text-[#e0ffff] leading-relaxed space-y-4"
+              className="overflow-auto h-full pr-2 text-[var(--hud-color-darker)] leading-relaxed space-y-4"
             >
-              <MarkdownRenderer markdown={feedback} />
-              {showLoading && feedback && <LoadingSpinner size="w-6 h-6" className="mx-auto pt-4" />}
+              <MarkdownRenderer markdown={feedback || ''} />
+              {isLoading && feedback && <LoadingSpinner size="w-6 h-6" className="mx-auto pt-4" />}
             </div>
-            <div 
-              className={`absolute top-0 left-0 right-0 h-16 bg-gradient-to-b from-[#101827]/80 via-[#101827]/70 to-transparent pointer-events-none backdrop-blur-[2px] transition-opacity duration-300 ${isScrolled ? 'opacity-100' : 'opacity-0'}`}
-              aria-hidden="true"
-            />
           </>
         )}
       </div>

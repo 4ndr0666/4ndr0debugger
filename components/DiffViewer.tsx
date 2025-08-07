@@ -77,7 +77,7 @@ interface DiffViewerProps {
   onClose: () => void;
 }
 
-export const DiffViewer: React.FC<DiffViewerProps> = ({ oldCode, newCode, onClose }) => {
+export const DiffViewer = ({ oldCode, newCode, onClose }: DiffViewerProps) => {
   const { oldDiff, newDiff } = React.useMemo(() => diffLines(oldCode, newCode), [oldCode, newCode]);
   
   const renderLines = (diffs: { type: string; content: string }[], side: 'old' | 'new') => {
@@ -93,7 +93,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ oldCode, newCode, onClos
 
         return (
             <div key={index} className={`flex ${bgColor}`}>
-                <span className="w-10 text-right pr-4 text-gray-500 select-none flex-shrink-0">
+                <span className="w-10 text-right pr-4 text-[var(--hud-color-darker)] select-none flex-shrink-0">
                   {showLineNumber ? lineCounter : ' '}
                 </span>
                 <pre className="whitespace-pre-wrap flex-grow break-all">{diff.content || ' '}</pre>
@@ -104,25 +104,27 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ oldCode, newCode, onClos
 
   return (
     <div
-      className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 transition-opacity duration-300 animate-fade-in-up"
+      className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4 transition-opacity duration-300 animate-fade-in"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-labelledby="diff-modal-title"
     >
       <div
-        className="bg-[#0A0F1A] rounded-lg shadow-xl shadow-[#156464]/50 w-full max-w-6xl h-[90vh] p-4 sm:p-6 flex flex-col border border-[#15adad]/60"
+        className="hud-container w-full max-w-6xl h-[90vh] flex flex-col"
         onClick={e => e.stopPropagation()}
       >
+        <div className="hud-corner corner-top-left"></div>
+        <div className="hud-corner corner-top-right"></div>
+        <div className="hud-corner corner-bottom-left"></div>
+        <div className="hud-corner corner-bottom-right"></div>
         <div className="flex justify-between items-center mb-4 flex-shrink-0">
-          <h2 id="diff-modal-title" className="text-xl font-semibold text-center font-heading">
-            <span style={{ background: 'linear-gradient(to right, #15fafa, #15adad, #157d7d)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent' }}>
-              Code Comparison
-            </span>
+          <h2 id="diff-modal-title" className="text-xl text-center">
+            Code Comparison
           </h2>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-full hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-[#15adad]"
+            className="p-1.5 rounded-full hover:bg-white/10 focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)]"
             aria-label="Close diff view"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -131,19 +133,19 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ oldCode, newCode, onClos
           </button>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-grow overflow-hidden font-mono text-sm text-[#e0ffff]">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-grow overflow-hidden font-mono text-sm text-[var(--hud-color)]">
           {/* Original Code */}
           <div className="flex flex-col h-full">
-             <h3 className="text-center font-semibold text-lg mb-2 font-sans">Original Code</h3>
-             <div className="overflow-auto bg-[#101827] rounded-md p-2 border border-[#15adad]/30 h-full">
+             <h3 className="text-center text-lg mb-2">Original Code</h3>
+             <div className="overflow-auto bg-black/50 border border-[var(--hud-color-darkest)] p-2 h-full">
                 {renderLines(oldDiff, 'old')}
              </div>
           </div>
 
           {/* Revised Code */}
           <div className="flex flex-col h-full">
-            <h3 className="text-center font-semibold text-lg mb-2 font-sans">Revised Code</h3>
-            <div className="overflow-auto bg-[#101827] rounded-md p-2 border border-[#15adad]/30 h-full">
+            <h3 className="text-center text-lg mb-2">Revised Code</h3>
+            <div className="overflow-auto bg-black/50 border border-[var(--hud-color-darkest)] p-2 h-full">
                 {renderLines(newDiff, 'new')}
             </div>
           </div>

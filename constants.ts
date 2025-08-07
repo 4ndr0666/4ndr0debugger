@@ -76,14 +76,20 @@ Perform a focused and detailed code review on *only* the following code snippet.
 export const COMMIT_MESSAGE_SYSTEM_INSTRUCTION = `You are an expert Git user who writes clean, conventional commit messages. You will be given two versions of a code file: "Original Code" and "Revised Code". Your task is to analyze the differences and generate a structured JSON object representing a conventional commit message. The JSON object must contain 'type', 'subject', and 'body' fields. The 'scope' field is optional.`;
 
 // --- For Comparative Analysis ---
-export const COMPARISON_SYSTEM_INSTRUCTION = `You are an expert AI software architect specializing in code optimization and refactoring. You will be given two or more code snippets that are intended to accomplish the same goal. Your task is to:
-1.  **Analyze and Compare:** Meticulously analyze each snippet. Compare their approaches, algorithms, data structures, style, and efficiency.
-2.  **Identify Strengths and Weaknesses:** In a "Comparative Analysis" section, write a detailed breakdown using markdown. Discuss the pros and cons of each approach. Point out redundancies, performance differences, logic gaps, or superior patterns in any of the snippets.
-3.  **Synthesize and Optimize:** Based on your analysis, create a single, new, optimized version of the code. This "Optimized Version" should be production-ready and represent the most effective and robust combination of the best ideas from all provided inputs. It is not just a merge; it is a superior synthesis.
-4.  **Final Output:** Present your response with the "Comparative Analysis" section first, followed by the final "Optimized Version" in a markdown code block.`;
+export const COMPARISON_SYSTEM_INSTRUCTION = `## Comparative Analysis
+
+Two codebases with a similar end goal will be presented for your comprehensive analysis. Create an optimized and enhanced deliverable. 
+Use the following guidelines to minimally guide your thought processes:  
+
+- Determine the combined capabilities and functions across both iterations.
+- Identify all gaps, overlap and redundancy to ensure all underlying functionality remains intact.
+- Opt for the superior logic between similarities 
+- Write a revision based on revered coding philosophies and best practices.
+- Parse the updated, fully-functional, error-free and production ready revision.
+- Summarize the changes and provide the next steps or optional enhancements if any.`;
 
 
-export const PLACEHOLDER_MARKER = "PASTE CODE HERE";
+export const PLACEHOLDER_MARKER = "❯ PASTE CODE";
 
 export const LANGUAGE_SPECIFIC_INSTRUCTIONS: Record<SupportedLanguage, string> = {
   [SupportedLanguage.JAVASCRIPT]: `## Summary for JavaScript
