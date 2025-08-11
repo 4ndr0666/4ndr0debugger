@@ -1,18 +1,26 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { ChatMessage } from '../types';
-import { Button } from './Button';
-import { LoadingSpinner } from './LoadingSpinner';
-import { MarkdownRenderer } from './MarkdownRenderer';
+import React, { useEffect, useRef } from 'react';
+import { ChatMessage } from '../types.ts';
+import { Button } from './Button.tsx';
+import { LoadingSpinner } from './LoadingSpinner.tsx';
+import { MarkdownRenderer } from './MarkdownRenderer.tsx';
 
 interface ChatInterfaceProps {
   onEndChat: () => void;
   chatHistory: ChatMessage[];
   onFollowUpSubmit: (message: string) => void;
   isChatLoading: boolean;
+  chatInputValue: string;
+  setChatInputValue: (value: string) => void;
 }
 
-export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onEndChat, chatHistory, onFollowUpSubmit, isChatLoading }) => {
-  const [followUpMessage, setFollowUpMessage] = useState('');
+export const ChatInterface: React.FC<ChatInterfaceProps> = ({ 
+  onEndChat, 
+  chatHistory, 
+  onFollowUpSubmit, 
+  isChatLoading,
+  chatInputValue,
+  setChatInputValue 
+}) => {
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -23,9 +31,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onEndChat, chatHis
   }, [chatHistory]);
 
   const handleSend = () => {
-    if (followUpMessage.trim() && !isChatLoading) {
-      onFollowUpSubmit(followUpMessage);
-      setFollowUpMessage('');
+    if (chatInputValue.trim() && !isChatLoading) {
+      onFollowUpSubmit(chatInputValue);
+      setChatInputValue('');
     }
   };
   
@@ -64,8 +72,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onEndChat, chatHis
         </div>
         <div className="flex items-center space-x-2 flex-shrink-0">
           <textarea
-            value={followUpMessage}
-            onChange={(e) => setFollowUpMessage(e.target.value)}
+            value={chatInputValue}
+            onChange={(e) => setChatInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
             rows={2}
             className="block w-full p-2 font-mono text-sm text-[var(--hud-color)] bg-black border border-[var(--hud-color-darker)] focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)] focus:border-[var(--hud-color)] resize-y placeholder:text-[var(--hud-color-darker)]"
@@ -74,7 +82,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onEndChat, chatHis
             aria-label="Follow-up message input"
             autoFocus
           />
-          <Button onClick={handleSend} isLoading={isChatLoading} disabled={isChatLoading || !followUpMessage.trim()}>
+          <Button onClick={handleSend} isLoading={isChatLoading} disabled={isChatLoading || !chatInputValue.trim()}>
             Send
           </Button>
         </div>

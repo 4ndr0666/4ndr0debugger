@@ -1,4 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
+import { SupportedLanguage } from '../types.ts';
+import { LANGUAGE_TAG_MAP } from '../constants.ts';
+
+declare const hljs: any;
 
 // Basic line-by-line diffing algorithm (LCS based)
 const diffLines = (oldStr: string, newStr: string) => {
@@ -41,20 +45,13 @@ const diffLines = (oldStr: string, newStr: string) => {
   const oldDiff: { type: string; content: string }[] = [];
   const newDiff: { type: string; content: string }[] = [];
 
-  let oldLineNum = 0;
-  let newLineNum = 0;
-
   result.forEach(item => {
     if (item.type === 'common') {
-      oldLineNum++;
-      newLineNum++;
       oldDiff.push({ type: 'common', content: item.line });
       newDiff.push({ type: 'common', content: item.line });
     } else if (item.type === 'removed') {
-      oldLineNum++;
       oldDiff.push({ type: 'removed', content: item.line });
     } else if (item.type === 'added') {
-      newLineNum++;
       newDiff.push({ type: 'added', content: item.line });
     }
   });
@@ -75,12 +72,29 @@ interface DiffViewerProps {
   oldCode: string;
   newCode: string;
   onClose: () => void;
+  language: SupportedLanguage;
 }
 
-export const DiffViewer = ({ oldCode, newCode, onClose }: DiffViewerProps) => {
+const HighlightedLine: React.FC<{ line: string; language: SupportedLanguage }> = ({ line, language }) => {
+    const highlighted = useMemo(() => {
+        const langTag = LANGUAGE_TAG_MAP[language] || 'plaintext';
+        try {
+            if (hljs.getLanguage(langTag)) {
+                return hljs.highlight(line, { language: langTag, ignoreIllegals: true }).value;
+            }
+        } catch(e) { console.error(e); }
+        // Fallback for safety
+        return line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }, [line, language]);
+    
+    return <code className={`language-${LANGUAGE_TAG_MAP[language] || 'plaintext'}`} dangerouslySetInnerHTML={{ __html: highlighted }} />;
+};
+
+
+export const DiffViewer = ({ oldCode, newCode, onClose, language }: DiffViewerProps) => {
   const { oldDiff, newDiff } = React.useMemo(() => diffLines(oldCode, newCode), [oldCode, newCode]);
   
-  const renderLines = (diffs: { type: string; content: string }[], side: 'old' | 'new') => {
+  const renderLines = (diffs: { type: string; content: string }[]) => {
     let lineCounter = 0;
     return diffs.map((diff, index) => {
         let bgColor = 'bg-transparent';
@@ -96,11 +110,16 @@ export const DiffViewer = ({ oldCode, newCode, onClose }: DiffViewerProps) => {
                 <span className="w-10 text-right pr-4 text-[var(--hud-color-darker)] select-none flex-shrink-0">
                   {showLineNumber ? lineCounter : ' '}
                 </span>
-                <pre className="whitespace-pre-wrap flex-grow break-all">{diff.content || ' '}</pre>
+                <pre className="whitespace-pre-wrap flex-grow break-all">
+                  <HighlightedLine line={diff.content || ' '} language={language} />
+                </pre>
             </div>
         );
     });
   };
+
+  const renderedOld = useMemo(() => renderLines(oldDiff), [oldDiff, language]);
+  const renderedNew = useMemo(() => renderLines(newDiff), [newDiff, language]);
 
   return (
     <div
@@ -133,20 +152,20 @@ export const DiffViewer = ({ oldCode, newCode, onClose }: DiffViewerProps) => {
           </button>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-grow overflow-hidden font-mono text-sm text-[var(--hud-color)]">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-grow overflow-hidden font-mono text-sm text-[var(--hud-color)] hljs">
           {/* Original Code */}
-          <div className="flex flex-col h-full">
-             <h3 className="text-center text-lg mb-2">Original Code</h3>
-             <div className="overflow-auto bg-black/50 border border-[var(--hud-color-darkest)] p-2 h-full">
-                {renderLines(oldDiff, 'old')}
+          <div className="flex flex-col h-full bg-black/50 border border-[var(--hud-color-darkest)]">
+             <h3 className="text-center text-lg mb-2 pt-2 flex-shrink-0">Original Code</h3>
+             <div className="overflow-auto p-2 h-full">
+                {renderedOld}
              </div>
           </div>
 
           {/* Revised Code */}
-          <div className="flex flex-col h-full">
-            <h3 className="text-center text-lg mb-2">Revised Code</h3>
-            <div className="overflow-auto bg-black/50 border border-[var(--hud-color-darkest)] p-2 h-full">
-                {renderLines(newDiff, 'new')}
+          <div className="flex flex-col h-full bg-black/50 border border-[var(--hud-color-darkest)]">
+            <h3 className="text-center text-lg mb-2 pt-2 flex-shrink-0">Revised Code</h3>
+            <div className="overflow-auto p-2 h-full">
+                {renderedNew}
             </div>
           </div>
         </div>

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Toast } from '../types';
-import { ToastErrorIcon, ToastInfoIcon, ToastSuccessIcon } from './Icons';
+import { Toast } from '../types.ts';
+import { ToastErrorIcon, ToastInfoIcon, ToastSuccessIcon } from './Icons.tsx';
 
 interface ToastProps {
   toast: Toast;

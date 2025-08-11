@@ -1,6 +1,6 @@
 import React from 'react';
-import { Version } from '../types';
-import { VersionHistory } from './VersionHistory';
+import { Version } from '../types.ts';
+import { VersionHistory } from './VersionHistory.tsx';
 
 interface VersionHistoryModalProps {
   isOpen: boolean;
@@ -56,9 +56,9 @@ export const VersionHistoryModal = ({ isOpen, onClose, ...versionHistoryProps }:
         
         <div className="flex-grow overflow-hidden mt-2">
             <VersionHistory 
-              {...versionHistoryProps} 
-              onLoadVersion={handleLoadVersion}
-              onStartFollowUp={handleStartFollowUp}
+                {...versionHistoryProps} 
+                onLoadVersion={handleLoadVersion} 
+                onStartFollowUp={handleStartFollowUp}
             />
         </div>
       </div>

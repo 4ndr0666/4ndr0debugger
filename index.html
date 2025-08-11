@@ -71,9 +71,9 @@
     @keyframes flicker {
       0%, 18%, 22%, 25%, 53%, 57%, 100% {
         text-shadow:
-          0 0 4px var(--hud-color),
-          0 0 11px var(--hud-color),
-          0 0 19px var(--hud-color);
+          0 0 4px var(--glow-color),
+          0 0 11px var(--glow-color),
+          0 0 19px var(--glow-color);
         opacity: 1;
       }
       20%, 24%, 55% {
@@ -146,18 +146,45 @@
     .corner-bottom-left { bottom: -1px; left: -1px; border-width: 0 0 2px 2px; }
     .corner-bottom-right { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
 
-    /* Blinking Cursor for Placeholder */
-    @keyframes blink-caret {
-      from, to { border-color: transparent }
-      50% { border-color: var(--hud-color); }
+    /* Blinking Placeholder Animation */
+    @keyframes placeholder-flicker {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
     }
     .blinking-placeholder::placeholder {
       color: var(--hud-color-darker);
-      opacity: 0.8;
+      animation: placeholder-flicker 2s infinite ease-in-out;
     }
     .blinking-prompt::after {
       content: '_';
       animation: blink-caret 1s step-end infinite;
+    }
+
+    /* Hamburger Menu Icon Styling */
+    .hamburger-container {
+        width: 24px;
+        height: 24px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-around;
+    }
+    .hamburger-line {
+        display: block;
+        width: 100%;
+        height: 2px;
+        background-color: currentColor;
+        border-radius: 1px;
+        transition: transform 0.3s ease-in-out, opacity 0.3s ease-in-out;
+        transform-origin: center;
+    }
+    .hamburger-line.top-line.open {
+        transform: translateY(8px) rotate(45deg);
+    }
+    .hamburger-line.middle-line.open {
+        opacity: 0;
+    }
+    .hamburger-line.bottom-line.open {
+        transform: translateY(-8px) rotate(-45deg);
     }
 
     /* --- Syntax Highlighting Theme (Okaidia for highlight.js) --- */
@@ -241,15 +268,10 @@
     }
   </style>
 <script>
-  // Polyfill process.env for browser environment as per README.md
-  window.process = {
-    env: {
-      // NOTE: The API_KEY is loaded from the environment now.
-      // This polyfill is for compatibility. The actual key should be
-      // set in the execution environment.
-      API_KEY: "" 
-    }
-  };
+  // Vite will handle environment variables. This is a fallback.
+  if (typeof window.process === 'undefined') {
+    window.process = { env: {} };
+  }
 </script>
 <script type="importmap">
 {
@@ -259,7 +281,9 @@
     "react-dom": "https://esm.sh/react-dom@^18.3.1",
     "react-dom/client": "https://esm.sh/react-dom@^18.3.1/client",
     "react-dom/": "https://esm.sh/react-dom@^18.3.1/",
-    "@google/genai": "https://esm.sh/@google/genai@^1.0.1"
+    "@google/genai": "https://esm.sh/@google/genai@^1.0.1",
+    "vite": "https://esm.sh/vite@^7.0.6",
+    "path": "https://esm.sh/path@^0.12.7"
   }
 }
 </script>

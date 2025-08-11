@@ -1,7 +1,6 @@
-
 import React from 'react';
-import { CodeBlock } from './CodeBlock';
-import ErrorBoundary from './ErrorBoundary';
+import { CodeBlock } from './CodeBlock.tsx';
+import ErrorBoundary from './ErrorBoundary.tsx';
 
 // Helper to parse simple inline markdown (bold, italic, code) into React nodes.
 const parseInlineMarkdown = (text: string): React.ReactNode => {

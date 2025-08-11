@@ -29,6 +29,7 @@ export enum ReviewProfile {
   DRY = 'DRY',
   CTF = 'CTF',
   REDTEAM = 'Red Team',
+  CUSTOM = 'Custom',
 }
 
 export interface ProfileOption {

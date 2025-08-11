@@ -1,6 +1,6 @@
 import React from 'react';
-import { Version } from '../types';
-import { LoadIcon, ChatIcon, DeleteIcon } from './Icons';
+import { Version } from '../types.ts';
+import { LoadIcon, ChatIcon, DeleteIcon } from './Icons.tsx';
 
 interface VersionHistoryProps {
   versions: Version[];

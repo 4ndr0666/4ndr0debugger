@@ -1,4 +1,5 @@
-import { LanguageOption, SupportedLanguage, ProfileOption, ReviewProfile } from './types';
+
+import { LanguageOption, SupportedLanguage, ProfileOption, ReviewProfile } from './types.ts';
 
 export const GEMINI_MODEL_NAME = 'gemini-2.5-flash';
 
@@ -32,7 +33,8 @@ export const PROFILE_SYSTEM_INSTRUCTIONS: Record<ReviewProfile, string> = {
   [ReviewProfile.SUCKLESS]: "In addition to your standard review, analyze the code through the lens of the 'suckless' philosophy. Prioritize simplicity, clarity, and minimalism. Identify and suggest removing any unnecessary complexity, features, or abstractions. The goal is code that is simple, small, and does one thing well.",
   [ReviewProfile.MODULAR]: "In addition to your standard review, focus on modularity and the Single Responsibility Principle. Identify areas where code could be better organized into smaller, reusable, and more focused functions, classes, or modules. Suggest improvements for decoupling and creating clearer APIs between components.",
   [ReviewProfile.IDIOMATIC]: "In addition to your standard review, focus heavily on whether the code is 'idiomatic' for the selected language. Point out where language-specific features, conventions, and standard library functions could be used to make the code more concise, readable, and natural for an experienced developer in that language.",
-  [ReviewProfile.DRY]: "In addition to your standard review, perform a strict analysis based on the 'Don't Repeat Yourself' (DRY) principle. Identify any duplicated code, logic, or data. Suggest ways to abstract and consolidate this repetition into reusable functions, variables, or other structures."
+  [ReviewProfile.DRY]: "In addition to your standard review, perform a strict analysis based on the 'Don't Repeat Yourself' (DRY) principle. Identify any duplicated code, logic, or data. Suggest ways to abstract and consolidate this repetition into reusable functions, variables, or other structures.",
+  [ReviewProfile.CUSTOM]: "", // No base instruction for custom, it's user-provided.
 };
 
 
@@ -453,6 +455,7 @@ export const REVIEW_PROFILES: ProfileOption[] = [
   { value: ReviewProfile.MODULAR, label: 'Focus: Modularity' },
   { value: ReviewProfile.IDIOMATIC, label: 'Focus: Idiomatic Code' },
   { value: ReviewProfile.DRY, label: 'Focus: DRY Principle' },
+  { value: ReviewProfile.CUSTOM, label: 'Custom Instructions...' },
 ];
 
 

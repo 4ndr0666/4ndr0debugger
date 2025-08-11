@@ -1,6 +1,5 @@
-
 import React, { useState, useMemo } from 'react';
-import { CopyIcon, CheckIcon } from './Icons';
+import { CopyIcon, CheckIcon } from './Icons.tsx';
 
 // Informs TypeScript that `hljs` is available on the global window object
 // because it's loaded from a <script> tag in index.html.

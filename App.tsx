@@ -1,18 +1,19 @@
 
+
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { GoogleGenAI, Chat, Type } from "@google/genai";
-import { Header } from './components/Header';
-import { CodeInput } from './components/CodeInput';
-import { ReviewOutput } from './components/ReviewOutput';
-import { SupportedLanguage, ChatMessage, Version, ReviewProfile, LoadingAction, Toast } from './types';
-import { SUPPORTED_LANGUAGES, GEMINI_MODEL_NAME, SYSTEM_INSTRUCTION, DOCS_SYSTEM_INSTRUCTION, PROFILE_SYSTEM_INSTRUCTIONS, GENERATE_TESTS_INSTRUCTION, EXPLAIN_CODE_INSTRUCTION, REVIEW_SELECTION_INSTRUCTION, COMMIT_MESSAGE_SYSTEM_INSTRUCTION, DOCS_INSTRUCTION, COMPARISON_SYSTEM_INSTRUCTION, generateComparisonTemplate, generateDocsTemplate } from './constants';
-import { DiffViewer } from './components/DiffViewer';
-import { ChatContext } from './components/ChatContext';
-import { ComparisonInput } from './components/ComparisonInput';
-import { VersionHistoryModal } from './components/VersionHistoryModal';
-import { SaveVersionModal } from './components/SaveVersionModal';
-import { ToastContainer } from './components/ToastContainer';
-import { ApiKeyBanner } from './components/ApiKeyBanner';
+import { Header } from './Components/Header.tsx';
+import { CodeInput } from './Components/CodeInput.tsx';
+import { ReviewOutput } from './Components/ReviewOutput.tsx';
+import { SupportedLanguage, ChatMessage, Version, ReviewProfile, LoadingAction, Toast } from './types.ts';
+import { SUPPORTED_LANGUAGES, GEMINI_MODEL_NAME, SYSTEM_INSTRUCTION, DOCS_SYSTEM_INSTRUCTION, PROFILE_SYSTEM_INSTRUCTIONS, GENERATE_TESTS_INSTRUCTION, EXPLAIN_CODE_INSTRUCTION, REVIEW_SELECTION_INSTRUCTION, COMMIT_MESSAGE_SYSTEM_INSTRUCTION, DOCS_INSTRUCTION, COMPARISON_SYSTEM_INSTRUCTION, generateComparisonTemplate, generateDocsTemplate, LANGUAGE_TAG_MAP } from './constants.ts';
+import { DiffViewer } from './Components/DiffViewer.tsx';
+import { ChatContext } from './Components/ChatContext.tsx';
+import { ComparisonInput } from './Components/ComparisonInput.tsx';
+import { VersionHistoryModal } from './Components/VersionHistoryModal.tsx';
+import { SaveVersionModal } from './Components/SaveVersionModal.tsx';
+import { ToastContainer } from './Components/ToastContainer.tsx';
+import { ApiKeyBanner } from './Components/ApiKeyBanner.tsx';
 
 type OutputType = LoadingAction;
 type ActivePanel = 'input' | 'output';
@@ -37,16 +38,19 @@ const App: React.FC = () => {
   // --- Single Review Mode State ---
   const [userOnlyCode, setUserOnlyCode] = useState<string>('');
   const [reviewProfile, setReviewProfile] = useState<ReviewProfile | 'none'>('none');
+  const [customReviewProfile, setCustomReviewProfile] = useState<string>('');
 
   // --- Comparison Mode State ---
   const [codeB, setCodeB] = useState<string>('');
   const [comparisonGoal, setComparisonGoal] = useState<string>('');
 
   // --- View & Chat State ---
+  const [isInputPanelVisible, setIsInputPanelVisible] = useState(true);
   const [isChatMode, setIsChatMode] = useState<boolean>(false);
   const [chatSession, setChatSession] = useState<Chat | null>(null);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [activePanel, setActivePanel] = useState<ActivePanel>('input');
+  const [chatInputValue, setChatInputValue] = useState('');
   
   // --- Versioning State ---
   const [versions, setVersions] = useState<Version[]>([]);
@@ -65,7 +69,6 @@ const App: React.FC = () => {
   const isReviewContextCurrent = reviewedCode !== null && (appMode === 'single' ? userOnlyCode === reviewedCode : true);
   const reviewAvailable = !!reviewFeedback && isReviewContextCurrent;
   const commitMessageAvailable = !!reviewedCode && !!revisedCode && reviewedCode !== revisedCode;
-  const canSaveReview = !!reviewFeedback && !isChatMode && !isLoading && !error;
   const showOutputPanel = isChatMode || isLoading || !!reviewFeedback || !!error;
 
   // Load versions from localStorage on initial render
@@ -101,11 +104,13 @@ const App: React.FC = () => {
 
   const getSystemInstructionForReview = useCallback(() => {
     let instruction = SYSTEM_INSTRUCTION;
-    if (reviewProfile && reviewProfile !== 'none' && PROFILE_SYSTEM_INSTRUCTIONS[reviewProfile]) {
+    if (reviewProfile && reviewProfile !== 'none' && reviewProfile !== ReviewProfile.CUSTOM && PROFILE_SYSTEM_INSTRUCTIONS[reviewProfile]) {
         instruction += `\n\n## Special Focus: ${reviewProfile}\n${PROFILE_SYSTEM_INSTRUCTIONS[reviewProfile]}`;
+    } else if (reviewProfile === ReviewProfile.CUSTOM && customReviewProfile.trim()) {
+        instruction += `\n\n## Custom Review Instructions:\n${customReviewProfile.trim()}`;
     }
     return instruction;
-  }, [reviewProfile]);
+  }, [reviewProfile, customReviewProfile]);
 
 
   const performStreamingRequest = async (fullCode: string, systemInstruction: string) => {
@@ -176,7 +181,9 @@ const App: React.FC = () => {
   }
 
   const extractFinalCodeBlock = (response: string) => {
-    const finalCodeRegex = /```(?:[a-zA-Z0-9-]*)\n([\s\S]*?)\n```$/;
+    const languageTag = LANGUAGE_TAG_MAP[language] || '';
+    // This regex is more robust, handling optional language tags
+    const finalCodeRegex = new RegExp("```(?:"+ languageTag +")?\\n([\\s\\S]*?)\\n```$", "m");
     const match = finalCodeRegex.exec(response);
     return match && match[1] ? match[1].trim() : null;
   }
@@ -185,6 +192,7 @@ const App: React.FC = () => {
     setIsLoading(true);
     setLoadingAction('review');
     setOutputType('review');
+    setIsInputPanelVisible(false); // Requirement #5: Collapse input panel on submit
     resetForNewRequest();
     setFullCodeForReview(fullCodeToSubmit);
     setReviewedCode(userOnlyCode);
@@ -197,12 +205,13 @@ const App: React.FC = () => {
 
     setIsLoading(false);
     setLoadingAction(null);
-  }, [ai, getSystemInstructionForReview, userOnlyCode]);
+  }, [ai, getSystemInstructionForReview, userOnlyCode, language]);
 
   const handleCompareAndOptimize = useCallback(async () => {
     setIsLoading(true);
     setLoadingAction('comparison');
     setOutputType('comparison');
+    setIsInputPanelVisible(false); // Requirement #5: Collapse input panel on submit
     resetForNewRequest();
 
     const prompt = generateComparisonTemplate(language, comparisonGoal, userOnlyCode, codeB);
@@ -225,6 +234,7 @@ const App: React.FC = () => {
     setIsLoading(true);
     setLoadingAction('docs');
     setOutputType('docs');
+    setIsInputPanelVisible(false);
     resetForNewRequest();
     
     const template = generateDocsTemplate(language);
@@ -244,6 +254,7 @@ const App: React.FC = () => {
     setIsLoading(true);
     setLoadingAction('tests');
     setOutputType('tests');
+    setIsInputPanelVisible(false);
     resetForNewRequest();
     setReviewedCode(userOnlyCode);
 
@@ -258,6 +269,7 @@ const App: React.FC = () => {
     setIsLoading(true);
     setLoadingAction('explain-selection');
     setOutputType('explain-selection');
+    setIsInputPanelVisible(false);
     resetForNewRequest();
 
     const prompt = `${EXPLAIN_CODE_INSTRUCTION}\n\n\`\`\`${language}\n${selection}\n\`\`\``;
@@ -271,6 +283,7 @@ const App: React.FC = () => {
     setIsLoading(true);
     setLoadingAction('review-selection');
     setOutputType('review-selection');
+    setIsInputPanelVisible(false);
     resetForNewRequest();
 
     const prompt = `${REVIEW_SELECTION_INSTRUCTION}\n\n\`\`\`${language}\n${selection}\n\`\`\``;
@@ -291,6 +304,7 @@ const App: React.FC = () => {
       setIsLoading(true);
       setLoadingAction('commit');
       setOutputType('commit');
+      setIsInputPanelVisible(false);
       resetForNewRequest();
 
       const schema = {
@@ -374,6 +388,7 @@ const App: React.FC = () => {
     } else if (selectionText) {
       const followUpContext = `My follow-up question is about this specific part of your code revision:\n\n\`\`\`\n${selectionText}\n\`\`\``;
       historyForAPI.push({ role: 'user', parts: [{ text: followUpContext }] });
+      setChatInputValue(followUpContext);
       const uiConfirmation = `Okay, let's talk about this snippet:\n\n\`\`\`\n${selectionText}\n\`\`\``;
       historyForUI.push({ id: `chat_${Date.now()}`, role: 'model', content: uiConfirmation });
     } else {
@@ -392,6 +407,7 @@ const App: React.FC = () => {
     setChatHistory(historyForUI);
     setIsChatMode(true);
     setActivePanel('input');
+    setIsInputPanelVisible(true);
   }, [reviewFeedback, fullCodeForReview, ai, getSystemInstructionForReview, userOnlyCode]);
 
   const handleFollowUpSubmit = useCallback(async (message: string) => {
@@ -436,6 +452,11 @@ const App: React.FC = () => {
     }
   }, [chatSession]);
 
+  const handleCodeLineClick = (line: string) => {
+    setChatInputValue(`Can you explain this line for me?\n\`\`\`\n${line}\n\`\`\``);
+    setActivePanel('input');
+  };
+
   const handleNewReview = () => {
     setAppMode('single');
     setIsChatMode(false);
@@ -450,13 +471,19 @@ const App: React.FC = () => {
     setActivePanel('input');
     setCodeB('');
     setComparisonGoal('');
+    setIsInputPanelVisible(true);
+    setReviewProfile('none');
+    setCustomReviewProfile('');
   };
 
   const handleStartComparison = () => {
+    handleNewReview(); // Reset state before switching mode
     setAppMode('comparison');
+    setIsInputPanelVisible(true);
   };
 
   const handleOpenSaveModal = () => {
+    const canSaveReview = !!reviewFeedback && !isChatMode && !isLoading && !error;
     if (!canSaveReview) return;
     setVersionName(`SYS_SAVE // ${new Date().toLocaleString()}`);
     setIsSaveModalOpen(true);
@@ -489,8 +516,13 @@ const App: React.FC = () => {
     setFullCodeForReview(version.fullPrompt);
     setReviewFeedback(version.feedback);
     setReviewedCode(version.userCode);
-    setRevisedCode(null); // Cannot determine revised code from old version
+    
+    // Attempt to extract revised code from the loaded feedback
+    const finalCodeInLoaded = extractFinalCodeBlock(version.feedback);
+    setRevisedCode(finalCodeInLoaded);
+
     setActivePanel('output');
+    setIsInputPanelVisible(false);
     
     // Determine which mode this version was from
     if (version.fullPrompt.includes('### Codebase B')) {
@@ -524,6 +556,7 @@ const App: React.FC = () => {
       userOnlyCode,
       language,
       reviewProfile,
+      customReviewProfile,
       fullCodeForReview,
       reviewFeedback,
       chatHistory,
@@ -564,6 +597,7 @@ const App: React.FC = () => {
         setUserOnlyCode(data.userOnlyCode ?? '');
         setLanguage(data.language ?? SUPPORTED_LANGUAGES[0].value);
         setReviewProfile(data.reviewProfile ?? 'none');
+        setCustomReviewProfile(data.customReviewProfile ?? '');
         setFullCodeForReview(data.fullCodeForReview ?? '');
         setReviewFeedback(data.reviewFeedback ?? null);
         setReviewedCode(data.reviewedCode ?? null);
@@ -580,6 +614,8 @@ const App: React.FC = () => {
         setComparisonGoal(data.comparisonGoal ?? '');
         
         addToast('Session imported successfully!', 'success');
+        setIsInputPanelVisible(false);
+
 
         // Re-create chat session if there's history
         if (ai && chatHistoryWithIds.length > 0 && data.fullCodeForReview && data.reviewFeedback) {
@@ -600,6 +636,7 @@ const App: React.FC = () => {
             });
             setChatSession(newChat);
             setIsChatMode(true);
+            setIsInputPanelVisible(true);
         } else {
             setIsChatMode(false);
         }
@@ -635,71 +672,79 @@ const App: React.FC = () => {
       <div className="fixed bottom-1/3 left-12 w-px h-1/4 bg-[var(--hud-color-darker)] opacity-50"></div>
 
       <Header 
-        onSaveVersion={handleOpenSaveModal}
         onImportClick={handleImportClick}
         onExportSession={handleExportSession}
-        isSaveEnabled={canSaveReview}
         onGenerateTests={handleGenerateTests}
         onGenerateDocs={handleGenerateDocs}
         onToggleVersionHistory={() => setIsVersionHistoryModalOpen(true)}
         isToolsEnabled={userOnlyCode.trim() !== '' && !isChatMode && appMode === 'single'}
         isLoading={isLoading || isChatLoading}
         addToast={addToast}
+        onStartComparison={handleStartComparison}
+        isInputPanelVisible={isInputPanelVisible}
+        onToggleInputPanel={() => setIsInputPanelVisible(p => !p)}
+        onNewReview={handleNewReview}
+        isFollowUpAvailable={reviewAvailable}
+        onStartFollowUp={handleStartFollowUp}
       />
       <ApiKeyBanner />
-      <main className={`flex-grow container mx-auto p-4 sm:p-6 lg:p-8 grid grid-cols-1 ${showOutputPanel ? 'lg:grid-cols-2' : ''} gap-6 lg:gap-8 animate-fade-in`}>
-          <div className="min-h-0" onClick={() => !isChatMode && setActivePanel('input')}>
-            {appMode === 'single' ? (
-                <CodeInput
-                  userCode={userOnlyCode}
-                  setUserCode={setUserOnlyCode}
-                  language={language}
-                  setLanguage={setLanguage}
-                  reviewProfile={reviewProfile}
-                  setReviewProfile={setReviewProfile}
-                  onSubmit={handleReviewSubmit}
-                  onGenerateDocs={handleGenerateDocs}
-                  onStartComparison={handleStartComparison}
-                  onGenerateCommitMessage={handleGenerateCommitMessage}
-                  onExplainSelection={handleExplainSelection}
-                  onReviewSelection={handleReviewSelection}
-                  isLoading={isLoading}
-                  isChatLoading={isChatLoading}
-                  loadingAction={loadingAction}
-                  reviewAvailable={reviewAvailable && !isChatMode}
-                  commitMessageAvailable={commitMessageAvailable}
-                  isChatMode={isChatMode}
-                  onStartFollowUp={handleStartFollowUp}
-                  onNewReview={handleNewReview}
-                  onFollowUpSubmit={handleFollowUpSubmit}
-                  chatHistory={chatHistory}
-                  isActive={activePanel === 'input'}
-                  onStopGenerating={handleStopGenerating}
-                />
-            ) : (
-                <ComparisonInput 
-                  codeA={userOnlyCode}
-                  setCodeA={setUserOnlyCode}
-                  codeB={codeB}
-                  setCodeB={setCodeB}
-                  language={language}
-                  setLanguage={setLanguage}
-                  goal={comparisonGoal}
-                  setGoal={setComparisonGoal}
-                  onSubmit={handleCompareAndOptimize}
-                  isLoading={isLoading}
-                  isChatLoading={isChatLoading}
-                  isActive={activePanel === 'input'}
-                  onNewReview={handleNewReview}
-                  isChatMode={isChatMode}
-                  onStartFollowUp={handleStartFollowUp}
-                  reviewAvailable={reviewAvailable}
-                  onFollowUpSubmit={handleFollowUpSubmit}
-                  chatHistory={chatHistory}
-                  onStopGenerating={handleStopGenerating}
-                />
-            )}
-          </div>
+      {/* Main content grid. It's a single column by default. 
+          When both the input panel is visible AND there's output to show, it switches to a two-column layout on large screens.
+          When the input panel is hidden (e.g., during review), it reverts to a single column, giving the output panel full width.
+          This fulfills requirements #5 and #6. */}
+      <main className={`flex-grow container mx-auto p-4 sm:p-6 lg:p-8 grid grid-cols-1 ${isInputPanelVisible && showOutputPanel ? 'lg:grid-cols-2' : ''} gap-6 lg:gap-8 animate-fade-in`}>
+          {isInputPanelVisible && (
+            <div className="min-h-0" onClick={() => !isChatMode && setActivePanel('input')}>
+              {appMode === 'single' ? (
+                  <CodeInput
+                    userCode={userOnlyCode}
+                    setUserCode={setUserOnlyCode}
+                    language={language}
+                    setLanguage={setLanguage}
+                    reviewProfile={reviewProfile}
+                    setReviewProfile={setReviewProfile}
+                    customReviewProfile={customReviewProfile}
+                    setCustomReviewProfile={setCustomReviewProfile}
+                    onSubmit={handleReviewSubmit}
+                    onExplainSelection={handleExplainSelection}
+                    onReviewSelection={handleReviewSelection}
+                    isLoading={isLoading}
+                    isChatLoading={isChatLoading}
+                    loadingAction={loadingAction}
+                    isChatMode={isChatMode}
+                    onNewReview={handleNewReview}
+                    onFollowUpSubmit={handleFollowUpSubmit}
+                    chatHistory={chatHistory}
+                    chatInputValue={chatInputValue}
+                    setChatInputValue={setChatInputValue}
+                    isActive={activePanel === 'input'}
+                    onStopGenerating={handleStopGenerating}
+                  />
+              ) : (
+                  <ComparisonInput 
+                    codeA={userOnlyCode}
+                    setCodeA={setUserOnlyCode}
+                    codeB={codeB}
+                    setCodeB={setCodeB}
+                    language={language}
+                    setLanguage={setLanguage}
+                    goal={comparisonGoal}
+                    setGoal={setComparisonGoal}
+                    onSubmit={handleCompareAndOptimize}
+                    isLoading={isLoading}
+                    isChatLoading={isChatLoading}
+                    isActive={activePanel === 'input'}
+                    onNewReview={handleNewReview}
+                    isChatMode={isChatMode}
+                    onFollowUpSubmit={handleFollowUpSubmit}
+                    chatHistory={chatHistory}
+                    chatInputValue={chatInputValue}
+                    setChatInputValue={setChatInputValue}
+                    onStopGenerating={handleStopGenerating}
+                  />
+              )}
+            </div>
+          )}
           
           {showOutputPanel && (
             <div className="min-h-0" onClick={() => setActivePanel('output')}>
@@ -710,10 +755,13 @@ const App: React.FC = () => {
                       originalFeedback={reviewFeedback || ''}
                       language={language}
                       isActive={activePanel === 'output'}
+                      onLineClick={handleCodeLineClick}
                   />
               ) : (
                   <ReviewOutput
                     feedback={reviewFeedback}
+                    revisedCode={revisedCode}
+                    language={language}
                     isLoading={isLoading}
                     isChatLoading={isChatLoading}
                     loadingAction={loadingAction}
@@ -724,6 +772,9 @@ const App: React.FC = () => {
                     canCompare={commitMessageAvailable}
                     isActive={activePanel === 'output'}
                     addToast={addToast}
+                    onStartFollowUp={handleStartFollowUp}
+                    onGenerateCommitMessage={handleGenerateCommitMessage}
+                    reviewAvailable={reviewAvailable}
                   />
               )}
             </div>
@@ -753,6 +804,7 @@ const App: React.FC = () => {
           <DiffViewer 
               oldCode={reviewedCode}
               newCode={revisedCode}
+              language={language}
               onClose={() => setIsDiffModalOpen(false)}
           />
       )}

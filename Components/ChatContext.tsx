@@ -1,8 +1,6 @@
 import React from 'react';
-import { MarkdownRenderer } from './MarkdownRenderer';
-import { CodeBlock } from './CodeBlock';
-import { SupportedLanguage } from '../types';
-import { LANGUAGE_TAG_MAP } from '../constants';
+import { MarkdownRenderer } from './MarkdownRenderer.tsx';
+import { SupportedLanguage } from '../types.ts';
 
 interface ChatContextProps {
   codeA: string;
@@ -10,9 +8,37 @@ interface ChatContextProps {
   originalFeedback: string;
   language: SupportedLanguage;
   isActive: boolean;
+  onLineClick: (line: string) => void;
 }
 
-export const ChatContext = ({ codeA, codeB, originalFeedback, language, isActive }: ChatContextProps) => {
+const ClickableCodeBlock: React.FC<{
+  code: string;
+  onLineClick: (line: string) => void;
+}> = ({ code, onLineClick }) => {
+    if (!code) return null;
+    const lines = code.split('\n');
+    return (
+        <div className="p-3 bg-black/30 border border-[var(--hud-color-darkest)] font-mono text-sm">
+            <pre className="whitespace-pre-wrap">
+                {lines.map((line, i) => (
+                    <div 
+                      key={i} 
+                      onClick={() => line.trim() && onLineClick(line)} 
+                      className="cursor-pointer hover:bg-[var(--hud-color)]/20 rounded-sm px-1 -mx-1"
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => { if(e.key === 'Enter' || e.key === ' ') { line.trim() && onLineClick(line) }}}
+                    >
+                        {/* Add a non-breaking space to render empty lines correctly */}
+                        {line || '\u00A0'}
+                    </div>
+                ))}
+            </pre>
+        </div>
+    );
+};
+
+export const ChatContext = ({ codeA, codeB, originalFeedback, language, isActive, onLineClick }: ChatContextProps) => {
   
   const activeClass = isActive ? 'active' : '';
 
@@ -34,15 +60,15 @@ export const ChatContext = ({ codeA, codeB, originalFeedback, language, isActive
             <div className="space-y-4">
               <div>
                 <h4 className="text-md text-[var(--hud-color-darker)] mb-1">Codebase A</h4>
-                <CodeBlock code={codeA} language={LANGUAGE_TAG_MAP[language]} />
+                <ClickableCodeBlock code={codeA} onLineClick={onLineClick} />
               </div>
               <div>
                 <h4 className="text-md text-[var(--hud-color-darker)] mb-1">Codebase B</h4>
-                <CodeBlock code={codeB} language={LANGUAGE_TAG_MAP[language]} />
+                <ClickableCodeBlock code={codeB} onLineClick={onLineClick} />
               </div>
             </div>
           ) : (
-            <CodeBlock code={codeA} language={LANGUAGE_TAG_MAP[language]} />
+             <ClickableCodeBlock code={codeA} onLineClick={onLineClick} />
           )}
         </div>
         <div>
