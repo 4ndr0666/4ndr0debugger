@@ -26,6 +26,10 @@ interface ComparisonInputProps {
   chatInputValue: string;
   setChatInputValue: (value: string) => void;
   onStopGenerating: () => void;
+  originalReviewedCode: string | null;
+  originalFeedback: string | null;
+  appMode: 'single' | 'comparison';
+  onCodeLineClick: (line: string) => void;
 }
 
 const CodeEditor: React.FC<{
@@ -91,6 +95,12 @@ export const ComparisonInput: React.FC<ComparisonInputProps> = (props) => {
                     isChatLoading={props.isChatLoading}
                     chatInputValue={props.chatInputValue}
                     setChatInputValue={props.setChatInputValue}
+                    originalReviewedCode={props.originalReviewedCode}
+                    originalFeedback={props.originalFeedback}
+                    appMode={props.appMode}
+                    codeB={codeB}
+                    language={language}
+                    onCodeLineClick={props.onCodeLineClick}
                 />
             </div>
         );

@@ -7,7 +7,6 @@ interface ChatContextProps {
   codeB?: string;
   originalFeedback: string;
   language: SupportedLanguage;
-  isActive: boolean;
   onLineClick: (line: string) => void;
 }
 
@@ -38,17 +37,10 @@ const ClickableCodeBlock: React.FC<{
     );
 };
 
-export const ChatContext = ({ codeA, codeB, originalFeedback, language, isActive, onLineClick }: ChatContextProps) => {
-  
-  const activeClass = isActive ? 'active' : '';
-
+export const ChatContext = ({ codeA, codeB, originalFeedback, onLineClick }: ChatContextProps) => {
   return (
-    <div className={`hud-container flex flex-col h-full ${activeClass}`}>
-      <div className="hud-corner corner-top-left"></div>
-      <div className="hud-corner corner-top-right"></div>
-      <div className="hud-corner corner-bottom-left"></div>
-      <div className="hud-corner corner-bottom-right"></div>
-      <h2 className="text-xl text-center mb-4 flex-shrink-0">
+    <>
+      <h2 className="text-xl text-center mb-4 flex-shrink-0 font-heading">
           Chat Context
       </h2>
       <div className="overflow-y-auto pr-2 flex-grow space-y-6">
@@ -78,6 +70,6 @@ export const ChatContext = ({ codeA, codeB, originalFeedback, language, isActive
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 };

@@ -8,7 +8,6 @@ import { ReviewOutput } from './Components/ReviewOutput.tsx';
 import { SupportedLanguage, ChatMessage, Version, ReviewProfile, LoadingAction, Toast } from './types.ts';
 import { SUPPORTED_LANGUAGES, GEMINI_MODEL_NAME, SYSTEM_INSTRUCTION, DOCS_SYSTEM_INSTRUCTION, PROFILE_SYSTEM_INSTRUCTIONS, GENERATE_TESTS_INSTRUCTION, EXPLAIN_CODE_INSTRUCTION, REVIEW_SELECTION_INSTRUCTION, COMMIT_MESSAGE_SYSTEM_INSTRUCTION, DOCS_INSTRUCTION, COMPARISON_SYSTEM_INSTRUCTION, generateComparisonTemplate, generateDocsTemplate, LANGUAGE_TAG_MAP } from './constants.ts';
 import { DiffViewer } from './Components/DiffViewer.tsx';
-import { ChatContext } from './Components/ChatContext.tsx';
 import { ComparisonInput } from './Components/ComparisonInput.tsx';
 import { VersionHistoryModal } from './Components/VersionHistoryModal.tsx';
 import { SaveVersionModal } from './Components/SaveVersionModal.tsx';
@@ -69,7 +68,7 @@ const App: React.FC = () => {
   const isReviewContextCurrent = reviewedCode !== null && (appMode === 'single' ? userOnlyCode === reviewedCode : true);
   const reviewAvailable = !!reviewFeedback && isReviewContextCurrent;
   const commitMessageAvailable = !!reviewedCode && !!revisedCode && reviewedCode !== revisedCode;
-  const showOutputPanel = isChatMode || isLoading || !!reviewFeedback || !!error;
+  const showOutputPanel = isLoading || !!reviewFeedback || !!error;
 
   // Load versions from localStorage on initial render
   useEffect(() => {
@@ -664,7 +663,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col relative">
+    <div className="h-screen flex flex-col relative">
       {/* Decorative Elements */}
       <div className="fixed top-1/4 left-8 w-1/4 h-px bg-[var(--hud-color-darker)] opacity-50"></div>
       <div className="fixed bottom-1/4 right-8 w-1/4 h-px bg-[var(--hud-color-darker)] opacity-50"></div>
@@ -690,11 +689,10 @@ const App: React.FC = () => {
       <ApiKeyBanner />
       {/* Main content grid. It's a single column by default. 
           When both the input panel is visible AND there's output to show, it switches to a two-column layout on large screens.
-          When the input panel is hidden (e.g., during review), it reverts to a single column, giving the output panel full width.
-          This fulfills requirements #5 and #6. */}
-      <main className={`flex-grow container mx-auto p-4 sm:p-6 lg:p-8 grid grid-cols-1 ${isInputPanelVisible && showOutputPanel ? 'lg:grid-cols-2' : ''} gap-6 lg:gap-8 animate-fade-in`}>
+          This is disabled in Chat Mode to provide a single-pane experience. */}
+      <main className={`flex-grow container mx-auto p-4 sm:p-6 lg:p-8 grid grid-cols-1 ${isInputPanelVisible && showOutputPanel && !isChatMode ? 'lg:grid-cols-2' : ''} gap-6 lg:gap-8 animate-fade-in overflow-hidden`}>
           {isInputPanelVisible && (
-            <div className="min-h-0" onClick={() => !isChatMode && setActivePanel('input')}>
+            <div className={`min-h-0 ${isChatMode ? 'lg:col-span-2' : ''}`} onClick={() => !isChatMode && setActivePanel('input')}>
               {appMode === 'single' ? (
                   <CodeInput
                     userCode={userOnlyCode}
@@ -719,6 +717,11 @@ const App: React.FC = () => {
                     setChatInputValue={setChatInputValue}
                     isActive={activePanel === 'input'}
                     onStopGenerating={handleStopGenerating}
+                    originalReviewedCode={reviewedCode}
+                    originalFeedback={reviewFeedback}
+                    appMode={appMode}
+                    codeB={codeB}
+                    onCodeLineClick={handleCodeLineClick}
                   />
               ) : (
                   <ComparisonInput 
@@ -741,42 +744,35 @@ const App: React.FC = () => {
                     chatInputValue={chatInputValue}
                     setChatInputValue={setChatInputValue}
                     onStopGenerating={handleStopGenerating}
+                    originalReviewedCode={reviewedCode}
+                    originalFeedback={reviewFeedback}
+                    appMode={appMode}
+                    onCodeLineClick={handleCodeLineClick}
                   />
               )}
             </div>
           )}
           
-          {showOutputPanel && (
+          {showOutputPanel && !isChatMode && (
             <div className="min-h-0" onClick={() => setActivePanel('output')}>
-              {isChatMode ? (
-                  <ChatContext 
-                      codeA={reviewedCode || ''}
-                      codeB={appMode === 'comparison' ? codeB : undefined}
-                      originalFeedback={reviewFeedback || ''}
-                      language={language}
-                      isActive={activePanel === 'output'}
-                      onLineClick={handleCodeLineClick}
-                  />
-              ) : (
-                  <ReviewOutput
-                    feedback={reviewFeedback}
-                    revisedCode={revisedCode}
-                    language={language}
-                    isLoading={isLoading}
-                    isChatLoading={isChatLoading}
-                    loadingAction={loadingAction}
-                    outputType={outputType}
-                    error={error}
-                    onSaveVersion={handleOpenSaveModal}
-                    onShowDiff={() => setIsDiffModalOpen(true)}
-                    canCompare={commitMessageAvailable}
-                    isActive={activePanel === 'output'}
-                    addToast={addToast}
-                    onStartFollowUp={handleStartFollowUp}
-                    onGenerateCommitMessage={handleGenerateCommitMessage}
-                    reviewAvailable={reviewAvailable}
-                  />
-              )}
+                <ReviewOutput
+                  feedback={reviewFeedback}
+                  revisedCode={revisedCode}
+                  language={language}
+                  isLoading={isLoading}
+                  isChatLoading={isChatLoading}
+                  loadingAction={loadingAction}
+                  outputType={outputType}
+                  error={error}
+                  onSaveVersion={handleOpenSaveModal}
+                  onShowDiff={() => setIsDiffModalOpen(true)}
+                  canCompare={commitMessageAvailable}
+                  isActive={activePanel === 'output'}
+                  addToast={addToast}
+                  onStartFollowUp={handleStartFollowUp}
+                  onGenerateCommitMessage={handleGenerateCommitMessage}
+                  reviewAvailable={reviewAvailable}
+                />
             </div>
           )}
       </main>

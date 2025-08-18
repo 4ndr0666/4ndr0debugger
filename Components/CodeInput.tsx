@@ -31,6 +31,12 @@ interface CodeInputProps {
   setChatInputValue: (value: string) => void;
   isActive: boolean;
   onStopGenerating: () => void;
+  // Context props for chat
+  originalReviewedCode: string | null;
+  originalFeedback: string | null;
+  appMode: 'single' | 'comparison';
+  codeB: string | null;
+  onCodeLineClick: (line: string) => void;
 }
 
 export const CodeInput: React.FC<CodeInputProps> = (props) => {
@@ -84,6 +90,12 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
             isChatLoading={props.isChatLoading}
             chatInputValue={props.chatInputValue}
             setChatInputValue={props.setChatInputValue}
+            originalReviewedCode={props.originalReviewedCode}
+            originalFeedback={props.originalFeedback}
+            appMode={props.appMode}
+            codeB={props.codeB}
+            language={language}
+            onCodeLineClick={props.onCodeLineClick}
           />
       </div>
     );

@@ -1,18 +1,20 @@
+
+
 import React, { useMemo } from 'react';
 import { SupportedLanguage } from '../types.ts';
 import { LANGUAGE_TAG_MAP } from '../constants.ts';
 
 declare const hljs: any;
 
-// Basic line-by-line diffing algorithm (LCS based)
+// A line-by-line diffing algorithm (LCS based) to produce a side-by-side comparison.
 const diffLines = (oldStr: string, newStr: string) => {
-  const oldLines = oldStr.split('\n');
-  const newLines = newStr.split('\n');
+  const oldLines = oldStr.replace(/\r\n/g, '\n').split('\n');
+  const newLines = newStr.replace(/\r\n/g, '\n').split('\n');
   const oldLen = oldLines.length;
   const newLen = newLines.length;
 
+  // Standard LCS DP table calculation
   const dp = Array(oldLen + 1).fill(0).map(() => Array(newLen + 1).fill(0));
-
   for (let i = 1; i <= oldLen; i++) {
     for (let j = 1; j <= newLen; j++) {
       if (oldLines[i - 1] === newLines[j - 1]) {
@@ -23,9 +25,10 @@ const diffLines = (oldStr: string, newStr: string) => {
     }
   }
 
+  // Backtracking through the DP table to build the raw diff sequence
   let i = oldLen;
   let j = newLen;
-  const result = [];
+  const result: { type: 'common' | 'added' | 'removed'; line: string }[] = [];
   while (i > 0 || j > 0) {
     if (i > 0 && j > 0 && oldLines[i - 1] === newLines[j - 1]) {
       result.unshift({ type: 'common', line: oldLines[i - 1] });
@@ -38,30 +41,36 @@ const diffLines = (oldStr: string, newStr: string) => {
       result.unshift({ type: 'removed', line: oldLines[i - 1] });
       i--;
     } else {
-        break; // Should not happen
+      break;
     }
   }
+  
+  // Process the raw diff sequence into two parallel arrays for side-by-side rendering
+  const oldDiff: { type: string; content: string; lineNumber?: number }[] = [];
+  const newDiff: { type: string; content: string; lineNumber?: number }[] = [];
+  
+  let oldLineNum = 1;
+  let newLineNum = 1;
 
-  const oldDiff: { type: string; content: string }[] = [];
-  const newDiff: { type: string; content: string }[] = [];
+  for (let k = 0; k < result.length; k++) {
+    const item = result[k];
+    const nextItem = result[k + 1];
 
-  result.forEach(item => {
-    if (item.type === 'common') {
-      oldDiff.push({ type: 'common', content: item.line });
-      newDiff.push({ type: 'common', content: item.line });
+    // Detect a modification (a removal immediately followed by an addition)
+    if (item.type === 'removed' && nextItem && nextItem.type === 'added') {
+      oldDiff.push({ type: 'removed', content: item.line, lineNumber: oldLineNum++ });
+      newDiff.push({ type: 'added', content: nextItem.line, lineNumber: newLineNum++ });
+      k++; // Manually increment k to skip the next item, as it's been consumed
+    } else if (item.type === 'common') {
+      oldDiff.push({ type: 'common', content: item.line, lineNumber: oldLineNum++ });
+      newDiff.push({ type: 'common', content: item.line, lineNumber: newLineNum++ });
     } else if (item.type === 'removed') {
-      oldDiff.push({ type: 'removed', content: item.line });
+      oldDiff.push({ type: 'removed', content: item.line, lineNumber: oldLineNum++ });
+      newDiff.push({ type: 'empty', content: '' }); // Add a placeholder to the other side
     } else if (item.type === 'added') {
-      newDiff.push({ type: 'added', content: item.line });
+      oldDiff.push({ type: 'empty', content: '' }); // Add a placeholder to the other side
+      newDiff.push({ type: 'added', content: item.line, lineNumber: newLineNum++ });
     }
-  });
-
-  // Pad the shorter diff array with empty lines to make them equal length
-  while (oldDiff.length < newDiff.length) {
-      oldDiff.push({ type: 'empty', content: '' });
-  }
-  while (newDiff.length < oldDiff.length) {
-      newDiff.push({ type: 'empty', content: '' });
   }
 
   return { oldDiff, newDiff };
@@ -94,21 +103,19 @@ const HighlightedLine: React.FC<{ line: string; language: SupportedLanguage }> =
 export const DiffViewer = ({ oldCode, newCode, onClose, language }: DiffViewerProps) => {
   const { oldDiff, newDiff } = React.useMemo(() => diffLines(oldCode, newCode), [oldCode, newCode]);
   
-  const renderLines = (diffs: { type: string; content: string }[]) => {
-    let lineCounter = 0;
+  const renderLines = (diffs: { type: string; content: string; lineNumber?: number }[]) => {
     return diffs.map((diff, index) => {
         let bgColor = 'bg-transparent';
-        if (diff.type === 'removed') bgColor = 'bg-red-900/40';
-        if (diff.type === 'added') bgColor = 'bg-green-900/40';
+        if (diff.type === 'removed') bgColor = 'bg-red-900/60';
+        if (diff.type === 'added') bgColor = 'bg-green-900/60';
         if (diff.type === 'empty') bgColor = 'bg-gray-800/20';
 
         const showLineNumber = diff.type !== 'empty';
-        if (showLineNumber) lineCounter++;
 
         return (
             <div key={index} className={`flex ${bgColor}`}>
                 <span className="w-10 text-right pr-4 text-[var(--hud-color-darker)] select-none flex-shrink-0">
-                  {showLineNumber ? lineCounter : ' '}
+                  {showLineNumber ? diff.lineNumber : ' '}
                 </span>
                 <pre className="whitespace-pre-wrap flex-grow break-all">
                   <HighlightedLine line={diff.content || ' '} language={language} />
@@ -152,19 +159,19 @@ export const DiffViewer = ({ oldCode, newCode, onClose, language }: DiffViewerPr
           </button>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-grow overflow-hidden font-mono text-sm text-[var(--hud-color)] hljs">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-grow min-h-0 font-mono text-sm text-[var(--hud-color)] hljs">
           {/* Original Code */}
-          <div className="flex flex-col h-full bg-black/50 border border-[var(--hud-color-darkest)]">
+          <div className="flex flex-col h-full bg-black/50 border border-[var(--hud-color-darkest)] min-h-0">
              <h3 className="text-center text-lg mb-2 pt-2 flex-shrink-0">Original Code</h3>
-             <div className="overflow-auto p-2 h-full">
+             <div className="overflow-auto p-2 flex-grow">
                 {renderedOld}
              </div>
           </div>
 
           {/* Revised Code */}
-          <div className="flex flex-col h-full bg-black/50 border border-[var(--hud-color-darkest)]">
+          <div className="flex flex-col h-full bg-black/50 border border-[var(--hud-color-darkest)] min-h-0">
             <h3 className="text-center text-lg mb-2 pt-2 flex-shrink-0">Revised Code</h3>
-            <div className="overflow-auto p-2 h-full">
+            <div className="overflow-auto p-2 flex-grow">
                 {renderedNew}
             </div>
           </div>

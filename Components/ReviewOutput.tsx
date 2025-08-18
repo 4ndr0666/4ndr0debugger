@@ -163,19 +163,19 @@ export const ReviewOutput = ({
       {/* Requirement #8: Contextual actions populate below the review */}
       {!isLoading && !error && reviewAvailable && (
         <div className="flex-shrink-0 pt-4 mt-4 border-t border-[var(--hud-color-darker)] flex flex-wrap justify-center items-center gap-3 animate-fade-in">
-            <Button onClick={onShowDiff} disabled={!canCompare} variant="secondary">
+            <Button onClick={onShowDiff} disabled={!canCompare} variant="primary" className="post-review-button">
                 <CompareIcon className="w-4 h-4 mr-2"/>
                 Show Diff
             </Button>
-            <Button onClick={onGenerateCommitMessage} disabled={!canCompare} variant="secondary">
+            <Button onClick={onGenerateCommitMessage} disabled={!canCompare} variant="primary" className="post-review-button">
                 <CommitIcon className="w-4 h-4 mr-2" />
                 Generate Commit
             </Button>
-            <Button onClick={onStartFollowUp} variant="secondary">
+            <Button onClick={() => onStartFollowUp()} variant="primary" className="post-review-button">
                 <ChatIcon className="w-4 h-4 mr-2" />
                 Follow-up
             </Button>
-            <Button onClick={onSaveVersion} variant="secondary">
+            <Button onClick={onSaveVersion} variant="primary" className="post-review-button">
                 <SaveIcon className="w-4 h-4 mr-2" />
                 Save Version
             </Button>
