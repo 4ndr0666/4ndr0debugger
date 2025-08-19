@@ -20,6 +20,7 @@ interface ComparisonInputProps {
   isChatLoading: boolean;
   isActive: boolean;
   onNewReview: () => void;
+  onEndChat: () => void;
   isChatMode: boolean;
   onFollowUpSubmit: (message: string) => void;
   chatHistory: ChatMessage[];
@@ -27,7 +28,6 @@ interface ComparisonInputProps {
   setChatInputValue: (value: string) => void;
   onStopGenerating: () => void;
   originalReviewedCode: string | null;
-  originalFeedback: string | null;
   appMode: 'single' | 'comparison';
   onCodeLineClick: (line: string) => void;
 }
@@ -69,7 +69,7 @@ export const ComparisonInput: React.FC<ComparisonInputProps> = (props) => {
     const {
         codeA, setCodeA, codeB, setCodeB, language, setLanguage, goal, setGoal,
         onSubmit, isLoading, isActive, onNewReview, isChatMode,
-        onStopGenerating
+        onStopGenerating, onEndChat
     } = props;
 
     const activeClass = isActive ? 'active' : '';
@@ -89,14 +89,13 @@ export const ComparisonInput: React.FC<ComparisonInputProps> = (props) => {
                 <div className="hud-corner corner-bottom-left"></div>
                 <div className="hud-corner corner-bottom-right"></div>
                 <ChatInterface
-                    onEndChat={onNewReview}
+                    onEndChat={onEndChat}
                     chatHistory={props.chatHistory}
                     onFollowUpSubmit={props.onFollowUpSubmit}
                     isChatLoading={props.isChatLoading}
                     chatInputValue={props.chatInputValue}
                     setChatInputValue={props.setChatInputValue}
                     originalReviewedCode={props.originalReviewedCode}
-                    originalFeedback={props.originalFeedback}
                     appMode={props.appMode}
                     codeB={codeB}
                     language={language}

@@ -1,11 +1,10 @@
 import React from 'react';
-import { MarkdownRenderer } from './MarkdownRenderer.tsx';
 import { SupportedLanguage } from '../types.ts';
+import { AccordionItem } from './AccordionItem.tsx';
 
 interface ChatContextProps {
   codeA: string;
   codeB?: string;
-  originalFeedback: string;
   language: SupportedLanguage;
   onLineClick: (line: string) => void;
 }
@@ -37,39 +36,30 @@ const ClickableCodeBlock: React.FC<{
     );
 };
 
-export const ChatContext = ({ codeA, codeB, originalFeedback, onLineClick }: ChatContextProps) => {
+export const ChatContext = ({ codeA, codeB, onLineClick }: ChatContextProps) => {
   return (
-    <>
+    <div className="flex flex-col h-full">
       <h2 className="text-xl text-center mb-4 flex-shrink-0 font-heading">
-          Chat Context
+          Revision History
       </h2>
-      <div className="overflow-y-auto pr-2 flex-grow space-y-6">
-        <div>
-           <h3 className="text-lg text-[var(--hud-color-darker)] mb-2">
-            {codeB ? 'Original Inputs' : 'Original Code'}
-          </h3>
-          {codeB ? (
-            <div className="space-y-4">
-              <div>
-                <h4 className="text-md text-[var(--hud-color-darker)] mb-1">Codebase A</h4>
+      <div className="overflow-y-auto pr-2 flex-grow flex flex-col gap-3 min-h-0">
+        <AccordionItem title={codeB ? 'Original Inputs' : 'Original Code'} defaultOpen={false}>
+            {codeB ? (
+                <div className="space-y-4">
+                <div>
+                    <h4 className="text-md text-[var(--hud-color-darker)] mb-1">Codebase A</h4>
+                    <ClickableCodeBlock code={codeA} onLineClick={onLineClick} />
+                </div>
+                <div>
+                    <h4 className="text-md text-[var(--hud-color-darker)] mb-1">Codebase B</h4>
+                    <ClickableCodeBlock code={codeB} onLineClick={onLineClick} />
+                </div>
+                </div>
+            ) : (
                 <ClickableCodeBlock code={codeA} onLineClick={onLineClick} />
-              </div>
-              <div>
-                <h4 className="text-md text-[var(--hud-color-darker)] mb-1">Codebase B</h4>
-                <ClickableCodeBlock code={codeB} onLineClick={onLineClick} />
-              </div>
-            </div>
-          ) : (
-             <ClickableCodeBlock code={codeA} onLineClick={onLineClick} />
-          )}
-        </div>
-        <div>
-          <h3 className="text-lg text-[var(--hud-color-darker)] mb-2">Initial Analysis</h3>
-          <div className="p-3 bg-black/30 border border-[var(--hud-color-darkest)]">
-            <MarkdownRenderer markdown={originalFeedback} />
-          </div>
-        </div>
+            )}
+        </AccordionItem>
       </div>
-    </>
+    </div>
   );
 };

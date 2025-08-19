@@ -1,6 +1,7 @@
 import React from 'react';
 import { CodeBlock } from './CodeBlock.tsx';
 import ErrorBoundary from './ErrorBoundary.tsx';
+import { AccordionItem } from './AccordionItem.tsx';
 
 // Helper to parse simple inline markdown (bold, italic, code) into React nodes.
 const parseInlineMarkdown = (text: string): React.ReactNode => {
@@ -79,24 +80,65 @@ const TextBlock: React.FC<{ text: string }> = ({ text }) => {
 export const MarkdownRenderer: React.FC<{ markdown: string }> = ({ markdown }) => {
   if (!markdown) return null;
 
-  // Split the content by code blocks, keeping the delimiters
-  const parts = markdown.split(/(```(?:[a-zA-Z0-9-]*)\n[\s\S]*?\n```)/g);
+  // This regex finds headings like "### REVISED CODE" and the code block that immediately follows.
+  // It captures the heading and the code block separately.
+  const revisedCodeRegex = /(#+\s*(?:REVISED|UPDATED|FULL)\s+CODE)\s*\n(```(?:[a-zA-Z0-9-]*)\n[\s\S]*?\n```)/g;
+
+  // The split method with a capturing group creates an array of:
+  // [text_before, captured_heading, captured_code_block, text_after, ...]
+  const parts = markdown.split(revisedCodeRegex);
+
+  const renderRegularPart = (part: string, key: string | number) => {
+    // This function handles rendering standard text and code blocks.
+    const subParts = part.split(/(```(?:[a-zA-Z0-9-]*)\n[\s\S]*?\n```)/g);
+    return (
+      <React.Fragment key={key}>
+        {subParts.map((subPart, subIndex) => {
+          if (!subPart) return null;
+          const codeBlockMatch = subPart.match(/^```([a-zA-Z0-9-]*)\n([\s\S]*?)\n```$/);
+          if (codeBlockMatch) {
+            const [, language, code] = codeBlockMatch;
+            return (
+              <ErrorBoundary key={`sub-${subIndex}`}>
+                <CodeBlock code={code.trim()} language={language} />
+              </ErrorBoundary>
+            );
+          }
+          return <TextBlock key={`sub-${subIndex}`} text={subPart} />;
+        })}
+      </React.Fragment>
+    );
+  };
 
   return (
     <>
       {parts.map((part, index) => {
-        if (!part) return null;
-        const codeBlockMatch = part.match(/^```([a-zA-Z0-9-]*)\n([\s\S]*?)\n```$/);
-        if (codeBlockMatch) {
-          const [, language, code] = codeBlockMatch;
-          return (
-            <ErrorBoundary key={index}>
-              <CodeBlock code={code.trim()} language={language} />
-            </ErrorBoundary>
-          );
+        // Every 3rd element starting from 0 is a regular text part.
+        if (index % 3 === 0) {
+          return renderRegularPart(part, index);
         }
-        // Render the non-code parts using our new, safer TextBlock component
-        return <TextBlock key={index} text={part} />;
+        
+        // Every 3rd element starting from 1 is a captured heading.
+        if (index % 3 === 1) {
+          const title = part.replace(/#+\s*/, '');
+          const codeBlockPart = parts[index + 1];
+          const codeBlockMatch = codeBlockPart?.match(/^```([a-zA-Z0-9-]*)\n([\s\S]*?)\n```$/);
+
+          if (codeBlockMatch) {
+            const [, language, code] = codeBlockMatch;
+            return (
+              <AccordionItem key={index} title={title} defaultOpen={false}>
+                <ErrorBoundary>
+                  <CodeBlock code={code.trim()} language={language} />
+                </ErrorBoundary>
+              </AccordionItem>
+            );
+          }
+        }
+        
+        // Every 3rd element starting from 2 is a captured code block which is handled
+        // with its preceding heading, so we render nothing here.
+        return null;
       })}
     </>
   );

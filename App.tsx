@@ -375,23 +375,26 @@ const App: React.FC = () => {
       }
     }
 
+    // The history for the API's memory starts with the original prompt and its full response.
     const historyForAPI: {role: 'user' | 'model', parts: {text: string}[]}[] = [
       { role: 'user', parts: [{ text: contextCode }] },
       { role: 'model', parts: [{ text: contextFeedback }] }
     ];
 
-    const historyForUI: ChatMessage[] = [];
+    // The history for the UI starts with the model's initial analysis.
+    const historyForUI: ChatMessage[] = [
+      { id: `chat_initial_${Date.now()}`, role: 'model', content: contextFeedback }
+    ];
     
     if (version) {
-        historyForUI.push({ id: `chat_${Date.now()}`, role: 'model', content: `Starting a follow-up about version: **"${version.name}"**.\n\nWhat would you like to ask?` });
-    } else if (selectionText) {
-      const followUpContext = `My follow-up question is about this specific part of your code revision:\n\n\`\`\`\n${selectionText}\n\`\`\``;
-      historyForAPI.push({ role: 'user', parts: [{ text: followUpContext }] });
-      setChatInputValue(followUpContext);
-      const uiConfirmation = `Okay, let's talk about this snippet:\n\n\`\`\`\n${selectionText}\n\`\`\``;
-      historyForUI.push({ id: `chat_${Date.now()}`, role: 'model', content: uiConfirmation });
+        historyForUI.push({ id: `chat_prompt_${Date.now()}`, role: 'model', content: `Context for **"${version.name}"** loaded. What is your question?` });
+    }
+    
+    // If the user selected text, pre-fill the input box for them as a starting point.
+    if (!version && selectionText) {
+      setChatInputValue(`Regarding this section:\n\n> ${selectionText.split('\n').join('\n> ')}\n\n`);
     } else {
-      historyForUI.push({ id: `chat_${Date.now()}`, role: 'model', content: "What would you like to ask about the review?" });
+      setChatInputValue('');
     }
     
     const newChat = ai.chats.create({ 
@@ -473,6 +476,42 @@ const App: React.FC = () => {
     setIsInputPanelVisible(true);
     setReviewProfile('none');
     setCustomReviewProfile('');
+  };
+
+  const handleSaveChatAndEnd = () => {
+    // Exclude the initial review message from the chat log to avoid duplication
+    const chatLog = chatHistory.slice(1)
+        .map(msg => `**[${msg.role.toUpperCase()}]**\n\n${msg.content}`)
+        .join('\n\n---\n\n');
+    
+    const feedbackToSave = (reviewFeedback || '') + '\n\n---\n\n## Follow-up Chat History\n\n' + chatLog;
+
+    const newVersion: Version = {
+      id: `v_${Date.now()}`,
+      name: `Follow-up Chat - ${new Date().toLocaleString()}`,
+      userCode: reviewedCode || userOnlyCode,
+      fullPrompt: fullCodeForReview,
+      feedback: feedbackToSave,
+      language,
+      timestamp: Date.now(),
+    };
+
+    setVersions(prev => [newVersion, ...prev]);
+    addToast("Chat session saved.", "success");
+    handleNewReview(); // Reset the UI after saving
+  };
+
+  const handleEndChat = () => {
+    // Only prompt to save if there's an actual conversation
+    if (chatHistory.length > 1) { 
+        if (window.confirm("Save this chat session to your Version History?")) {
+            handleSaveChatAndEnd();
+        } else {
+            handleNewReview();
+        }
+    } else {
+        handleNewReview(); // If no conversation, just end it
+    }
   };
 
   const handleStartComparison = () => {
@@ -711,6 +750,7 @@ const App: React.FC = () => {
                     loadingAction={loadingAction}
                     isChatMode={isChatMode}
                     onNewReview={handleNewReview}
+                    onEndChat={handleEndChat}
                     onFollowUpSubmit={handleFollowUpSubmit}
                     chatHistory={chatHistory}
                     chatInputValue={chatInputValue}
@@ -718,7 +758,6 @@ const App: React.FC = () => {
                     isActive={activePanel === 'input'}
                     onStopGenerating={handleStopGenerating}
                     originalReviewedCode={reviewedCode}
-                    originalFeedback={reviewFeedback}
                     appMode={appMode}
                     codeB={codeB}
                     onCodeLineClick={handleCodeLineClick}
@@ -738,6 +777,7 @@ const App: React.FC = () => {
                     isChatLoading={isChatLoading}
                     isActive={activePanel === 'input'}
                     onNewReview={handleNewReview}
+                    onEndChat={handleEndChat}
                     isChatMode={isChatMode}
                     onFollowUpSubmit={handleFollowUpSubmit}
                     chatHistory={chatHistory}
@@ -745,7 +785,6 @@ const App: React.FC = () => {
                     setChatInputValue={setChatInputValue}
                     onStopGenerating={handleStopGenerating}
                     originalReviewedCode={reviewedCode}
-                    originalFeedback={reviewFeedback}
                     appMode={appMode}
                     onCodeLineClick={handleCodeLineClick}
                   />

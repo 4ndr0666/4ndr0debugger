@@ -25,6 +25,7 @@ interface CodeInputProps {
   loadingAction: LoadingAction;
   isChatMode: boolean;
   onNewReview: () => void;
+  onEndChat: () => void;
   onFollowUpSubmit: (message: string) => void;
   chatHistory: ChatMessage[];
   chatInputValue: string;
@@ -33,7 +34,6 @@ interface CodeInputProps {
   onStopGenerating: () => void;
   // Context props for chat
   originalReviewedCode: string | null;
-  originalFeedback: string | null;
   appMode: 'single' | 'comparison';
   codeB: string | null;
   onCodeLineClick: (line: string) => void;
@@ -46,7 +46,7 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
     setUserCode, setLanguage, reviewProfile, setReviewProfile, onNewReview,
     customReviewProfile, setCustomReviewProfile,
     onExplainSelection, onReviewSelection,
-    isChatMode, isActive, onStopGenerating
+    isChatMode, isActive, onStopGenerating, onEndChat
   } = props;
   
   const [selectedText, setSelectedText] = useState('');
@@ -84,14 +84,13 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
           <div className="hud-corner corner-bottom-left"></div>
           <div className="hud-corner corner-bottom-right"></div>
           <ChatInterface 
-            onEndChat={onNewReview}
+            onEndChat={onEndChat}
             chatHistory={props.chatHistory}
             onFollowUpSubmit={props.onFollowUpSubmit}
             isChatLoading={props.isChatLoading}
             chatInputValue={props.chatInputValue}
             setChatInputValue={props.setChatInputValue}
             originalReviewedCode={props.originalReviewedCode}
-            originalFeedback={props.originalFeedback}
             appMode={props.appMode}
             codeB={props.codeB}
             language={language}
