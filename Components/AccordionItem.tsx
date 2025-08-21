@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { ChevronDownIcon } from './Icons.tsx';
 
 interface AccordionItemProps {
-  title: string;
+  title: React.ReactNode;
   children: React.ReactNode;
   defaultOpen?: boolean;
 }

@@ -1,13 +1,9 @@
 
-
 import React, { useRef, useState, useEffect, useMemo } from 'react';
-import { LoadingSpinner } from './LoadingSpinner.tsx';
 import { MarkdownRenderer } from './MarkdownRenderer.tsx';
-import { LoadingAction, Toast, SupportedLanguage } from '../types.ts';
-import { SaveIcon, CopyIcon, CheckIcon, CompareIcon, ChatIcon, CommitIcon } from './Icons.tsx';
-import { LANGUAGE_TAG_MAP } from '../constants.ts';
-import ErrorBoundary from './ErrorBoundary.tsx';
-import { CodeBlock } from './CodeBlock.tsx';
+import { LoadingAction, Toast, SupportedLanguage, AppMode, Version } from '../types.ts';
+import { SaveIcon, CopyIcon, CheckIcon, CompareIcon, ChatIcon, CommitIcon, BugIcon } from './Icons.tsx';
+import { LoadingSpinner } from './LoadingSpinner.tsx';
 import { Button } from './Button.tsx';
 
 interface ReviewOutputProps {
@@ -24,15 +20,57 @@ interface ReviewOutputProps {
   canCompare: boolean;
   isActive: boolean;
   addToast: (message: string, type: Toast['type']) => void;
-  onStartFollowUp: () => void;
+  onStartFollowUp: (version?: Version, modeOverride?: AppMode) => void;
   onGenerateCommitMessage: () => void;
   reviewAvailable: boolean;
+  appMode: AppMode;
 }
+
+const analysisSteps = [
+  'INITIATING ANALYSIS PROTOCOL',
+  'PARSING ABSTRACT SYNTAX TREE',
+  'CROSS-REFERENCING SECURITY VECTORS',
+  'IDENTIFYING LOGIC FLAWS',
+  'EVALUATING IDIOMATIC CONVENTIONS',
+  'COMPILING FEEDBACK MATRIX',
+  'GENERATING REVISION',
+  'FINALIZING OUTPUT STREAM',
+];
+
+const AnalysisLoader: React.FC = () => {
+  const [currentStep, setCurrentStep] = useState(analysisSteps[0]);
+  const [fade, setFade] = useState(true);
+
+  useEffect(() => {
+    let stepIndex = 0;
+    const intervalId = setInterval(() => {
+      setFade(false); // Start fade-out
+      setTimeout(() => {
+        stepIndex = (stepIndex + 1) % analysisSteps.length;
+        setCurrentStep(analysisSteps[stepIndex]);
+        setFade(true); // Start fade-in
+      }, 400); // Animation duration
+    }, 1800); // Time each step is visible
+
+    return () => clearInterval(intervalId);
+  }, []);
+
+  return (
+    <div className="flex flex-col items-center justify-center h-full text-center">
+      <LoadingSpinner size="w-12 h-12" />
+      <p className={`mt-4 uppercase tracking-[0.2em] text-sm text-[var(--hud-color)] transition-opacity duration-300 ${fade ? 'opacity-100' : 'opacity-0'}`}>
+        {currentStep.endsWith('...') ? currentStep : `${currentStep}...`}
+      </p>
+    </div>
+  );
+};
+
 
 export const ReviewOutput = ({ 
     feedback, revisedCode, language, isLoading, isChatLoading, loadingAction, error, 
     onSaveVersion, isActive, outputType, onShowDiff, canCompare,
-    addToast, onStartFollowUp, onGenerateCommitMessage, reviewAvailable
+    addToast, onStartFollowUp, onGenerateCommitMessage, reviewAvailable,
+    appMode
 }: ReviewOutputProps) => {
   const [copied, setCopied] = useState(false);
   const showLoading = isLoading || isChatLoading;
@@ -52,22 +90,12 @@ export const ReviewOutput = ({
     });
   };
 
-  const analysisText = useMemo(() => {
-      if (!feedback) return null;
-      // During streaming, show everything to avoid layout jumps
-      if (isLoading && feedback) return feedback;
-      
-      // Once complete, if there's revised code, strip it from the main analysis body
-      if (revisedCode) {
-        const finalCodeRegex = new RegExp("```(?:"+ (LANGUAGE_TAG_MAP[language] || '') +")?\\n[\\s\\S]*?\\n```$", "m");
-        return feedback.replace(finalCodeRegex, '').trim();
-      }
-      
-      return feedback;
-  }, [feedback, revisedCode, isLoading, language]);
-
   const title = useMemo(() => {
     const action = showLoading ? loadingAction : outputType;
+
+    if (appMode === 'debug' && (action === 'review' || action === 'review-selection')) {
+        return 'Debugger';
+    }
     
     switch (action) {
         case 'review': return 'Code Review';
@@ -79,31 +107,34 @@ export const ReviewOutput = ({
         case 'comparison': return 'Comparative Analysis';
         default: return 'Analysis';
     }
-  }, [showLoading, loadingAction, outputType]);
+  }, [showLoading, loadingAction, outputType, appMode]);
 
-  // This effect handles auto-scrolling for streaming responses
   useEffect(() => {
     const contentElement = contentRef.current;
     if (!contentElement || !isLoading) return;
 
-    // If user has scrolled up, don't force scroll down. Otherwise, follow the stream.
     const isScrolledToBottom = contentElement.scrollHeight - contentElement.scrollTop <= contentElement.clientHeight + 50;
     if (isScrolledToBottom) {
       contentElement.scrollTop = contentElement.scrollHeight;
     }
   }, [feedback, isLoading]);
   
-  // Reset copied state if feedback changes
   useEffect(() => { setCopied(false) }, [feedback]);
 
   const activeClass = isActive ? 'active' : '';
+  const followUpButtonText = appMode === 'debug' ? 'Test Results' : 'Follow-up';
+  const showBorder = !isLoading || (isLoading && !!feedback);
 
   return (
-    <div className={`hud-container min-h-[200px] flex flex-col h-full ${activeClass}`}>
-      <div className="hud-corner corner-top-left"></div>
-      <div className="hud-corner corner-top-right"></div>
-      <div className="hud-corner corner-bottom-left"></div>
-      <div className="hud-corner corner-bottom-right"></div>
+    <div className={`min-h-[200px] flex flex-col h-full ${showBorder ? 'hud-container' : 'p-[1.5rem]'} ${activeClass} ${showBorder ? 'animate-fade-in' : ''}`}>
+      {showBorder && (
+        <>
+            <div className="hud-corner corner-top-left"></div>
+            <div className="hud-corner corner-top-right"></div>
+            <div className="hud-corner corner-bottom-left"></div>
+            <div className="hud-corner corner-bottom-right"></div>
+        </>
+      )}
       <div className="relative flex justify-center items-center mb-4 flex-shrink-0">
         <h2 className="text-xl text-center">
             {title}
@@ -124,9 +155,8 @@ export const ReviewOutput = ({
 
       <div className="flex-grow overflow-hidden relative">
         {isLoading && !feedback && (
-          <div className="flex flex-col items-center justify-center h-full py-10">
-            <LoadingSpinner size="w-12 h-12" />
-            <p className="mt-4 uppercase tracking-widest text-sm animate-pulse">Analyzing...</p>
+          <div className="flex flex-col items-center justify-center h-full">
+            <AnalysisLoader />
           </div>
         )}
         {error && !isLoading && (
@@ -136,44 +166,38 @@ export const ReviewOutput = ({
           </div>
         )}
         
-        {/* Requirement #6: Contained output stream */}
-        <div 
-          id="review-output-content" 
-          ref={contentRef}
-          className="overflow-auto h-full pr-2 text-[var(--hud-color-darker)] leading-relaxed space-y-4"
-        >
-          {analysisText && <MarkdownRenderer markdown={analysisText} />}
-
-          {/* Requirement #7: Collapsed pane for revised code */}
-          {!isLoading && revisedCode && (
-            <details className="mt-6 pt-4 border-t border-[var(--hud-color-darkest)] animate-fade-in">
-              <summary className="font-heading text-lg text-[var(--hud-color)] cursor-pointer hover:text-white transition-colors">
-                View Revised Code
-              </summary>
-              <ErrorBoundary>
-                <CodeBlock code={revisedCode} language={LANGUAGE_TAG_MAP[language]} />
-              </ErrorBoundary>
-            </details>
-          )}
-
-          {isLoading && feedback && <LoadingSpinner size="w-6 h-6" className="mx-auto pt-4" />}
-        </div>
+        {showBorder && (
+            <div 
+            id="review-output-content" 
+            ref={contentRef}
+            className="overflow-auto h-full pr-2 text-[var(--hud-color-darker)] leading-relaxed space-y-4"
+            >
+            {feedback && <MarkdownRenderer markdown={feedback} />}
+            {isLoading && feedback && <LoadingSpinner size="w-5 h-5" className="mx-auto mt-4" />}
+            </div>
+        )}
       </div>
 
-      {/* Requirement #8: Contextual actions populate below the review */}
       {!isLoading && !error && reviewAvailable && (
         <div className="flex-shrink-0 pt-4 mt-4 border-t border-[var(--hud-color-darker)] flex flex-wrap justify-center items-center gap-3 animate-fade-in">
-            <Button onClick={onShowDiff} disabled={!canCompare} variant="primary" className="post-review-button">
-                <CompareIcon className="w-4 h-4 mr-2"/>
-                Show Diff
-            </Button>
+            {appMode === 'single' ? (
+              <Button onClick={() => onStartFollowUp(undefined, 'debug')} disabled={!reviewAvailable} variant="primary" className="post-review-button">
+                  <BugIcon className="w-4 h-4 mr-2"/>
+                  Debugger
+              </Button>
+            ) : (
+              <Button onClick={onShowDiff} disabled={!canCompare} variant="primary" className="post-review-button">
+                  <CompareIcon className="w-4 h-4 mr-2"/>
+                  Show Diff
+              </Button>
+            )}
             <Button onClick={onGenerateCommitMessage} disabled={!canCompare} variant="primary" className="post-review-button">
                 <CommitIcon className="w-4 h-4 mr-2" />
                 Generate Commit
             </Button>
             <Button onClick={() => onStartFollowUp()} variant="primary" className="post-review-button">
                 <ChatIcon className="w-4 h-4 mr-2" />
-                Follow-up
+                {followUpButtonText}
             </Button>
             <Button onClick={onSaveVersion} variant="primary" className="post-review-button">
                 <SaveIcon className="w-4 h-4 mr-2" />

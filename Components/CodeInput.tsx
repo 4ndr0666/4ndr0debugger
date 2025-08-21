@@ -1,16 +1,18 @@
 
 
 import React, { useState, useEffect, useRef } from 'react';
-import { SupportedLanguage, ChatMessage, ReviewProfile, LoadingAction } from '../types.ts';
+import { SupportedLanguage, ChatMessage, ReviewProfile, LoadingAction, ChatRevision } from '../types.ts';
 import { Button } from './Button.tsx';
 import { Select } from './Select.tsx';
-import { SUPPORTED_LANGUAGES, generateReviewerTemplate, PLACEHOLDER_MARKER, REVIEW_PROFILES } from '../constants.ts';
+import { SUPPORTED_LANGUAGES, generateReviewerTemplate, generateDebuggerTemplate, PLACEHOLDER_MARKER, REVIEW_PROFILES } from '../constants.ts';
 import { ChatInterface } from './ChatInterface.tsx';
 import { StopIcon } from './Icons.tsx';
 
 interface CodeInputProps {
   userCode: string;
   setUserCode: (code: string) => void;
+  errorMessage: string;
+  setErrorMessage: (error: string) => void;
   language: SupportedLanguage;
   setLanguage: (language: SupportedLanguage) => void;
   reviewProfile: ReviewProfile | 'none';
@@ -34,9 +36,13 @@ interface CodeInputProps {
   onStopGenerating: () => void;
   // Context props for chat
   originalReviewedCode: string | null;
-  appMode: 'single' | 'comparison';
+  initialRevisedCode: string | null;
+  chatRevisions: ChatRevision[];
+  appMode: 'debug' | 'single' | 'comparison';
   codeB: string | null;
   onCodeLineClick: (line: string) => void;
+  onClearChatRevisions: () => void;
+  onRenameChatRevision: (id: string, newName: string) => void;
 }
 
 export const CodeInput: React.FC<CodeInputProps> = (props) => {
@@ -46,7 +52,8 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
     setUserCode, setLanguage, reviewProfile, setReviewProfile, onNewReview,
     customReviewProfile, setCustomReviewProfile,
     onExplainSelection, onReviewSelection,
-    isChatMode, isActive, onStopGenerating, onEndChat
+    isChatMode, isActive, onStopGenerating, onEndChat, appMode,
+    errorMessage, setErrorMessage
   } = props;
   
   const [selectedText, setSelectedText] = useState('');
@@ -60,8 +67,13 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
 
   const handleReviewSubmit = () => {
     if (userCode.trim()) {
-      const template = generateReviewerTemplate(language);
-      const fullCode = template.replace(PLACEHOLDER_MARKER, userCode);
+      let fullCode;
+      if (appMode === 'debug') {
+        fullCode = generateDebuggerTemplate(language, userCode, errorMessage);
+      } else { // 'single' mode
+        const template = generateReviewerTemplate(language);
+        fullCode = template.replace(PLACEHOLDER_MARKER, userCode);
+      }
       onSubmit(fullCode);
     }
   };
@@ -69,9 +81,8 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
   const textareaClasses = `
     block w-full h-full p-3 pr-10 font-mono text-sm text-[var(--hud-color)]
     focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)] focus:border-[var(--hud-color)]
-    resize-y placeholder:text-[var(--hud-color-darker)] bg-black/70 border border-[var(--hud-color-darker)]
+    resize-y placeholder:text-transparent bg-black/70 border border-[var(--hud-color-darker)]
     transition-colors duration-300
-    ${!userCode ? 'blinking-placeholder' : ''}
   `.trim().replace(/\s+/g, ' ');
 
   const activeClass = isActive ? 'active' : '';
@@ -91,14 +102,20 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
             chatInputValue={props.chatInputValue}
             setChatInputValue={props.setChatInputValue}
             originalReviewedCode={props.originalReviewedCode}
+            initialRevisedCode={props.initialRevisedCode}
+            chatRevisions={props.chatRevisions}
             appMode={props.appMode}
             codeB={props.codeB}
             language={language}
             onCodeLineClick={props.onCodeLineClick}
+            onClearChatRevisions={props.onClearChatRevisions}
+            onRenameChatRevision={props.onRenameChatRevision}
           />
       </div>
     );
   }
+
+  const title = appMode === 'debug' ? 'Debugger' : 'Single Review';
 
   return (
     <div className={`hud-container h-full flex flex-col ${activeClass} animate-fade-in`}>
@@ -109,13 +126,13 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
       
       <div className="flex items-center justify-center relative flex-shrink-0">
         <h2 className="text-xl text-center">
-          Code Input
+          {title}
         </h2>
       </div>
           
       <div className="flex-grow flex flex-col overflow-y-auto pr-2 mt-4">
         <div className="flex flex-col space-y-4 flex-grow">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
             <div title="Select the language of your code for an accurate review.">
               <Select
                 id="language-select"
@@ -147,22 +164,37 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
               </label>
               <textarea
                 id="custom-profile-input"
-                rows={3}
                 className={`${textareaClasses.replace('h-full', '')}`}
                 value={customReviewProfile}
                 onChange={(e) => setCustomReviewProfile(e.target.value)}
                 disabled={isLoading}
-                placeholder="e.g., Focus on refactoring for performance."
+                placeholder=" "
                 aria-label="Custom review instructions"
               />
             </div>
           )}
+
+          {appMode === 'debug' && (
+            <div className="mt-2 animate-fade-in">
+              <label htmlFor="error-message-input" className="block text-sm uppercase tracking-wider text-[var(--hud-color-darker)] mb-1">
+                Error Message / Context
+              </label>
+              <textarea
+                id="error-message-input"
+                className={`${textareaClasses.replace('h-full', '')}`}
+                value={errorMessage}
+                onChange={(e) => setErrorMessage(e.target.value)}
+                disabled={isLoading}
+                placeholder="e.g., Paste console logs or error stack trace here."
+                aria-label="Error message input"
+              />
+            </div>
+          )}
           
-          <div className="relative flex-grow">
+          <div className="relative flex-grow min-h-[100px]">
             <textarea
               ref={textareaRef}
               id="code-input"
-              rows={15}
               className={textareaClasses}
               value={userCode}
               onChange={(e) => setUserCode(e.target.value)}
@@ -171,9 +203,15 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
               onKeyUp={handleSelect}
               disabled={isLoading}
               aria-label="Code input area"
-              placeholder="❯ Awaiting input..."
+              placeholder=" "
               title="Paste code here."
             />
+            {!userCode && !isLoading && (
+              <div className="absolute top-3 left-3 pointer-events-none font-mono text-sm text-[var(--hud-color)]" aria-hidden="true">
+                <span className="blinking-prompt">❯ </span>
+                <span className="text-[var(--hud-color-darker)]">Awaiting input...</span>
+              </div>
+            )}
             {userCode && !isLoading && (
               <button
                 onClick={(e) => { e.preventDefault(); onNewReview(); }}
@@ -201,7 +239,7 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
                       aria-label="Submit code for review"
                       title="Submit your code for a standard analysis of quality, bugs, and style."
                   >
-                      Review Code
+                      {appMode === 'debug' ? 'Debug Code' : 'Review Code'}
                   </Button>
               </div>
             )}

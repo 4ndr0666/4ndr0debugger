@@ -48,6 +48,12 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface ChatRevision {
+  id: string;
+  name: string;
+  code: string;
+}
+
 export interface Version {
   id: string;
   name: string;
@@ -56,9 +62,12 @@ export interface Version {
   feedback: string;
   language: SupportedLanguage;
   timestamp: number;
+  chatRevisions?: ChatRevision[];
 }
 
 export type LoadingAction = 'review' | 'docs' | 'tests' | 'commit' | 'explain-selection' | 'review-selection' | 'comparison' | null;
+
+export type AppMode = 'debug' | 'single' | 'comparison';
 
 export interface Toast {
   id: number;

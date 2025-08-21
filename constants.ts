@@ -1,15 +1,23 @@
 
+
 import { LanguageOption, SupportedLanguage, ProfileOption, ReviewProfile } from './types.ts';
 
-export const GEMINI_MODEL_NAME = 'gemini-2.5-flash';
+export const GEMINI_MODELS = {
+  // For core, complex reasoning tasks like full code reviews and comparisons.
+  CORE_ANALYSIS: 'gemini-2.5-pro',
+
+  // For faster, more focused tasks like chat, explanations, or commit messages.
+  FAST_TASKS: 'gemini-2.5-flash',
+};
 
 // --- For Code Review ---
 export const SYSTEM_INSTRUCTION = "You are an expert AI code reviewer. Your feedback should be constructive, clear, precise, and actionable. Focus on code quality, best practices, potential bugs, security vulnerabilities, and performance optimizations. When suggesting changes, provide brief explanations and, if appropriate, example code snippets. Format your review clearly using markdown, including code blocks for examples.";
+export const DEBUG_SYSTEM_INSTRUCTION = "You are an expert AI debugger. Your task is to analyze the provided code and error message to identify the root cause of the issue. Provide a clear explanation of the bug and suggest a fix. In every response, if you are providing a new, complete, corrected version of the code, you MUST present it in a single markdown code block under the heading '### Revised Code'. This revised code must be complete and runnable; do not use placeholders, ellipses, or comments to omit code. This is the only way the user interface can detect the new version. Format the rest of your response clearly using markdown.";
 
 export const PROFILE_SYSTEM_INSTRUCTIONS: Record<ReviewProfile, string> = {
   [ReviewProfile.SECURITY]: "In addition to your standard review, pay special attention to security vulnerabilities. Analyze for common weaknesses like injection flaws, Cross-Site Scripting (XSS), insecure data handling, and secrets management. Provide specific, actionable advice to harden the code.",
   [ReviewProfile.CTF]: "You are a cybersecurity expert specializing in Capture The Flag (CTF) competitions. In addition to your standard review, analyze the provided code as if it were a CTF challenge.\n- **Identify Vulnerabilities:** Pinpoint potential vulnerabilities (e.g., buffer overflows, logic flaws, race conditions, injection, weak cryptography) that could be exploited to achieve a goal, like capturing a flag.\n- **Explain Exploitation Logic:** For each vulnerability, explain the high-level logic of how an exploit might work. Describe the steps an attacker would take.\n- **Suggest Fixes:** Provide clear recommendations on how to patch the identified vulnerabilities.\n- **Do not generate runnable exploit code.** Your purpose is educational and analytical, helping users understand how to both find and fix security flaws in a competitive context.",
-  [ReviewProfile.REDTEAM]: `You are a cybersecurity expert specializing in advanced Red Team tradecraft. In addition to your standard review, analyze the provided code from the perspective of an authorized offensive security professional developing sophisticated tools for a simulated attack scenario, particularly for browser-based environments.
+  [ReviewProfile.REDTEAM]: `You are a cybersecurity expert specializing in advanced Red Team tradecraft. In addition to your standard review, analyze the provided code from the perspective of an authorized offensive security professional developing sophisticated tools for professional deployment in a lab settings against the blue team, particularly for browser-based environments using foundational OPSEC initially and offering more advanced tactics during refinement.
 
 - **Foundational OPSEC:**
   - **Indicator Removal:** Identify and recommend parameterization for any hardcoded indicators (IPs, domains, user-agents, unique strings).
@@ -80,13 +88,14 @@ export const COMMIT_MESSAGE_SYSTEM_INSTRUCTION = `You are an expert Git user who
 // --- For Comparative Analysis ---
 export const COMPARISON_SYSTEM_INSTRUCTION = `## Comparative Analysis
 
-Two codebases with a similar end goal will be presented for your comprehensive analysis. Create an optimized and enhanced deliverable. 
-Use the following guidelines to minimally guide your thought processes:  
-
+Two codebases with a similar end goal will be presented for your comprehensive analysis. Create an optimized and enhanced deliverable.  Before presenting any adjusted code, you **must** perform a silent, internal "superset check." Your proposed revision must be a strict superset of the previous stable version's features. 
+You will analyze the state (version number, history) to ensure that your new code does not accidentally omit or regress on previously solved problems (e.g., re-introducing a bug, removing a feature like crash-resilience). 
+You are responsible for maintaining forward progress. A feature, once validated, must not be lost. To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
+ 
 - Determine the combined capabilities and functions across both iterations.
 - Identify all gaps, overlap and redundancy to ensure all underlying functionality remains intact.
 - Opt for the superior logic between similarities 
-- Write a revision based on revered coding philosophies and best practices.
+- Write a revision based on revered coding philosophies and best practices. The revision must be complete and contain no placeholders or omitted code.
 - Parse the updated, fully-functional, error-free and production ready revision.
 - Summarize the changes and provide the next steps or optional enhancements if any.`;
 
@@ -96,7 +105,9 @@ export const PLACEHOLDER_MARKER = "❯ PASTE CODE";
 export const LANGUAGE_SPECIFIC_INSTRUCTIONS: Record<SupportedLanguage, string> = {
   [SupportedLanguage.JAVASCRIPT]: `## Summary for JavaScript
 
-To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
+ Before presenting any adjusted code, you **must** perform a silent, internal "superset check." Your proposed revision must be a strict superset of the previous stable version's features. 
+ You will analyze the state (version number, history) to ensure that your new code does not accidentally omit or regress on previously solved problems (e.g., re-introducing a bug, removing a feature like crash-resilience). 
+ You are responsible for maintaining forward progress. A feature, once validated, must not be lost. To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
 
 - **Type Coercion & Equality:** Consistently uses strict equality (\`===\` and \`!==\`) to prevent unexpected type coercion bugs.
 - **Variable Scoping:** Correctly uses \`let\` and \`const\` for block-scoped variable declarations, avoiding \`var\`.
@@ -111,10 +122,12 @@ To minimally guide your thought processes, ensure your review and subsequent rev
 - **Code Style & Readability:** Adheres to a consistent code style (e.g., consistent naming conventions like camelCase, indentation, comments where necessary).
 - **Security:** Actively guards against common web vulnerabilities (e.g., XSS, CSRF if applicable) and validates/sanitizes all external data.
 
-After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`//\` syntax.**`,
+After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. The code you provide must be whole and complete; do not use placeholders, ellipses, or comments indicating omitted code (e.g., \`// ... rest of the code\`). Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`//\` syntax.**`,
   [SupportedLanguage.TYPESCRIPT]: `## Summary for TypeScript
 
-To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
+ Before presenting any adjusted code, you **must** perform a silent, internal "superset check." Your proposed revision must be a strict superset of the previous stable version's features. 
+ You will analyze the state (version number, history) to ensure that your new code does not accidentally omit or regress on previously solved problems (e.g., re-introducing a bug, removing a feature like crash-resilience). 
+ You are responsible for maintaining forward progress. A feature, once validated, must not be lost. To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
 
 - **Type Safety:** Leverages TypeScript's type system effectively; uses specific types over \`any\` where possible. Interfaces and custom types are well-defined.
 - **Strict Null Checks:** Code is written with \`strictNullChecks\` in mind, handling \`null\` and \`undefined\` explicitly.
@@ -129,10 +142,13 @@ To minimally guide your thought processes, ensure your review and subsequent rev
 - **Build Process:** Assumes code will be compiled; avoids TypeScript-specific syntax that might cause issues in plain JavaScript environments if not properly handled by a build step.
 - **Utility Types:** Effectively uses built-in utility types (e.g., \`Partial\`, \`Readonly\`, \`Pick\`, \`Omit\`) to transform and manage types.
 
-After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`//\` syntax.**`,
+After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. The code you provide must be whole and complete; do not use placeholders, ellipses, or comments indicating omitted code (e.g., \`// ... rest of the code\`). Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`//\` syntax.**`,
   [SupportedLanguage.PYTHON]: `## Summary for Python
 
-To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
+Before presenting any adjusted code, you **must** perform a silent, internal "superset check." Your proposed revision must be a strict superset of the previous stable version's features. 
+You will analyze the state (version number, history) to ensure that your new code does not accidentally omit or regress on previously solved problems (e.g., re-introducing a bug, removing a feature like crash-resilience). 
+You are responsible for maintaining forward progress. A feature, once validated, must not be lost. To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
+
 
 - **PEP 8 Compliance:** Adheres to PEP 8 style guidelines for code layout, naming conventions (snake_case), and comments/docstrings.
 - **Idiomatic Python:** Uses Pythonic constructs and built-in functions/libraries where appropriate (e.g., list comprehensions, generators, context managers \`with\` statement).
@@ -147,10 +163,12 @@ To minimally guide your thought processes, ensure your review and subsequent rev
 - **Performance:** Aware of potential performance bottlenecks, chooses efficient algorithms and data structures.
 - **Security:** If dealing with web applications or external input, guards against common vulnerabilities (e.g., SQL injection, command injection, insecure deserialization).
 
-After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using the \`#\` syntax.**`,
+After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. The code you provide must be whole and complete; do not use placeholders, ellipses, or comments indicating omitted code (e.g., \`# ... rest of the code\`). Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using the \`#\` syntax.**`,
   [SupportedLanguage.JAVA]: `## Summary for Java
 
-To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
+Before presenting any adjusted code, you **must** perform a silent, internal "superset check." Your proposed revision must be a strict superset of the previous stable version's features. 
+You will analyze the state (version number, history) to ensure that your new code does not accidentally omit or regress on previously solved problems (e.g., re-introducing a bug, removing a feature like crash-resilience). 
+You are responsible for maintaining forward progress. A feature, once validated, must not be lost. To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
 
 - **Object-Oriented Principles:** Strongly adheres to OOP principles (Encapsulation, Inheritance, Polymorphism, Abstraction).
 - **SOLID Principles:** Design reflects SOLID principles where applicable.
@@ -166,10 +184,12 @@ To minimally guide your thought processes, ensure your review and subsequent rev
 - **Memory Management:** While Java has garbage collection, avoids memory leaks (e.g., unclosed resources, loitering objects).
 - **Design Patterns:** Applies appropriate design patterns to solve common problems.
 
-After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`//\` syntax.**`,
+After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. The code you provide must be whole and complete; do not use placeholders, ellipses, or comments indicating omitted code (e.g., \`// ... rest of the code\`). Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`//\` syntax.**`,
   [SupportedLanguage.CSHARP]: `## Summary for C#
 
-To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
+Before presenting any adjusted code, you **must** perform a silent, internal "superset check." Your proposed revision must be a strict superset of the previous stable version's features. 
+You will analyze the state (version number, history) to ensure that your new code does not accidentally omit or regress on previously solved problems (e.g., re-introducing a bug, removing a feature like crash-resilience). 
+You are responsible for maintaining forward progress. A feature, once validated, must not be lost. To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
 
 - **Object-Oriented Principles:** Code demonstrates strong adherence to OOP principles.
 - **Properties & Indexers:** Uses properties (auto-implemented or full) over public fields. Uses indexers where appropriate.
@@ -185,10 +205,13 @@ To minimally guide your thought processes, ensure your review and subsequent rev
 - **Value Types vs. Reference Types:** Shows clear understanding of the distinction and their implications.
 - **Pattern Matching (C# 7+):** Utilizes pattern matching features to simplify conditional logic.
 
-After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`//\` syntax.**`,
+After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. The code you provide must be whole and complete; do not use placeholders, ellipses, or comments indicating omitted code (e.g., \`// ... rest of the code\`). Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`//\` syntax.**`,
   [SupportedLanguage.CPP]: `## Summary for C++
 
-To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
+Before presenting any adjusted code, you **must** perform a silent, internal "superset check." Your proposed revision must be a strict superset of the previous stable version's features. 
+You will analyze the state (version number, history) to ensure that your new code does not accidentally omit or regress on previously solved problems (e.g., re-introducing a bug, removing a feature like crash-resilience). 
+You are responsible for maintaining forward progress. A feature, once validated, must not be lost. To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
+
 
 - **RAII (Resource Acquisition Is Initialization):** Strictly adheres to RAII for resource management (memory, files, locks, etc.), using smart pointers (\`std::unique_ptr\`, \`std::shared_ptr\`) and custom RAII wrappers.
 - **Memory Management:** Avoids manual \`new\`/\`delete\` where smart pointers or STL containers can be used. No memory leaks, dangling pointers, or double frees.
@@ -203,10 +226,13 @@ To minimally guide your thought processes, ensure your review and subsequent rev
 - **Templates & Metaprogramming (if applicable):** Uses templates effectively for generic programming.
 - **Readability:** Code is well-formatted, commented, and follows consistent naming conventions.
 
-After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`//\` syntax.**`,
+After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. The code you provide must be whole and complete; do not use placeholders, ellipses, or comments indicating omitted code (e.g., \`// ... rest of the code\`). Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`//\` syntax.**`,
   [SupportedLanguage.GO]: `## Summary for Go
 
-To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
+Before presenting any adjusted code, you **must** perform a silent, internal "superset check." Your proposed revision must be a strict superset of the previous stable version's features. 
+You will analyze the state (version number, history) to ensure that your new code does not accidentally omit or regress on previously solved problems (e.g., re-introducing a bug, removing a feature like crash-resilience). 
+You are responsible for maintaining forward progress. A feature, once validated, must not be lost. To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
+
 
 - **Error Handling:** Explicitly checks for errors returned from function calls and handles them appropriately (typically by returning them up the call stack). Avoids panic for ordinary errors.
 - **Goroutines & Channels (Concurrency):** Uses goroutines and channels idiomatically for concurrent programming. Manages goroutine lifecycles and avoids deadlocks or race conditions.
@@ -221,10 +247,12 @@ To minimally guide your thought processes, ensure your review and subsequent rev
 - **Pointers:** Uses pointers judiciously, understanding when to pass by value versus by pointer.
 - **Build & Dependencies:** Manages dependencies using Go Modules.
 
-After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`//\` syntax.**`,
+After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. The code you provide must be whole and complete; do not use placeholders, ellipses, or comments indicating omitted code (e.g., \`// ... rest of the code\`). Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`//\` syntax.**`,
   [SupportedLanguage.RUBY]: `## Summary for Ruby
 
-To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
+Before presenting any adjusted code, you **must** perform a silent, internal "superset check." Your proposed revision must be a strict superset of the previous stable version's features. 
+You will analyze the state (version number, history) to ensure that your new code does not accidentally omit or regress on previously solved problems (e.g., re-introducing a bug, removing a feature like crash-resilience). 
+You are responsible for maintaining forward progress. A feature, once validated, must not be lost. To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
 
 - **Ruby Idioms:** Employs idiomatic Ruby constructs (e.g., iterators like \`each\`, \`map\`, \`select\`; symbols; truthiness; blocks, procs, and lambdas).
 - **Readability & Expressiveness:** Code is expressive and reads like natural language where possible.
@@ -239,10 +267,12 @@ To minimally guide your thought processes, ensure your review and subsequent rev
 - **Security (if Rails or web-related):** Guards against common web vulnerabilities (SQL injection, XSS, CSRF, mass assignment).
 - **Monkey Patching:** Avoids monkey patching core classes unless absolutely necessary and well-justified with minimal scope.
 
-After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using the \`#\` syntax.**`,
+After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. The code you provide must be whole and complete; do not use placeholders, ellipses, or comments indicating omitted code (e.g., \`# ... rest of the code\`). Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using the \`#\` syntax.**`,
   [SupportedLanguage.PHP]: `## Summary for PHP
 
-To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
+Before presenting any adjusted code, you **must** perform a silent, internal "superset check." Your proposed revision must be a strict superset of the previous stable version's features. 
+You will analyze the state (version number, history) to ensure that your new code does not accidentally omit or regress on previously solved problems (e.g., re-introducing a bug, removing a feature like crash-resilience). 
+You are responsible for maintaining forward progress. A feature, once validated, must not be lost. To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
 
 - **Modern PHP Practices (PHP 7+):** Uses modern PHP features (e.g., strict types, return type declarations, arrow functions, null coalescing operator). Avoids deprecated features.
 - **Error Handling & Exceptions:** Uses exceptions for error handling over traditional PHP errors where appropriate. \`try-catch\` blocks are used effectively.
@@ -260,10 +290,12 @@ To minimally guide your thought processes, ensure your review and subsequent rev
 - **Database Interaction:** Uses an appropriate abstraction layer (e.g., PDO) for database operations.
 - **API Design (if applicable):** If building an API, follows RESTful principles or other clear API design standards.
 
-After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`//\` syntax.**`,
+After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. The code you provide must be whole and complete; do not use placeholders, ellipses, or comments indicating omitted code (e.g., \`// ... rest of the code\`). Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`//\` syntax.**`,
   [SupportedLanguage.HTML]: `## Summary for HTML
 
-To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
+Before presenting any adjusted code, you **must** perform a silent, internal "superset check." Your proposed revision must be a strict superset of the previous stable version's features. 
+You will analyze the state (version number, history) to ensure that your new code does not accidentally omit or regress on previously solved problems (e.g., re-introducing a bug, removing a feature like crash-resilience). 
+You are responsible for maintaining forward progress. A feature, once validated, must not be lost. To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
 
 - **Semantic Markup:** Uses HTML5 semantic elements correctly (\`<article>\`, \`<aside>\`, \`<nav>\`, \`<section>\`, \`<header>\`, \`<footer>\`, etc.) to convey meaning and structure.
 - **Accessibility (A11y):**
@@ -280,10 +312,12 @@ To minimally guide your thought processes, ensure your review and subsequent rev
 - **Readability & Maintainability:** Code is well-indented and comments are used for complex sections if necessary.
 - **Performance:** Avoids excessive or deeply nested DOM elements where simpler structures suffice. Optimizes images if referenced.
 
-After your detailed review, provide a complete, fully-functional, and production-ready revision of the markup. This revision must incorporate all your feedback. Present the revised markup in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`<!-- -->\` syntax.**`,
+After your detailed review, provide a complete, fully-functional, and production-ready revision of the markup. This revision must incorporate all your feedback. The markup you provide must be whole and complete; do not use placeholders, ellipses, or comments indicating omitted code (e.g., \`<!-- ... rest of the code -->\`). Present the revised markup in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`<!-- -->\` syntax.**`,
   [SupportedLanguage.CSS]: `## Summary for CSS
 
-To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
+Before presenting any adjusted code, you **must** perform a silent, internal "superset check." Your proposed revision must be a strict superset of the previous stable version's features. 
+You will analyze the state (version number, history) to ensure that your new code does not accidentally omit or regress on previously solved problems (e.g., re-introducing a bug, removing a feature like crash-resilience). 
+You are responsible for maintaining forward progress. A feature, once validated, must not be lost. To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
 
 - **Readability & Maintainability:**
   - CSS is well-organized, possibly grouped by component or section.
@@ -302,10 +336,12 @@ To minimally guide your thought processes, ensure your review and subsequent rev
 - **Accessibility:** Ensures sufficient color contrast. Focus states for interactive elements are clear.
 - **Modularity:** CSS is modular and avoids global styles that are hard to override or lead to unintended side effects.
 
-After your detailed review, provide a complete, fully-functional, and production-ready revision of the stylesheet. This revision must incorporate all your feedback. Present the revised stylesheet in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`/* */\` syntax.**`,
+After your detailed review, provide a complete, fully-functional, and production-ready revision of the stylesheet. This revision must incorporate all your feedback. The stylesheet you provide must be whole and complete; do not use placeholders, ellipses, or comments indicating omitted code (e.g., \`/* ... rest of the code */\`). Present the revised stylesheet in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`/* */\` syntax.**`,
   [SupportedLanguage.MARKDOWN]: `## Summary for Markdown
 
-To minimally guide your thought processes, ensure your review addresses the following points:
+Before presenting any adjusted code, you **must** perform a silent, internal "superset check." Your proposed revision must be a strict superset of the previous stable version's features. 
+You will analyze the state (version number, history) to ensure that your new code does not accidentally omit or regress on previously solved problems (e.g., re-introducing a bug, removing a feature like crash-resilience). 
+You are responsible for maintaining forward progress. A feature, once validated, must not be lost. To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
 
 - **Syntax Correctness:** Adheres to standard Markdown syntax (e.g., CommonMark or GFM if specified). All elements are correctly formatted.
 - **Readability:** The raw Markdown is easy to read and understand. Formatting choices enhance the readability of the rendered output.
@@ -324,7 +360,9 @@ To minimally guide your thought processes, ensure your review addresses the foll
 Your review should be in markdown format. Do not provide a separate "revision" block for markdown, but you can include corrected examples within your review.`,
   [SupportedLanguage.SQL]: `## Summary for SQL
 
-To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
+Before presenting any adjusted code, you **must** perform a silent, internal "superset check." Your proposed revision must be a strict superset of the previous stable version's features. 
+You will analyze the state (version number, history) to ensure that your new code does not accidentally omit or regress on previously solved problems (e.g., re-introducing a bug, removing a feature like crash-resilience). 
+You are responsible for maintaining forward progress. A feature, once validated, must not be lost. To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
 
 - **Clarity & Readability:** SQL queries are well-formatted (e.g., consistent indentation, capitalization of keywords) and easy to understand.
 - **Correctness:** The query achieves the intended result accurately.
@@ -341,10 +379,12 @@ To minimally guide your thought processes, ensure your review and subsequent rev
 - **Normalization:** Table structures implied by the query should ideally reflect good normalization principles (though this is about schema design, queries interact with it).
 - **Clarity of Intent:** Query clearly expresses what data is being requested or manipulated. Complex logic is broken down or commented if necessary.
 
-After your detailed review, provide a complete, fully-functional, and production-ready revision of the query. This revision must incorporate all your feedback. Present the revised query in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`--\` syntax.**`,
+After your detailed review, provide a complete, fully-functional, and production-ready revision of the query. This revision must incorporate all your feedback. The query you provide must be whole and complete; do not use placeholders, ellipses, or comments indicating omitted code (e.g., \`-- ... rest of the code\`). Present the revised query in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`--\` syntax.**`,
   [SupportedLanguage.SHELL]: `## Summary for Shell Script
 
-First, provide a detailed review based on the following criteria. Pay close attention to Shellcheck guidelines and general best practices.
+Before presenting any adjusted code, you **must** perform a silent, internal "superset check." Your proposed revision must be a strict superset of the previous stable version's features. 
+You will analyze the state (version number, history) to ensure that your new code does not accidentally omit or regress on previously solved problems (e.g., re-introducing a bug, removing a feature like crash-resilience). 
+You are responsible for maintaining forward progress. A feature, once validated, must not be lost. First, provide a detailed review based on the following criteria. Pay close attention to Shellcheck guidelines and general best practices.
 
 - **Linting:** Code should be free of common Shellcheck warnings.
 - **Robustness:** Ensure exit statuses are checked, variables are quoted to prevent word splitting and globbing, and input is handled safely. Use \`set -euo pipefail\` where appropriate.
@@ -353,10 +393,12 @@ First, provide a detailed review based on the following criteria. Pay close atte
 - **Idempotency & Scoping:** Scripts should be idempotent where possible. Variables should be properly scoped.
 - **Complexity:** Avoid unnecessary cyclomatic complexity.
 
-After your detailed review, provide a complete, fully-functional, and production-ready revision of the script. This revision must incorporate all your feedback and adhere to the guidelines above. Present the revised script in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using the \`#\` syntax.**`,
+After your detailed review, provide a complete, fully-functional, and production-ready revision of the script. This revision must incorporate all your feedback and adhere to the guidelines above. The script you provide must be whole and complete; do not use placeholders, ellipses, or comments indicating omitted code (e.g., \`# ... rest of the code\`). Present the revised script in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using the \`#\` syntax.**`,
   [SupportedLanguage.KOTLIN]: `## Summary for Kotlin
 
-To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
+Before presenting any adjusted code, you **must** perform a silent, internal "superset check." Your proposed revision must be a strict superset of the previous stable version's features. 
+You will analyze the state (version number, history) to ensure that your new code does not accidentally omit or regress on previously solved problems (e.g., re-introducing a bug, removing a feature like crash-resilience). 
+You are responsible for maintaining forward progress. A feature, once validated, must not be lost. To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
 
 - **Null Safety:** Effectively utilizes Kotlin's null safety features (\`?\`, \`!!\`, \`?.\`, \`?:\`, \`let\`). Avoids unnecessary \`!!\` assertions.
 - **Immutability:** Prefers immutable data structures (\`val\`, \`listOf\`, \`mapOf\`, \`setOf\`, data class \`copy\`) where possible.
@@ -370,10 +412,12 @@ To minimally guide your thought processes, ensure your review and subsequent rev
 - **Error Handling:** Uses Kotlin's exception handling mechanisms (\`try-catch-finally\`) or functional approaches (e.g., \`Result\` type) appropriately.
 - **Coding Conventions:** Follows official Kotlin coding conventions.
 
-After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`//\` syntax.**`,
+After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. The code you provide must be whole and complete; do not use placeholders, ellipses, or comments indicating omitted code (e.g., \`// ... rest of the code\`). Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`//\` syntax.**`,
   [SupportedLanguage.SWIFT]: `## Summary for Swift
 
-To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
+Before presenting any adjusted code, you **must** perform a silent, internal "superset check." Your proposed revision must be a strict superset of the previous stable version's features. 
+You will analyze the state (version number, history) to ensure that your new code does not accidentally omit or regress on previously solved problems (e.g., re-introducing a bug, removing a feature like crash-resilience). 
+You are responsible for maintaining forward progress. A feature, once validated, must not be lost. To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
 
 - **Type Safety & Optionals:** Effectively uses Swift's type system and handles optionals safely (\`?\`, \`!\`, optional binding \`if let\`/\`guard let\`, optional chaining, nil-coalescing operator \`??\`). Avoids forced unwrapping (\`!\`) unless safety is guaranteed.
 - **Value vs. Reference Types:** Demonstrates clear understanding and appropriate use of value types (structs, enums) and reference types (classes). Prefers value types where appropriate.
@@ -388,10 +432,12 @@ To minimally guide your thought processes, ensure your review and subsequent rev
 - **Higher-Order Functions:** Utilizes higher-order functions like \`map\`, \`filter\`, \`reduce\` for collection processing.
 - **Readability:** Code is clear, concise, and follows Swift's expressive style.
 
-After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`//\` syntax.**`,
+After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. The code you provide must be whole and complete; do not use placeholders, ellipses, or comments indicating omitted code (e.g., \`// ... rest of the code\`). Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`//\` syntax.**`,
   [SupportedLanguage.RUST]: `## Summary for Rust
 
-To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
+Before presenting any adjusted code, you **must** perform a silent, internal "superset check." Your proposed revision must be a strict superset of the previous stable version's features. 
+You will analyze the state (version number, history) to ensure that your new code does not accidentally omit or regress on previously solved problems (e.g., re-introducing a bug, removing a feature like crash-resilience). 
+You are responsible for maintaining forward progress. A feature, once validated, must not be lost. To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
 
 - **Ownership & Borrowing:** Correctly applies Rust's ownership, borrowing (immutable \`&\` and mutable \`&mut\`), and lifetime rules. Code compiles without fighting the borrow checker excessively.
 - **Memory Safety:** Code is memory safe, with no data races, or use-after-free errors (as enforced by the compiler).
@@ -406,10 +452,12 @@ To minimally guide your thought processes, ensure your review and subsequent rev
 - **Documentation (\`rustdoc\`):** Includes documentation comments for public APIs.
 - **Performance:** Writes performant code, taking advantage of Rust's low-level control when needed.
 
-After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`//\` syntax.**`,
+After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. The code you provide must be whole and complete; do not use placeholders, ellipses, or comments indicating omitted code (e.g., \`// ... rest of the code\`). Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using \`//\` syntax.**`,
   [SupportedLanguage.OTHER]: `## Summary for Other (Generic)
 
-To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
+Before presenting any adjusted code, you **must** perform a silent, internal "superset check." Your proposed revision must be a strict superset of the previous stable version's features. 
+You will analyze the state (version number, history) to ensure that your new code does not accidentally omit or regress on previously solved problems (e.g., re-introducing a bug, removing a feature like crash-resilience). 
+You are responsible for maintaining forward progress. A feature, once validated, must not be lost. To minimally guide your thought processes, ensure your review and subsequent revision address the following points:
 
 - **Clarity & Readability:** Code is well-formatted, uses clear and consistent naming conventions, and includes comments where logic is non-obvious.
 - **Correctness:** The code appears to achieve its stated purpose without obvious logical flaws.
@@ -422,7 +470,7 @@ To minimally guide your thought processes, ensure your review and subsequent rev
 - **Efficiency:** No glaringly inefficient algorithms or operations are apparent for the given task.
 - **Consistency:** Follows a consistent style throughout the provided snippet.
 
-After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using the appropriate comment syntax for the language.**`,
+After your detailed review, provide a complete, fully-functional, and production-ready revision of the code. This revision must incorporate all your feedback. The code you provide must be whole and complete; do not use placeholders, ellipses, or comments indicating omitted code. Present the revised code in a single, final markdown code block. **Crucially, any inline comments you add within this code block to explain changes MUST be correctly formatted using the appropriate comment syntax for the language.**`,
 };
 
 
@@ -487,6 +535,15 @@ export const generateReviewerTemplate = (language: SupportedLanguage): string =>
 
   return `\`\`\`${languageTag}\n\n${PLACEHOLDER_MARKER}\n\n\`\`\`\n\n${instructions}`;
 };
+
+export const generateDebuggerTemplate = (language: SupportedLanguage, code: string, error: string): string => {
+    const languageTag = LANGUAGE_TAG_MAP[language] || '';
+    const errorBlock = error.trim() ? `\n\n### Error Message / Context\n\`\`\`\n${error.trim()}\n\`\`\`\n` : '';
+    const instructions = LANGUAGE_SPECIFIC_INSTRUCTIONS[language] || LANGUAGE_SPECIFIC_INSTRUCTIONS[SupportedLanguage.OTHER];
+
+    return `### Code to Debug\n\`\`\`${languageTag}\n${code}\n\`\`\`${errorBlock}\n\n${instructions}`;
+};
+
 
 export const generateDocsTemplate = (language: SupportedLanguage): string => {
   const languageTag = LANGUAGE_TAG_MAP[language] || '';

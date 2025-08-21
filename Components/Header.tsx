@@ -1,7 +1,9 @@
 
 
+
+
 import React, { useState, useRef, useEffect } from 'react';
-import { SaveIcon, ImportIcon, ExportIcon, AnimatedMenuIcon, BoltIcon, LogoIcon, ChatIcon, HistoryIcon, EyeIcon, EyeOffIcon, CodeIcon, CompareIcon as CompareIconSvg } from './Icons.tsx';
+import { SaveIcon, ImportIcon, ExportIcon, AnimatedMenuIcon, BoltIcon, LogoIcon, ChatIcon, HistoryIcon, EyeIcon, EyeOffIcon, CodeIcon, CompareIcon as CompareIconSvg, BugIcon } from './Icons.tsx';
 import { Toast } from '../types.ts';
 
 interface HeaderProps {
@@ -13,10 +15,12 @@ interface HeaderProps {
     isToolsEnabled: boolean;
     isLoading: boolean;
     addToast: (message: string, type: Toast['type']) => void;
+    onStartDebug: () => void;
+    onStartSingleReview: () => void;
     onStartComparison: () => void;
     isInputPanelVisible: boolean;
     onToggleInputPanel: () => void;
-    onNewReview: () => void;
+    onNewReview: () => void; // Kept for the clear button functionality
     isFollowUpAvailable: boolean;
     onStartFollowUp: () => void;
 }
@@ -48,10 +52,11 @@ export const Header: React.FC<HeaderProps> = ({
     isToolsEnabled,
     isLoading,
     addToast,
+    onStartDebug,
+    onStartSingleReview,
     onStartComparison,
     isInputPanelVisible,
     onToggleInputPanel,
-    onNewReview,
     isFollowUpAvailable,
     onStartFollowUp,
 }) => {
@@ -100,7 +105,10 @@ export const Header: React.FC<HeaderProps> = ({
                     <div className="absolute left-0 z-20 mt-2 w-64 origin-top-left bg-black/90 backdrop-blur-sm border border-[var(--hud-color-darker)] focus:outline-none">
                         <div className="p-1" role="menu" aria-orientation="vertical">
                             <MenuDivider label="Modes" />
-                            <MenuItem onClick={() => handleMenuClick(onNewReview)} disabled={isLoading}>
+                             <MenuItem onClick={() => handleMenuClick(onStartDebug)} disabled={isLoading}>
+                                <BugIcon className="w-4 h-4" /> Debug
+                            </MenuItem>
+                            <MenuItem onClick={() => handleMenuClick(onStartSingleReview)} disabled={isLoading}>
                                 <CodeIcon className="w-4 h-4" /> Single Review
                             </MenuItem>
                             <MenuItem onClick={() => handleMenuClick(onStartComparison)} disabled={isLoading}>

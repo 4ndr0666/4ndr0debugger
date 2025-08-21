@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { CodeBlock } from './CodeBlock.tsx';
 import ErrorBoundary from './ErrorBoundary.tsx';
@@ -62,6 +63,9 @@ const TextBlock: React.FC<{ text: string }> = ({ text }) => {
     } else if (line.startsWith('### ')) {
       flushList(`ul-before-${key}`);
       elements.push(<h3 key={key} className="text-lg font-semibold mt-4 mb-1 text-white">{parseInlineMarkdown(line.substring(4))}</h3>);
+    } else if (line.startsWith('#### ')) {
+      flushList(`ul-before-${key}`);
+      elements.push(<h4 key={key} className="text-base font-semibold mt-3 mb-1 text-white">{parseInlineMarkdown(line.substring(5))}</h4>);
     } else if (line.startsWith('- ')) {
       listItems.push(line.substring(2));
     } else {
@@ -82,7 +86,7 @@ export const MarkdownRenderer: React.FC<{ markdown: string }> = ({ markdown }) =
 
   // This regex finds headings like "### REVISED CODE" and the code block that immediately follows.
   // It captures the heading and the code block separately.
-  const revisedCodeRegex = /(#+\s*(?:REVISED|UPDATED|FULL)\s+CODE)\s*\n(```(?:[a-zA-Z0-9-]*)\n[\s\S]*?\n```)/g;
+  const revisedCodeRegex = /(#+\s*(?:REVISED|UPDATED|FULL|OPTIMIZED|ENHANCED)[\s\w]*(?:CODE|REVISION))\s*\n(```(?:[a-zA-Z0-9-]*)\n[\s\S]*?\n```)/gi;
 
   // The split method with a capturing group creates an array of:
   // [text_before, captured_heading, captured_code_block, text_after, ...]

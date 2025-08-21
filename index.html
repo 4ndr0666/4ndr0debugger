@@ -111,6 +111,15 @@
       animation: fade-in 1s ease-out forwards;
     }
 
+    @keyframes cyan-text-pulse {
+      0% { text-shadow: 0 0 3px var(--glow-color), 0 0 5px var(--glow-color); }
+      50% { text-shadow: 0 0 8px var(--glow-color), 0 0 12px var(--glow-color); }
+      100% { text-shadow: 0 0 3px var(--glow-color), 0 0 5px var(--glow-color); }
+    }
+    .animate-cyan-pulse {
+        animation: cyan-text-pulse 1.5s infinite ease-in-out;
+    }
+
     /* Main Container Style */
     .hud-container {
       position: relative;
@@ -146,15 +155,6 @@
     .corner-bottom-left { bottom: -1px; left: -1px; border-width: 0 0 2px 2px; }
     .corner-bottom-right { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
 
-    /* Blinking Placeholder Animation */
-    @keyframes placeholder-flicker {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.3; }
-    }
-    .blinking-placeholder::placeholder {
-      color: var(--hud-color-darker);
-      animation: placeholder-flicker 2s infinite ease-in-out;
-    }
     @keyframes blink-caret {
       from, to { opacity: 1; }
       50% { opacity: 0; }

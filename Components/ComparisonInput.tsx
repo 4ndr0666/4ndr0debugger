@@ -1,5 +1,7 @@
+
+
 import React, { useState, useEffect } from 'react';
-import { SupportedLanguage, ChatMessage, Version } from '../types.ts';
+import { SupportedLanguage, ChatMessage, Version, ChatRevision } from '../types.ts';
 import { Button } from './Button.tsx';
 import { Select } from './Select.tsx';
 import { SUPPORTED_LANGUAGES } from '../constants.ts';
@@ -28,8 +30,12 @@ interface ComparisonInputProps {
   setChatInputValue: (value: string) => void;
   onStopGenerating: () => void;
   originalReviewedCode: string | null;
-  appMode: 'single' | 'comparison';
+  initialRevisedCode: string | null;
+  chatRevisions: ChatRevision[];
+  appMode: 'single' | 'comparison' | 'debug';
   onCodeLineClick: (line: string) => void;
+  onClearChatRevisions: () => void;
+  onRenameChatRevision: (id: string, newName: string) => void;
 }
 
 const CodeEditor: React.FC<{
@@ -40,26 +46,32 @@ const CodeEditor: React.FC<{
   language: SupportedLanguage;
 }> = ({ title, code, setCode, isLoading }) => {
     const textareaClasses = `
-        block w-full p-3 font-mono text-sm text-[var(--hud-color)] bg-black/70
+        block w-full h-full p-3 font-mono text-sm text-[var(--hud-color)] bg-black/70
         focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)]
-        resize-y placeholder:text-[var(--hud-color-darker)] transition-colors duration-300
+        resize-y placeholder:text-transparent transition-colors duration-300
         border border-[var(--hud-color-darker)]
-        ${!code ? 'blinking-placeholder' : ''}
     `.trim().replace(/\s+/g, ' ');
 
     return (
         <div className="flex flex-col h-full">
             <h3 className="text-lg text-center mb-2">{title}</h3>
-            <textarea
-                rows={15}
-                className={`${textareaClasses} flex-grow`}
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                disabled={isLoading}
-                aria-label={`${title} code input area`}
-                placeholder="❯ Awaiting input..."
-                title="Paste code here."
-            />
+            <div className="relative flex-grow">
+                <textarea
+                    className={textareaClasses}
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    disabled={isLoading}
+                    aria-label={`${title} code input area`}
+                    placeholder=" "
+                    title="Paste code here."
+                />
+                {!code && !isLoading && (
+                    <div className="absolute top-3 left-3 pointer-events-none font-mono text-sm text-[var(--hud-color)]" aria-hidden="true">
+                        <span className="blinking-prompt">❯ </span>
+                        <span className="text-[var(--hud-color-darker)]">Awaiting input...</span>
+                    </div>
+                )}
+            </div>
         </div>
     );
 };
@@ -96,10 +108,14 @@ export const ComparisonInput: React.FC<ComparisonInputProps> = (props) => {
                     chatInputValue={props.chatInputValue}
                     setChatInputValue={props.setChatInputValue}
                     originalReviewedCode={props.originalReviewedCode}
+                    initialRevisedCode={props.initialRevisedCode}
+                    chatRevisions={props.chatRevisions}
                     appMode={props.appMode}
                     codeB={codeB}
                     language={language}
                     onCodeLineClick={props.onCodeLineClick}
+                    onClearChatRevisions={props.onClearChatRevisions}
+                    onRenameChatRevision={props.onRenameChatRevision}
                 />
             </div>
         );
