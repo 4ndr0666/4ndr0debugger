@@ -1,10 +1,13 @@
 
+
+
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { MarkdownRenderer } from './MarkdownRenderer.tsx';
-import { LoadingAction, Toast, SupportedLanguage, AppMode, Version } from '../types.ts';
-import { SaveIcon, CopyIcon, CheckIcon, CompareIcon, ChatIcon, CommitIcon, BugIcon } from './Icons.tsx';
+import { LoadingAction, Toast, SupportedLanguage, AppMode, Version, Feature, FeatureDecision, FeatureDecisionRecord } from '../types.ts';
+import { SaveIcon, CopyIcon, CheckIcon, CompareIcon, ChatIcon, CommitIcon, BugIcon, BoltIcon } from './Icons.tsx';
 import { LoadingSpinner } from './LoadingSpinner.tsx';
 import { Button } from './Button.tsx';
+import { FeatureMatrix } from './FeatureMatrix.tsx';
 
 interface ReviewOutputProps {
   feedback: string | null;
@@ -24,6 +27,11 @@ interface ReviewOutputProps {
   onGenerateCommitMessage: () => void;
   reviewAvailable: boolean;
   appMode: AppMode;
+  featureMatrix: Feature[] | null;
+  featureDecisions: Record<string, FeatureDecisionRecord>;
+  onFeatureDecision: (feature: Feature, decision: FeatureDecision) => void;
+  allFeaturesDecided: boolean;
+  onFinalize: () => void;
 }
 
 const analysisSteps = [
@@ -70,7 +78,7 @@ export const ReviewOutput = ({
     feedback, revisedCode, language, isLoading, isChatLoading, loadingAction, error, 
     onSaveVersion, isActive, outputType, onShowDiff, canCompare,
     addToast, onStartFollowUp, onGenerateCommitMessage, reviewAvailable,
-    appMode
+    appMode, featureMatrix, featureDecisions, onFeatureDecision, allFeaturesDecided, onFinalize
 }: ReviewOutputProps) => {
   const [copied, setCopied] = useState(false);
   const showLoading = isLoading || isChatLoading;
@@ -105,6 +113,8 @@ export const ReviewOutput = ({
         case 'explain-selection': return 'Code Explanation';
         case 'review-selection': return 'Selection Review';
         case 'comparison': return 'Comparative Analysis';
+        case 'revise': return 'Comparative Revision';
+        case 'finalizing': return 'Finalizing Revision';
         default: return 'Analysis';
     }
   }, [showLoading, loadingAction, outputType, appMode]);
@@ -170,39 +180,60 @@ export const ReviewOutput = ({
             <div 
             id="review-output-content" 
             ref={contentRef}
-            className="overflow-auto h-full pr-2 text-[var(--hud-color-darker)] leading-relaxed space-y-4"
+            className="overflow-auto h-full pr-2 text-[var(--hud-color-darker)] leading-relaxed"
             >
-            {feedback && <MarkdownRenderer markdown={feedback} />}
-            {isLoading && feedback && <LoadingSpinner size="w-5 h-5" className="mx-auto mt-4" />}
+            {outputType === 'revise' && featureMatrix ? (
+              <FeatureMatrix features={featureMatrix} decisions={featureDecisions} onDecision={onFeatureDecision} />
+            ) : (
+              feedback && <div className="space-y-4"><MarkdownRenderer markdown={feedback} /></div>
+            )}
+            {isLoading && feedback && outputType !== 'revise' && <LoadingSpinner size="w-5 h-5" className="mx-auto mt-4" />}
             </div>
         )}
       </div>
 
       {!isLoading && !error && reviewAvailable && (
         <div className="flex-shrink-0 pt-4 mt-4 border-t border-[var(--hud-color-darker)] flex flex-wrap justify-center items-center gap-3 animate-fade-in">
-            {appMode === 'single' ? (
-              <Button onClick={() => onStartFollowUp(undefined, 'debug')} disabled={!reviewAvailable} variant="primary" className="post-review-button">
-                  <BugIcon className="w-4 h-4 mr-2"/>
-                  Debugger
-              </Button>
+            {outputType === 'revise' ? (
+              <>
+                {allFeaturesDecided ? (
+                    <Button onClick={onFinalize} variant="primary" className="post-review-button w-full">
+                        <BoltIcon className="w-4 h-4 mr-2" />
+                        Finalize Revision
+                    </Button>
+                ) : (
+                  <p className="text-xs text-center text-[var(--hud-color-darker)] animate-fade-in">
+                      Make a decision for each feature to proceed.
+                  </p>
+                )}
+              </>
             ) : (
-              <Button onClick={onShowDiff} disabled={!canCompare} variant="primary" className="post-review-button">
-                  <CompareIcon className="w-4 h-4 mr-2"/>
-                  Show Diff
-              </Button>
+              <>
+                {appMode === 'single' ? (
+                  <Button onClick={() => onStartFollowUp(undefined, 'debug')} disabled={!reviewAvailable} variant="primary" className="post-review-button">
+                      <BugIcon className="w-4 h-4 mr-2"/>
+                      Debugger
+                  </Button>
+                ) : (
+                  <Button onClick={onShowDiff} disabled={!canCompare} variant="primary" className="post-review-button">
+                      <CompareIcon className="w-4 h-4 mr-2"/>
+                      Show Diff
+                  </Button>
+                )}
+                <Button onClick={onGenerateCommitMessage} disabled={!canCompare} variant="primary" className="post-review-button">
+                    <CommitIcon className="w-4 h-4 mr-2" />
+                    Generate Commit
+                </Button>
+                <Button onClick={() => onStartFollowUp()} variant="primary" className="post-review-button">
+                    <ChatIcon className="w-4 h-4 mr-2" />
+                    {followUpButtonText}
+                </Button>
+                <Button onClick={onSaveVersion} variant="primary" className="post-review-button">
+                    <SaveIcon className="w-4 h-4 mr-2" />
+                    Save Version
+                </Button>
+              </>
             )}
-            <Button onClick={onGenerateCommitMessage} disabled={!canCompare} variant="primary" className="post-review-button">
-                <CommitIcon className="w-4 h-4 mr-2" />
-                Generate Commit
-            </Button>
-            <Button onClick={() => onStartFollowUp()} variant="primary" className="post-review-button">
-                <ChatIcon className="w-4 h-4 mr-2" />
-                {followUpButtonText}
-            </Button>
-            <Button onClick={onSaveVersion} variant="primary" className="post-review-button">
-                <SaveIcon className="w-4 h-4 mr-2" />
-                Save Version
-            </Button>
         </div>
       )}
     </div>

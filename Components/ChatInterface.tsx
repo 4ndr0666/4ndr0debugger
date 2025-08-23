@@ -1,7 +1,5 @@
-
-
 import React, { useEffect, useRef } from 'react';
-import { ChatMessage, SupportedLanguage, ChatRevision } from '../types.ts';
+import { ChatMessage, SupportedLanguage, ChatRevision, Feature, ChatContext as ChatContextType, FinalizationSummary } from '../types.ts';
 import { Button } from './Button.tsx';
 import { LoadingSpinner } from './LoadingSpinner.tsx';
 import { MarkdownRenderer } from './MarkdownRenderer.tsx';
@@ -24,6 +22,9 @@ interface ChatInterfaceProps {
   onCodeLineClick: (line: string) => void;
   onClearChatRevisions: () => void;
   onRenameChatRevision: (id: string, newName: string) => void;
+  chatContext: ChatContextType;
+  activeFeatureForDiscussion: Feature | null;
+  finalizationSummary: FinalizationSummary | null;
 }
 
 export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
@@ -33,7 +34,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
     originalReviewedCode, appMode, codeB,
     language, onCodeLineClick,
     initialRevisedCode, chatRevisions,
-    onClearChatRevisions, onRenameChatRevision
+    onClearChatRevisions, onRenameChatRevision,
+    chatContext, activeFeatureForDiscussion, finalizationSummary
   } = props;
   
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -65,25 +67,34 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
     }
   };
   
-  const chatTitle = appMode === 'debug' ? 'Debugging Session' : 'Follow-up Chat';
+  const chatTitle = chatContext === 'feature_discussion' 
+    ? `DISCUSSING: ${activeFeatureForDiscussion?.name}`.toUpperCase()
+    : chatContext === 'finalizing'
+    ? 'FINALIZING REVISION'
+    : (appMode === 'debug' ? 'DEBUGGING SESSION' : 'FOLLOW-UP CHAT');
+
+  const endButtonText = chatContext === 'feature_discussion' ? 'Finalize Discussion' : 'End Chat';
+
 
   return (
     <div className="flex flex-col h-full">
         <div className="flex justify-between items-center flex-shrink-0">
-            <h3 className="text-xl font-heading">{chatTitle}</h3>
-            <Button onClick={onEndChat} variant="secondary" className="py-1 px-3 text-xs">
-                End Chat
-            </Button>
+            <h3 className="text-xl font-heading truncate pr-4" title={chatTitle}>{chatTitle}</h3>
+            {chatContext !== 'finalizing' && (
+              <Button onClick={onEndChat} variant="secondary" className="py-1 px-3 text-xs">
+                  {endButtonText}
+              </Button>
+            )}
         </div>
 
         {/* Main Content Area: A single pane with responsive sections for chat and history */}
         <div className="flex flex-col flex-grow min-h-0 mt-4">
 
             {/* Middle Section: Contains chat log and revision history */}
-            <div className="flex flex-col lg:flex-row flex-grow min-h-0 gap-6 lg:gap-8">
+            <div className="flex flex-col md:flex-row flex-grow min-h-0 gap-6 md:gap-8">
                 
                 {/* Left Part: Chat History */}
-                <div ref={chatContainerRef} className="w-full lg:w-3/5 flex-grow min-h-0 overflow-y-auto overflow-x-hidden border border-[var(--hud-color-darkest)]">
+                <div ref={chatContainerRef} className="w-full md:w-3/5 flex-grow min-h-0 overflow-y-auto overflow-x-hidden border border-[var(--hud-color-darkest)]">
                     <div className="p-3 space-y-4 flex flex-col">
                         {chatHistory.map((msg) => (
                             <div 
@@ -104,8 +115,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
                     </div>
                 </div>
 
-                {/* Right Part: Revision History */}
-                <div className="w-full lg:w-2/5 flex flex-col min-h-0">
+                {/* Right Part: Revision History / Feature Context */}
+                <div className="w-full md:w-2/5 flex flex-col min-h-0">
                     <ChatContext 
                         codeA={originalReviewedCode || ''}
                         codeB={appMode === 'comparison' ? (codeB || undefined) : undefined}
@@ -116,6 +127,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
                         onClearChatRevisions={onClearChatRevisions}
                         onRenameRevision={onRenameChatRevision}
                         appMode={appMode}
+                        chatContext={chatContext}
+                        activeFeatureForDiscussion={activeFeatureForDiscussion}
+                        finalizationSummary={finalizationSummary}
                     />
                 </div>
             </div>
@@ -130,14 +144,16 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
                         onKeyDown={handleKeyDown}
                         rows={2}
                         className="block w-full p-2 pr-36 font-mono text-sm text-[var(--hud-color)] bg-black border border-[var(--hud-color-darker)] focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)] focus:border-[var(--hud-color)] resize-y placeholder:text-transparent"
-                        placeholder=" "
+                        placeholder={chatContext === 'finalizing' ? "Final instructions..." : " "}
                         disabled={isChatLoading}
                         aria-label="Follow-up message input"
                     />
                     {!chatInputValue && !isChatLoading && (
                         <span className="absolute left-[13px] top-[9px] pointer-events-none font-mono text-sm text-[var(--hud-color)]" aria-hidden="true">
                             <span className="blinking-prompt">❯ </span>
-                            {appMode === 'debug' ? 
+                            {chatContext === 'finalizing' ? 
+                              <span className="text-[var(--hud-color-darker)]">Final instructions...</span>
+                            : appMode === 'debug' ? 
                               <span className="text-[var(--hud-color-darker)]">Terminal Output...</span>
                             : <span className="text-[var(--hud-color-darker)]">Your message...</span> }
                         </span>
@@ -153,9 +169,14 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
                         </button>
                     )}
                 </div>
-                {appMode !== 'debug' && (
+                {appMode !== 'debug' && chatContext !== 'finalizing' && (
                     <Button onClick={handleSend} isLoading={isChatLoading} disabled={isChatLoading || !chatInputValue.trim()}>
                         Send
+                    </Button>
+                )}
+                 {chatContext === 'finalizing' && (
+                    <Button onClick={handleSend} isLoading={isChatLoading} disabled={isChatLoading || !chatInputValue.trim()}>
+                        Generate Revision
                     </Button>
                 )}
             </div>

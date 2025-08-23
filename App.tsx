@@ -1,12 +1,10 @@
-
-
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { GoogleGenAI, Chat, Type } from "@google/genai";
 import { Header } from './Components/Header.tsx';
 import { CodeInput } from './Components/CodeInput.tsx';
 import { ReviewOutput } from './Components/ReviewOutput.tsx';
-import { SupportedLanguage, ChatMessage, Version, ReviewProfile, LoadingAction, Toast, AppMode, ChatRevision } from './types.ts';
-import { SUPPORTED_LANGUAGES, GEMINI_MODELS, SYSTEM_INSTRUCTION, DEBUG_SYSTEM_INSTRUCTION, DOCS_SYSTEM_INSTRUCTION, PROFILE_SYSTEM_INSTRUCTIONS, GENERATE_TESTS_INSTRUCTION, EXPLAIN_CODE_INSTRUCTION, REVIEW_SELECTION_INSTRUCTION, COMMIT_MESSAGE_SYSTEM_INSTRUCTION, DOCS_INSTRUCTION, COMPARISON_SYSTEM_INSTRUCTION, generateComparisonTemplate, generateDocsTemplate, LANGUAGE_TAG_MAP, PLACEHOLDER_MARKER } from './constants.ts';
+import { SupportedLanguage, ChatMessage, Version, ReviewProfile, LoadingAction, Toast, AppMode, ChatRevision, Feature, FeatureDecision, ChatContext, FinalizationSummary, FeatureDecisionRecord } from './types.ts';
+import { SUPPORTED_LANGUAGES, GEMINI_MODELS, SYSTEM_INSTRUCTION, DEBUG_SYSTEM_INSTRUCTION, DOCS_SYSTEM_INSTRUCTION, PROFILE_SYSTEM_INSTRUCTIONS, GENERATE_TESTS_INSTRUCTION, EXPLAIN_CODE_INSTRUCTION, REVIEW_SELECTION_INSTRUCTION, COMMIT_MESSAGE_SYSTEM_INSTRUCTION, DOCS_INSTRUCTION, COMPARISON_SYSTEM_INSTRUCTION, COMPARISON_REVISION_SYSTEM_INSTRUCTION, FEATURE_MATRIX_SCHEMA, generateComparisonTemplate, generateDocsTemplate, LANGUAGE_TAG_MAP, PLACEHOLDER_MARKER } from './constants.ts';
 import { DiffViewer } from './Components/DiffViewer.tsx';
 import { ComparisonInput } from './Components/ComparisonInput.tsx';
 import { VersionHistoryModal } from './Components/VersionHistoryModal.tsx';
@@ -42,6 +40,11 @@ const App: React.FC = () => {
   // --- Comparison Mode State ---
   const [codeB, setCodeB] = useState<string>('');
   const [comparisonGoal, setComparisonGoal] = useState<string>('');
+  const [featureMatrix, setFeatureMatrix] = useState<Feature[] | null>(null);
+  const [rawFeatureMatrixJson, setRawFeatureMatrixJson] = useState<string | null>(null);
+  const [featureDecisions, setFeatureDecisions] = useState<Record<string, FeatureDecisionRecord>>({});
+  const [allFeaturesDecided, setAllFeaturesDecided] = useState(false);
+  const [finalizationSummary, setFinalizationSummary] = useState<FinalizationSummary | null>(null);
 
   // --- View & Chat State ---
   const [isInputPanelVisible, setIsInputPanelVisible] = useState(true);
@@ -51,6 +54,8 @@ const App: React.FC = () => {
   const [activePanel, setActivePanel] = useState<ActivePanel>('input');
   const [chatInputValue, setChatInputValue] = useState('');
   const [chatRevisions, setChatRevisions] = useState<ChatRevision[]>([]);
+  const [chatContext, setChatContext] = useState<ChatContext>('general');
+  const [activeFeatureForDiscussion, setActiveFeatureForDiscussion] = useState<Feature | null>(null);
   
   // --- Versioning State ---
   const [versions, setVersions] = useState<Version[]>([]);
@@ -91,6 +96,23 @@ const App: React.FC = () => {
       console.error("Failed to save versions to localStorage", e);
     }
   }, [versions]);
+
+  // Check if all features have decisions
+  useEffect(() => {
+    if (featureMatrix && featureMatrix.length > 0) {
+        const allDecided = featureMatrix.every(feature => !!featureDecisions[feature.name]);
+        setAllFeaturesDecided(allDecided);
+    } else {
+        setAllFeaturesDecided(false);
+    }
+  }, [featureDecisions, featureMatrix]);
+
+  // Effect to handle starting a feature discussion after state has updated
+  useEffect(() => {
+    if (chatContext === 'feature_discussion' && activeFeatureForDiscussion) {
+      handleStartFollowUp();
+    }
+  }, [chatContext, activeFeatureForDiscussion]);
 
   const addToast = (message: string, type: Toast['type']) => {
     const id = Date.now();
@@ -181,6 +203,13 @@ const App: React.FC = () => {
     setReviewedCode(null);
     setRevisedCode(null);
     setChatRevisions([]);
+    setFeatureMatrix(null);
+    setFeatureDecisions({});
+    setAllFeaturesDecided(false);
+    setChatContext('general');
+    setActiveFeatureForDiscussion(null);
+    setRawFeatureMatrixJson(null);
+    setFinalizationSummary(null);
   }
 
   const extractFinalCodeBlock = (response: string, isInitialReview: boolean) => {
@@ -255,6 +284,57 @@ const App: React.FC = () => {
     
     setIsLoading(false);
     setLoadingAction(null);
+  }, [ai, language, comparisonGoal, userOnlyCode, codeB]);
+
+  const handleCompareAndRevise = useCallback(async () => {
+    if (!ai) {
+      const msg = "Error: API Key not configured.";
+      setError(msg);
+      addToast(msg, 'error');
+      return;
+    }
+    setIsLoading(true);
+    setLoadingAction('revise');
+    setOutputType('revise');
+    setIsInputPanelVisible(false);
+    resetForNewRequest();
+
+    const prompt = generateComparisonTemplate(language, comparisonGoal, userOnlyCode, codeB);
+    setFullCodeForReview(prompt);
+    setReviewedCode(userOnlyCode);
+
+    try {
+        const response = await ai.models.generateContent({
+            model: GEMINI_MODELS.CORE_ANALYSIS,
+            contents: prompt,
+            config: {
+                systemInstruction: COMPARISON_REVISION_SYSTEM_INSTRUCTION,
+                responseMimeType: 'application/json',
+                responseSchema: FEATURE_MATRIX_SCHEMA,
+            }
+        });
+        
+        const rawJsonResponse = response.text;
+        const jsonResponse = JSON.parse(rawJsonResponse);
+        if (jsonResponse && jsonResponse.features) {
+            setFeatureMatrix(jsonResponse.features);
+            setRawFeatureMatrixJson(rawJsonResponse);
+            setReviewFeedback("Feature matrix generated. Please make a decision for each feature to proceed.");
+        } else {
+            throw new Error("Invalid feature matrix format received from API.");
+        }
+
+    } catch (apiError) {
+        console.error("Comparative Revision API Error:", apiError);
+        const message = apiError instanceof Error ? apiError.message : "An unexpected error occurred.";
+        setError(`Failed to generate feature matrix: ${message}`);
+        addToast(`API Error: ${message}`, 'error');
+        setFeatureMatrix(null);
+        setReviewFeedback(null);
+    } finally {
+        setIsLoading(false);
+        setLoadingAction(null);
+    }
   }, [ai, language, comparisonGoal, userOnlyCode, codeB]);
 
 
@@ -383,10 +463,44 @@ const App: React.FC = () => {
   }, [ai, reviewedCode, revisedCode, language]);
 
 
-  const handleStartFollowUp = useCallback((version?: Version, modeOverride?: AppMode) => {
+  const handleStartFollowUp = useCallback(async (version?: Version, modeOverride?: AppMode) => {
+    if (chatContext === 'feature_discussion' && activeFeatureForDiscussion && ai) {
+        // Set up UI for loading state
+        setIsChatMode(true);
+        setActivePanel('input');
+        setIsInputPanelVisible(true);
+        setIsChatLoading(true);
+        setChatHistory([]); // Clear any previous history
+
+        const systemInstruction = `You are a senior software architect. Your task is to initiate a discussion about a specific software feature, keeping a shared project goal in mind. You will be given a "Shared Goal", the "Name" of the feature, and its "Description". Your response MUST begin by referencing the shared goal and explaining how it relates to the feature. You should then provide your initial thoughts, suggestions, or questions to kickstart a productive conversation. Example starters: "To align with our shared goal of ${comparisonGoal || '...'}, I think we should approach the '${activeFeatureForDiscussion.name}' feature by..." or "Considering the goal is to ${comparisonGoal || '...'}, my initial recommendation for '${activeFeatureForDiscussion.name}' is...".`;
+        
+        const primerPrompt = `Shared Goal: "${comparisonGoal || 'create the best possible unified code'}"\n\nFeature Name: "${activeFeatureForDiscussion.name}"\nFeature Description: "${activeFeatureForDiscussion.description}"\n\nPlease start the discussion.`;
+
+        try {
+            const newChat = ai.chats.create({ 
+                model: GEMINI_MODELS.FAST_TASKS, 
+                history: [], // Start fresh for this feature
+                config: { systemInstruction }
+            });
+            setChatSession(newChat);
+
+            const response = await newChat.sendMessage({ message: primerPrompt });
+            const aiPrimerMessage = response.text;
+
+            setChatHistory([{ id: `chat_initial_${Date.now()}`, role: 'model', content: aiPrimerMessage }]);
+        } catch (apiError) {
+            console.error("Feature discussion primer error:", apiError);
+            const message = apiError instanceof Error ? apiError.message : "Failed to start discussion.";
+            setChatHistory([{ id: `chat_error_${Date.now()}`, role: 'model', content: `Error: Could not start discussion. ${message}` }]);
+        } finally {
+            setIsChatLoading(false);
+        }
+        return;
+    }
+
     const contextFeedback = version ? version.feedback : reviewFeedback;
     const contextCode = version ? version.fullPrompt : fullCodeForReview;
-    const contextUserCode = version ? version.userCode : userOnlyCode;
+    const contextUserCode = version ? version.userCode : (appMode === 'comparison' ? userOnlyCode : reviewedCode);
     
     if (!contextFeedback || !contextCode || !ai) return;
 
@@ -408,7 +522,7 @@ const App: React.FC = () => {
     }
     
     let selectionText = '';
-    if (!version) {
+    if (!version && chatInputValue.trim() === '') {
       const selection = window.getSelection();
       if (selection && selection.toString().trim() !== '') {
         const selectedNode = selection.anchorNode;
@@ -433,10 +547,9 @@ const App: React.FC = () => {
         historyForUI.push({ id: `chat_prompt_${Date.now()}`, role: 'model', content: `Context for **"${version.name}"** loaded. What is your question?` });
     }
     
-    // If the user selected text, pre-fill the input box for them as a starting point.
     if (!version && selectionText) {
       setChatInputValue(`Regarding this section:\n\n> ${selectionText.split('\n').join('\n> ')}\n\n`);
-    } else {
+    } else if (chatInputValue.trim() === '' && chatContext !== 'feature_discussion') {
       setChatInputValue('');
     }
     
@@ -457,22 +570,70 @@ const App: React.FC = () => {
     setIsChatMode(true);
     setActivePanel('input');
     setIsInputPanelVisible(true);
-  }, [reviewFeedback, fullCodeForReview, ai, getSystemInstructionForReview, userOnlyCode, appMode]);
+  }, [reviewFeedback, fullCodeForReview, ai, getSystemInstructionForReview, userOnlyCode, appMode, chatInputValue, reviewedCode, chatContext, activeFeatureForDiscussion, comparisonGoal]);
 
-  const handleFollowUpSubmit = useCallback(async (message: string) => {
-    if (!chatSession) return;
+  const handleFollowUpSubmit = useCallback(async (message: string, session?: Chat | null) => {
+    const currentSession = session || chatSession;
+    if (!currentSession) return;
+
     setIsChatLoading(true);
     setError(null);
     setChatHistory(prev => [...prev, { id: `chat_user_${Date.now()}`, role: 'user', content: message }]);
     setActivePanel('input');
     abortStreamRef.current = false;
+
+    let messageToSend = message;
+
+    // Special handling for the first message in the finalization context.
+    if (chatContext === 'finalizing' && chatHistory.length === 1) {
+        if (!featureMatrix || !finalizationSummary) {
+            const err = "Finalization context is missing. Cannot proceed.";
+            setError(err);
+            addToast(err, 'error');
+            setIsChatLoading(false);
+            return;
+        }
+
+        const { included, removed, revised } = finalizationSummary;
+        
+        let briefing = `## Canonical Action Map\n\n`;
+        briefing += `You are a senior software architect tasked with unifying two codebases (Codebase A and Codebase B) into a single, production-ready file. You will be provided with a detailed 'Canonical Action Map' that you must follow precisely.\n\n`;
+        briefing += `**Original Codebases:**\n${fullCodeForReview}\n\n---\n\n`;
+        briefing += `**ACTION PLAN:**\n\n`;
+
+        if (included.length > 0) {
+            briefing += `### 1. Features to INTEGRATE AS-IS:\nThese features should be included in the final output, preferring the best implementation if common.\n${included.map(f => `- **${f.name}** (${f.source}): ${f.description}`).join('\n')}\n\n`;
+        }
+        if (removed.length > 0) {
+            briefing += `### 2. Features to EXCLUDE:\nThese features must be omitted from the final codebase.\n${removed.map(f => `- **${f.name}** (${f.source}): ${f.description}`).join('\n')}\n\n`;
+        }
+        if (revised.length > 0) {
+            briefing += `### 3. Features to REVISE AND INTEGRATE:\nFor each feature below, use the provided context and revised code snippets to inform the final implementation.\n\n`;
+            revised.forEach(feature => {
+                const decisionRecord = featureDecisions[feature.name];
+                briefing += `#### Feature: "${feature.name}"\n`;
+                briefing += `*Description:* ${feature.description}\n\n`;
+                if (decisionRecord?.history && decisionRecord.history.length > 0) {
+                    const transcript = decisionRecord.history.slice(1).map(msg => `[${msg.role.toUpperCase()}]: ${msg.content}`).join('\n\n');
+                    briefing += `**Discussion Transcript for Context:**\n\`\`\`text\n${transcript}\n\`\`\`\n\n`;
+                }
+                if (decisionRecord?.revisedSnippet) {
+                    briefing += `**CRITICAL INSTRUCTION:** For this feature, you MUST use the following revised code snippet exactly as provided in the final unified codebase:\n`;
+                    briefing += `\`\`\`${LANGUAGE_TAG_MAP[language]}\n${decisionRecord.revisedSnippet}\n\`\`\`\n\n`;
+                }
+            });
+        }
+        briefing += `---\n\n### 4. Final User Instructions:\n${message}\n\n`;
+        briefing += `Based on this complete Canonical Action Map, please provide the final, complete, and runnable unified codebase in a single markdown block under the heading '### Revised Code'. Ensure all integrated and revised features work together seamlessly.`;
+        messageToSend = briefing;
+    }
     
     const modelMessageId = `chat_model_${Date.now()}`;
     
     try {
       setChatHistory(prev => [...prev, { id: modelMessageId, role: 'model', content: '' }]); // Add empty placeholder
       
-      const responseStream = await chatSession.sendMessageStream({ message });
+      const responseStream = await currentSession.sendMessageStream({ message: messageToSend });
       
       let currentResponse = "";
       for await (const chunk of responseStream) {
@@ -481,7 +642,10 @@ const App: React.FC = () => {
         currentResponse += chunkText;
         setChatHistory(prev => {
           const newHistory = [...prev];
-          newHistory[newHistory.length - 1] = { id: modelMessageId, role: 'model', content: currentResponse };
+          const lastMessageIndex = newHistory.findIndex(m => m.id === modelMessageId);
+          if (lastMessageIndex !== -1) {
+            newHistory[lastMessageIndex] = { ...newHistory[lastMessageIndex], content: currentResponse };
+          }
           return newHistory;
         });
       }
@@ -489,10 +653,11 @@ const App: React.FC = () => {
       if (!abortStreamRef.current) {
         const newRevisionCode = extractFinalCodeBlock(currentResponse, false);
         if (newRevisionCode) {
+           setRevisedCode(newRevisionCode); // Update the main revised code for diffing in finalize context
           setChatRevisions(prev => {
             const lastRevisionCode = prev.length > 0 ? prev[prev.length - 1].code : revisedCode;
             if (lastRevisionCode !== newRevisionCode) {
-              const newVersionName = `Version 1.${prev.length + 1}`;
+              const newVersionName = `Chat Revision ${prev.length + 1}`;
               const newId = `rev_${Date.now()}`;
               return [...prev, { id: newId, name: newVersionName, code: newRevisionCode }];
             }
@@ -509,18 +674,65 @@ const App: React.FC = () => {
         const errorMsg = apiError instanceof Error ? apiError.message : "An unexpected error occurred.";
         setError(`Failed to get response: ${errorMsg}`);
         addToast(`Chat Error: ${errorMsg}`, 'error');
-        setChatHistory(prev => prev.slice(0, -1)); // Remove the empty placeholder on error
+        setChatHistory(prev => prev.filter(msg => msg.id !== modelMessageId && msg.role !== 'user' || msg.content !== message));
       }
     } finally {
       setIsChatLoading(false);
     }
-  }, [chatSession, revisedCode]);
+  }, [chatSession, revisedCode, chatContext, chatHistory, finalizationSummary, featureMatrix, fullCodeForReview, featureDecisions, language]);
 
   const handleCodeLineClick = (line: string) => {
     setChatInputValue(`Can you explain this line for me?\n\`\`\`\n${line}\n\`\`\``);
     setActivePanel('input');
   };
   
+  const handleFeatureDecision = (feature: Feature, decision: FeatureDecision) => {
+    if (decision === 'discussed') {
+        setActiveFeatureForDiscussion(feature);
+        setChatContext('feature_discussion');
+    } else {
+        setFeatureDecisions(prev => ({ ...prev, [feature.name]: { decision } }));
+        addToast(`Feature "${feature.name}" marked to '${decision}'.`, 'info');
+    }
+  };
+
+  const handleFinalizeRevision = useCallback(() => {
+    if (!featureMatrix || !ai) return;
+
+    setLoadingAction('finalizing');
+    setOutputType('finalizing');
+
+    const included = featureMatrix.filter(f => featureDecisions[f.name]?.decision === 'include');
+    const removed = featureMatrix.filter(f => featureDecisions[f.name]?.decision === 'remove');
+    const revised = featureMatrix.filter(f => featureDecisions[f.name]?.decision === 'discussed');
+    const summary = { included, removed, revised };
+    setFinalizationSummary(summary);
+
+    // Set up UI for finalization, but wait for user input.
+    setChatContext('finalizing');
+    setIsChatMode(true);
+    setActivePanel('input');
+    setIsInputPanelVisible(true);
+    setChatHistory([
+        { 
+            id: `chat_initial_${Date.now()}`, 
+            role: 'model', 
+            content: "Finalization plan constructed. Provide your final instructions for generating the unified codebase, then press send." 
+        }
+    ]);
+    
+    // Create a new, empty chat session. The context will be built and sent with the first user message.
+    const newChat = ai.chats.create({
+      model: GEMINI_MODELS.CORE_ANALYSIS,
+      history: [], 
+      config: {
+        systemInstruction: COMPARISON_SYSTEM_INSTRUCTION,
+      }
+    });
+    setChatSession(newChat);
+
+  }, [featureMatrix, featureDecisions, ai]);
+
   const handleClearChatRevisions = () => {
     setChatRevisions([]);
     addToast("Revision history cleared.", "info");
@@ -579,14 +791,50 @@ const App: React.FC = () => {
   };
 
   const handleEndChat = () => {
-    if (chatHistory.length > 1) { 
-        if (window.confirm("Save this chat session to your Version History?")) {
-            handleSaveChatAndEnd();
+    if (chatContext === 'feature_discussion' && activeFeatureForDiscussion) {
+        const discussionHistory = chatHistory;
+        
+        // A more lenient code block extractor for snippets
+        const extractSnippetCodeBlock = (responseText: string): string | null => {
+            const allCodeBlocksRegex = /`{3}(?:[a-zA-Z0-9-]*)?\n([\s\S]*?)\n`{3}/g;
+            const matches = [...responseText.matchAll(allCodeBlocksRegex)];
+            if (matches.length > 0) {
+                return matches[matches.length - 1][1].trim();
+            }
+            return null;
+        };
+
+        const lastAiResponse = discussionHistory.slice().reverse().find(m => m.role === 'model')?.content || '';
+        const revisedSnippet = extractSnippetCodeBlock(lastAiResponse);
+
+        setFeatureDecisions(prev => ({ 
+            ...prev, 
+            [activeFeatureForDiscussion.name as string]: {
+                decision: 'discussed',
+                history: discussionHistory,
+                revisedSnippet: revisedSnippet || undefined
+            } 
+        }));
+        addToast(`Discussion for "${activeFeatureForDiscussion.name}" complete.${revisedSnippet ? ' Snippet captured.' : ''}`, 'info');
+        
+        // Reset UI state to return to the feature matrix view.
+        setIsChatMode(false);
+        setChatContext('general');
+        setActiveFeatureForDiscussion(null);
+        setChatHistory([]);
+        setChatSession(null);
+        setChatInputValue('');
+        setIsInputPanelVisible(false); // Return focus to the output panel
+    } else {
+        if (chatHistory.length > 1) { 
+            if (window.confirm("Save this chat session to your Version History?")) {
+                handleSaveChatAndEnd();
+            } else {
+                resetAndSetMode('debug');
+            }
         } else {
             resetAndSetMode('debug');
         }
-    } else {
-        resetAndSetMode('debug');
     }
   };
 
@@ -609,6 +857,7 @@ const App: React.FC = () => {
       language,
       timestamp: Date.now(),
       chatRevisions,
+      rawFeatureMatrixJson: rawFeatureMatrixJson,
     };
 
     setVersions(prevVersions => [newVersion, ...prevVersions]);
@@ -626,6 +875,7 @@ const App: React.FC = () => {
     setReviewFeedback(version.feedback);
     setReviewedCode(version.userCode);
     setChatRevisions(version.chatRevisions || []);
+    setRawFeatureMatrixJson(version.rawFeatureMatrixJson || null);
     
     const finalCodeInLoaded = extractFinalCodeBlock(version.feedback, true);
     setRevisedCode(finalCodeInLoaded);
@@ -649,6 +899,8 @@ const App: React.FC = () => {
       setOutputType('explain-selection');
     } else if (version.fullPrompt.includes(REVIEW_SELECTION_INSTRUCTION)) {
       setOutputType('review-selection');
+    } else if (version.rawFeatureMatrixJson) {
+      setOutputType('revise');
     } else {
       setOutputType('review');
     }
@@ -677,6 +929,7 @@ const App: React.FC = () => {
       comparisonGoal,
       chatRevisions,
       errorMessage,
+      rawFeatureMatrixJson,
     };
     const blob = new Blob([JSON.stringify(sessionData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -714,6 +967,7 @@ const App: React.FC = () => {
         setRevisedCode(data.revisedCode ?? null);
         setChatRevisions(data.chatRevisions ?? []);
         setErrorMessage(data.errorMessage ?? '');
+        setRawFeatureMatrixJson(data.rawFeatureMatrixJson ?? null);
         
         const chatHistoryWithIds = (data.chatHistory ?? []).map((msg: Omit<ChatMessage, 'id'>, index: number) => ({
           ...msg,
@@ -800,9 +1054,9 @@ const App: React.FC = () => {
         onStartFollowUp={handleStartFollowUp}
       />
       <ApiKeyBanner />
-      <main className={`flex-grow container mx-auto p-4 sm:p-6 lg:p-8 grid grid-cols-1 ${isInputPanelVisible && showOutputPanel && !isChatMode ? 'lg:grid-cols-2' : ''} gap-6 lg:gap-8 animate-fade-in overflow-hidden`}>
+      <main className={`flex-grow container mx-auto p-4 sm:p-6 lg:p-8 grid grid-cols-1 ${isInputPanelVisible && showOutputPanel && !isChatMode ? 'md:grid-cols-2' : ''} gap-6 lg:gap-8 animate-fade-in overflow-hidden`}>
           {isInputPanelVisible && (
-            <div className={`min-h-0 ${isChatMode ? 'lg:col-span-2' : ''}`} onClick={() => !isChatMode && setActivePanel('input')}>
+            <div className={`min-h-0 ${isChatMode ? 'md:col-span-2' : ''}`} onClick={() => !isChatMode && setActivePanel('input')}>
               {appMode === 'single' || appMode === 'debug' ? (
                   <CodeInput
                     userCode={userOnlyCode}
@@ -838,6 +1092,9 @@ const App: React.FC = () => {
                     chatRevisions={chatRevisions}
                     onClearChatRevisions={handleClearChatRevisions}
                     onRenameChatRevision={handleRenameChatRevision}
+                    chatContext={chatContext}
+                    activeFeatureForDiscussion={activeFeatureForDiscussion}
+                    finalizationSummary={finalizationSummary}
                   />
               ) : (
                   <ComparisonInput 
@@ -850,8 +1107,10 @@ const App: React.FC = () => {
                     goal={comparisonGoal}
                     setGoal={setComparisonGoal}
                     onSubmit={handleCompareAndOptimize}
+                    onCompareAndRevise={handleCompareAndRevise}
                     isLoading={isLoading}
                     isChatLoading={isChatLoading}
+                    loadingAction={loadingAction}
                     isActive={activePanel === 'input'}
                     onNewReview={() => resetAndSetMode('comparison')}
                     onEndChat={handleEndChat}
@@ -868,6 +1127,9 @@ const App: React.FC = () => {
                     chatRevisions={chatRevisions}
                     onClearChatRevisions={handleClearChatRevisions}
                     onRenameChatRevision={handleRenameChatRevision}
+                    chatContext={chatContext}
+                    activeFeatureForDiscussion={activeFeatureForDiscussion}
+                    finalizationSummary={finalizationSummary}
                   />
               )}
             </div>
@@ -893,6 +1155,11 @@ const App: React.FC = () => {
                   onGenerateCommitMessage={handleGenerateCommitMessage}
                   reviewAvailable={reviewAvailable}
                   appMode={appMode}
+                  featureMatrix={featureMatrix}
+                  featureDecisions={featureDecisions}
+                  onFeatureDecision={handleFeatureDecision}
+                  allFeaturesDecided={allFeaturesDecided}
+                  onFinalize={handleFinalizeRevision}
                 />
             </div>
           )}

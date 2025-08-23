@@ -1,7 +1,7 @@
 
 
 import React, { useState, useEffect, useRef } from 'react';
-import { SupportedLanguage, ChatMessage, ReviewProfile, LoadingAction, ChatRevision } from '../types.ts';
+import { SupportedLanguage, ChatMessage, ReviewProfile, LoadingAction, ChatRevision, Feature, ChatContext, FinalizationSummary } from '../types.ts';
 import { Button } from './Button.tsx';
 import { Select } from './Select.tsx';
 import { SUPPORTED_LANGUAGES, generateReviewerTemplate, generateDebuggerTemplate, PLACEHOLDER_MARKER, REVIEW_PROFILES } from '../constants.ts';
@@ -43,6 +43,9 @@ interface CodeInputProps {
   onCodeLineClick: (line: string) => void;
   onClearChatRevisions: () => void;
   onRenameChatRevision: (id: string, newName: string) => void;
+  chatContext: ChatContext;
+  activeFeatureForDiscussion: Feature | null;
+  finalizationSummary: FinalizationSummary | null;
 }
 
 export const CodeInput: React.FC<CodeInputProps> = (props) => {
@@ -53,7 +56,7 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
     customReviewProfile, setCustomReviewProfile,
     onExplainSelection, onReviewSelection,
     isChatMode, isActive, onStopGenerating, onEndChat, appMode,
-    errorMessage, setErrorMessage
+    errorMessage, setErrorMessage, chatContext, activeFeatureForDiscussion, finalizationSummary
   } = props;
   
   const [selectedText, setSelectedText] = useState('');
@@ -110,6 +113,9 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
             onCodeLineClick={props.onCodeLineClick}
             onClearChatRevisions={props.onClearChatRevisions}
             onRenameChatRevision={props.onRenameChatRevision}
+            chatContext={chatContext}
+            activeFeatureForDiscussion={activeFeatureForDiscussion}
+            finalizationSummary={finalizationSummary}
           />
       </div>
     );

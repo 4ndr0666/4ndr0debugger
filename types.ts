@@ -63,11 +63,34 @@ export interface Version {
   language: SupportedLanguage;
   timestamp: number;
   chatRevisions?: ChatRevision[];
+  rawFeatureMatrixJson?: string | null;
 }
 
-export type LoadingAction = 'review' | 'docs' | 'tests' | 'commit' | 'explain-selection' | 'review-selection' | 'comparison' | null;
+export interface Feature {
+  name: string;
+  description: string;
+  source: 'Unique to A' | 'Unique to B' | 'Common';
+}
+
+export type FeatureDecision = 'include' | 'remove' | 'discussed';
+
+export interface FeatureDecisionRecord {
+  decision: FeatureDecision;
+  history?: ChatMessage[];
+  revisedSnippet?: string;
+}
+
+export type LoadingAction = 'review' | 'docs' | 'tests' | 'commit' | 'explain-selection' | 'review-selection' | 'comparison' | 'revise' | 'finalizing' | null;
 
 export type AppMode = 'debug' | 'single' | 'comparison';
+
+export type ChatContext = 'general' | 'feature_discussion' | 'finalizing';
+
+export interface FinalizationSummary {
+  included: Feature[];
+  removed: Feature[];
+  revised: Feature[];
+}
 
 export interface Toast {
   id: number;

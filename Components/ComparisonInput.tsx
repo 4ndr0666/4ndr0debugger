@@ -1,7 +1,7 @@
 
 
 import React, { useState, useEffect } from 'react';
-import { SupportedLanguage, ChatMessage, Version, ChatRevision } from '../types.ts';
+import { SupportedLanguage, ChatMessage, Version, ChatRevision, LoadingAction, Feature, ChatContext, FinalizationSummary } from '../types.ts';
 import { Button } from './Button.tsx';
 import { Select } from './Select.tsx';
 import { SUPPORTED_LANGUAGES } from '../constants.ts';
@@ -18,8 +18,10 @@ interface ComparisonInputProps {
   goal: string;
   setGoal: (g: string) => void;
   onSubmit: () => void;
+  onCompareAndRevise: () => void;
   isLoading: boolean;
   isChatLoading: boolean;
+  loadingAction: LoadingAction;
   isActive: boolean;
   onNewReview: () => void;
   onEndChat: () => void;
@@ -36,6 +38,9 @@ interface ComparisonInputProps {
   onCodeLineClick: (line: string) => void;
   onClearChatRevisions: () => void;
   onRenameChatRevision: (id: string, newName: string) => void;
+  chatContext: ChatContext;
+  activeFeatureForDiscussion: Feature | null;
+  finalizationSummary: FinalizationSummary | null;
 }
 
 const CodeEditor: React.FC<{
@@ -80,19 +85,13 @@ const CodeEditor: React.FC<{
 export const ComparisonInput: React.FC<ComparisonInputProps> = (props) => {
     const {
         codeA, setCodeA, codeB, setCodeB, language, setLanguage, goal, setGoal,
-        onSubmit, isLoading, isActive, onNewReview, isChatMode,
-        onStopGenerating, onEndChat
+        onSubmit, onCompareAndRevise, isLoading, isActive, onNewReview, isChatMode,
+        onStopGenerating, onEndChat, loadingAction, chatContext, activeFeatureForDiscussion, finalizationSummary
     } = props;
 
     const activeClass = isActive ? 'active' : '';
     const canSubmit = codeA.trim() && codeB.trim();
-    
-    const handleSubmit = () => {
-        if (canSubmit && !isLoading) {
-            onSubmit();
-        }
-    };
-    
+        
     if (isChatMode) {
         return (
             <div className={`hud-container h-full flex flex-col ${activeClass}`}>
@@ -116,6 +115,9 @@ export const ComparisonInput: React.FC<ComparisonInputProps> = (props) => {
                     onCodeLineClick={props.onCodeLineClick}
                     onClearChatRevisions={props.onClearChatRevisions}
                     onRenameChatRevision={props.onRenameChatRevision}
+                    chatContext={chatContext}
+                    activeFeatureForDiscussion={activeFeatureForDiscussion}
+                    finalizationSummary={finalizationSummary}
                 />
             </div>
         );
@@ -179,14 +181,23 @@ export const ComparisonInput: React.FC<ComparisonInputProps> = (props) => {
                           Stop
                         </Button>
                       ) : (
-                        <Button
-                            onClick={handleSubmit}
-                            disabled={!canSubmit || isLoading}
-                            isLoading={isLoading}
-                            className="w-full"
-                        >
-                            Compare & Optimize
-                        </Button>
+                        <div className="w-full flex gap-3">
+                            <Button
+                                onClick={onSubmit}
+                                disabled={!canSubmit}
+                                className="flex-1"
+                            >
+                                Compare & Optimize
+                            </Button>
+                            <Button
+                                onClick={onCompareAndRevise}
+                                disabled={!canSubmit}
+                                className="flex-1"
+                                variant="secondary"
+                            >
+                                Compare & Revise
+                            </Button>
+                        </div>
                       )}
                 </div>
             </div>

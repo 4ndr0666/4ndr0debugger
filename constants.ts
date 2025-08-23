@@ -1,10 +1,11 @@
 
 
 import { LanguageOption, SupportedLanguage, ProfileOption, ReviewProfile } from './types.ts';
+import { Type } from "@google/genai";
 
 export const GEMINI_MODELS = {
   // For core, complex reasoning tasks like full code reviews and comparisons.
-  CORE_ANALYSIS: 'gemini-2.5-pro',
+  CORE_ANALYSIS: 'gemini-2.5-flash',
 
   // For faster, more focused tasks like chat, explanations, or commit messages.
   FAST_TASKS: 'gemini-2.5-flash',
@@ -98,6 +99,43 @@ You are responsible for maintaining forward progress. A feature, once validated,
 - Write a revision based on revered coding philosophies and best practices. The revision must be complete and contain no placeholders or omitted code.
 - Parse the updated, fully-functional, error-free and production ready revision.
 - Summarize the changes and provide the next steps or optional enhancements if any.`;
+
+export const COMPARISON_REVISION_SYSTEM_INSTRUCTION = `You are a senior software architect. Your task is to analyze two given codebases, break them down into their core features, and return a structured JSON object.
+
+**Output Requirements:**
+- Your entire response MUST be a single, valid JSON object.
+- Do NOT include any explanatory text, markdown formatting, or any content outside of the JSON object.
+- The JSON object must contain a single root key: "features".
+- The "features" key must hold an array of feature objects.
+- Each feature object in the array must have the following three string properties:
+  1.  "name": A short, descriptive title for the feature (e.g., "User Authentication", "API Data Fetching").
+  2.  "description": A concise, one-sentence explanation of what the feature does and how it's implemented.
+  3.  "source": A string indicating where the feature was found. This value MUST be one of the following exact strings: "Unique to A", "Unique to B", or "Common".
+
+**Analysis Guidelines:**
+- "Unique to A": The feature exists only in the first codebase (Codebase A).
+- "Unique to B": The feature exists only in the second codebase (Codebase B).
+- "Common": The feature exists in both codebases, even if the implementation differs slightly.
+`;
+
+export const FEATURE_MATRIX_SCHEMA = {
+    type: Type.OBJECT,
+    properties: {
+        features: {
+            type: Type.ARRAY,
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    name: { type: Type.STRING, description: "A short, descriptive title for the feature." },
+                    description: { type: Type.STRING, description: "A concise explanation of what the feature does." },
+                    source: { type: Type.STRING, description: "Must be 'Unique to A', 'Unique to B', or 'Common'." }
+                },
+                required: ['name', 'description', 'source']
+            }
+        }
+    },
+    required: ['features']
+};
 
 
 export const PLACEHOLDER_MARKER = "❯ PASTE CODE";
@@ -538,32 +576,18 @@ export const generateReviewerTemplate = (language: SupportedLanguage): string =>
 
 export const generateDebuggerTemplate = (language: SupportedLanguage, code: string, error: string): string => {
     const languageTag = LANGUAGE_TAG_MAP[language] || '';
-    const errorBlock = error.trim() ? `\n\n### Error Message / Context\n\`\`\`\n${error.trim()}\n\`\`\`\n` : '';
-    const instructions = LANGUAGE_SPECIFIC_INSTRUCTIONS[language] || LANGUAGE_SPECIFIC_INSTRUCTIONS[SupportedLanguage.OTHER];
-
-    return `### Code to Debug\n\`\`\`${languageTag}\n${code}\n\`\`\`${errorBlock}\n\n${instructions}`;
+    const errorBlock = error.trim() ? `### Error Message / Context\n\n\`\`\`\n${error}\n\`\`\`` : "### No Error Message Provided";
+    return `\`\`\`${languageTag}\n${code}\n\`\`\`\n\n${errorBlock}`;
 };
 
+export const generateComparisonTemplate = (language: SupportedLanguage, goal: string, codeA: string, codeB: string): string => {
+  const languageTag = LANGUAGE_TAG_MAP[language] || '';
+  const goalSection = goal.trim() ? `### Shared Goal\n${goal.trim()}\n\n` : '';
+
+  return `${goalSection}### Codebase A\n\`\`\`${languageTag}\n${codeA}\n\`\`\`\n\n### Codebase B\n\`\`\`${languageTag}\n${codeB}\n\`\`\``;
+};
 
 export const generateDocsTemplate = (language: SupportedLanguage): string => {
   const languageTag = LANGUAGE_TAG_MAP[language] || '';
   return `\`\`\`${languageTag}\n\n${PLACEHOLDER_MARKER}\n\n\`\`\`\n\n${DOCS_INSTRUCTION}`;
-};
-
-export const generateComparisonTemplate = (language: SupportedLanguage, goal: string, codeA: string, codeB: string): string => {
-    const languageTag = LANGUAGE_TAG_MAP[language] || '';
-    const goalText = goal.trim() ? `The shared goal of this code is: ${goal}\n\n` : '';
-
-    return `${goalText}Please analyze, compare, and then create a single optimized version of the following code snippets.
-
-### Codebase A
-\`\`\`${languageTag}
-${codeA}
-\`\`\`
-
-### Codebase B
-\`\`\`${languageTag}
-${codeB}
-\`\`\`
-`;
 };
