@@ -1,10 +1,9 @@
 
 
-
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { MarkdownRenderer } from './MarkdownRenderer.tsx';
 import { LoadingAction, Toast, SupportedLanguage, AppMode, Version, Feature, FeatureDecision, FeatureDecisionRecord } from '../types.ts';
-import { SaveIcon, CopyIcon, CheckIcon, CompareIcon, ChatIcon, CommitIcon, BugIcon, BoltIcon } from './Icons.tsx';
+import { SaveIcon, CopyIcon, CheckIcon, CompareIcon, ChatIcon, CommitIcon, BugIcon, BoltIcon, ImportIcon } from './Icons.tsx';
 import { LoadingSpinner } from './LoadingSpinner.tsx';
 import { Button } from './Button.tsx';
 import { FeatureMatrix } from './FeatureMatrix.tsx';
@@ -32,6 +31,7 @@ interface ReviewOutputProps {
   onFeatureDecision: (feature: Feature, decision: FeatureDecision) => void;
   allFeaturesDecided: boolean;
   onFinalize: () => void;
+  onDownloadOutput: () => void;
 }
 
 const analysisSteps = [
@@ -78,7 +78,8 @@ export const ReviewOutput = ({
     feedback, revisedCode, language, isLoading, isChatLoading, loadingAction, error, 
     onSaveVersion, isActive, outputType, onShowDiff, canCompare,
     addToast, onStartFollowUp, onGenerateCommitMessage, reviewAvailable,
-    appMode, featureMatrix, featureDecisions, onFeatureDecision, allFeaturesDecided, onFinalize
+    appMode, featureMatrix, featureDecisions, onFeatureDecision, allFeaturesDecided, onFinalize,
+    onDownloadOutput
 }: ReviewOutputProps) => {
   const [copied, setCopied] = useState(false);
   const showLoading = isLoading || isChatLoading;
@@ -209,6 +210,12 @@ export const ReviewOutput = ({
               </>
             ) : (
               <>
+                {outputType === 'docs' && (
+                  <Button onClick={onDownloadOutput} variant="primary" className="post-review-button">
+                    <ImportIcon className="w-4 h-4 mr-2" />
+                    Download .md
+                  </Button>
+                )}
                 {appMode === 'single' ? (
                   <Button onClick={() => onStartFollowUp(undefined, 'debug')} disabled={!reviewAvailable} variant="primary" className="post-review-button">
                       <BugIcon className="w-4 h-4 mr-2"/>

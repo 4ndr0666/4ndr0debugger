@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useRef } from 'react';
 import { SupportedLanguage, ChatMessage, ReviewProfile, LoadingAction, ChatRevision, Feature, ChatContext, FinalizationSummary } from '../types.ts';
 import { Button } from './Button.tsx';
@@ -27,25 +25,34 @@ interface CodeInputProps {
   loadingAction: LoadingAction;
   isChatMode: boolean;
   onNewReview: () => void;
-  onEndChat: () => void;
+  onFinalizeFeatureDiscussion: () => void;
+  onReturnToOutputView: () => void;
   onFollowUpSubmit: (message: string) => void;
   chatHistory: ChatMessage[];
   chatInputValue: string;
   setChatInputValue: (value: string) => void;
   isActive: boolean;
   onStopGenerating: () => void;
+  onOpenSaveModal: () => void;
+  onLoadRevisionIntoEditor: () => void;
   // Context props for chat
   originalReviewedCode: string | null;
-  initialRevisedCode: string | null;
+  revisedCode: string | null;
   chatRevisions: ChatRevision[];
   appMode: 'debug' | 'single' | 'comparison';
   codeB: string | null;
   onCodeLineClick: (line: string) => void;
   onClearChatRevisions: () => void;
   onRenameChatRevision: (id: string, newName: string) => void;
+  onDeleteChatRevision: (id: string) => void;
   chatContext: ChatContext;
   activeFeatureForDiscussion: Feature | null;
   finalizationSummary: FinalizationSummary | null;
+  // Attachment props
+  attachedFile: File | null;
+  onAttachFileClick: () => void;
+  onRemoveFile: () => void;
+  onOpenProjectFilesModal: () => void;
 }
 
 export const CodeInput: React.FC<CodeInputProps> = (props) => {
@@ -55,7 +62,7 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
     setUserCode, setLanguage, reviewProfile, setReviewProfile, onNewReview,
     customReviewProfile, setCustomReviewProfile,
     onExplainSelection, onReviewSelection,
-    isChatMode, isActive, onStopGenerating, onEndChat, appMode,
+    isChatMode, isActive, onStopGenerating, appMode,
     errorMessage, setErrorMessage, chatContext, activeFeatureForDiscussion, finalizationSummary
   } = props;
   
@@ -98,14 +105,15 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
           <div className="hud-corner corner-bottom-left"></div>
           <div className="hud-corner corner-bottom-right"></div>
           <ChatInterface 
-            onEndChat={onEndChat}
+            onFinalizeFeatureDiscussion={props.onFinalizeFeatureDiscussion}
+            onReturnToOutputView={props.onReturnToOutputView}
             chatHistory={props.chatHistory}
             onFollowUpSubmit={props.onFollowUpSubmit}
             isChatLoading={props.isChatLoading}
             chatInputValue={props.chatInputValue}
             setChatInputValue={props.setChatInputValue}
             originalReviewedCode={props.originalReviewedCode}
-            initialRevisedCode={props.initialRevisedCode}
+            revisedCode={props.revisedCode}
             chatRevisions={props.chatRevisions}
             appMode={props.appMode}
             codeB={props.codeB}
@@ -113,9 +121,17 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
             onCodeLineClick={props.onCodeLineClick}
             onClearChatRevisions={props.onClearChatRevisions}
             onRenameChatRevision={props.onRenameChatRevision}
+            onDeleteChatRevision={props.onDeleteChatRevision}
             chatContext={chatContext}
             activeFeatureForDiscussion={activeFeatureForDiscussion}
             finalizationSummary={finalizationSummary}
+            onNewReview={onNewReview}
+            onOpenSaveModal={props.onOpenSaveModal}
+            onLoadRevisionIntoEditor={props.onLoadRevisionIntoEditor}
+            attachedFile={props.attachedFile}
+            onAttachFileClick={props.onAttachFileClick}
+            onRemoveFile={props.onRemoveFile}
+            onOpenProjectFilesModal={props.onOpenProjectFilesModal}
           />
       </div>
     );

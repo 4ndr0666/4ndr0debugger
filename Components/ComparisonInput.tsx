@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect } from 'react';
 import { SupportedLanguage, ChatMessage, Version, ChatRevision, LoadingAction, Feature, ChatContext, FinalizationSummary } from '../types.ts';
 import { Button } from './Button.tsx';
@@ -24,23 +22,32 @@ interface ComparisonInputProps {
   loadingAction: LoadingAction;
   isActive: boolean;
   onNewReview: () => void;
-  onEndChat: () => void;
+  onFinalizeFeatureDiscussion: () => void;
+  onReturnToOutputView: () => void;
   isChatMode: boolean;
   onFollowUpSubmit: (message: string) => void;
   chatHistory: ChatMessage[];
   chatInputValue: string;
   setChatInputValue: (value: string) => void;
   onStopGenerating: () => void;
+  onOpenSaveModal: () => void;
+  onLoadRevisionIntoEditor: () => void;
   originalReviewedCode: string | null;
-  initialRevisedCode: string | null;
+  revisedCode: string | null;
   chatRevisions: ChatRevision[];
   appMode: 'single' | 'comparison' | 'debug';
   onCodeLineClick: (line: string) => void;
   onClearChatRevisions: () => void;
   onRenameChatRevision: (id: string, newName: string) => void;
+  onDeleteChatRevision: (id: string) => void;
   chatContext: ChatContext;
   activeFeatureForDiscussion: Feature | null;
   finalizationSummary: FinalizationSummary | null;
+  // Attachment props
+  attachedFile: File | null;
+  onAttachFileClick: () => void;
+  onRemoveFile: () => void;
+  onOpenProjectFilesModal: () => void;
 }
 
 const CodeEditor: React.FC<{
@@ -86,7 +93,7 @@ export const ComparisonInput: React.FC<ComparisonInputProps> = (props) => {
     const {
         codeA, setCodeA, codeB, setCodeB, language, setLanguage, goal, setGoal,
         onSubmit, onCompareAndRevise, isLoading, isActive, onNewReview, isChatMode,
-        onStopGenerating, onEndChat, loadingAction, chatContext, activeFeatureForDiscussion, finalizationSummary
+        onStopGenerating, loadingAction, chatContext, activeFeatureForDiscussion, finalizationSummary
     } = props;
 
     const activeClass = isActive ? 'active' : '';
@@ -100,14 +107,15 @@ export const ComparisonInput: React.FC<ComparisonInputProps> = (props) => {
                 <div className="hud-corner corner-bottom-left"></div>
                 <div className="hud-corner corner-bottom-right"></div>
                 <ChatInterface
-                    onEndChat={onEndChat}
+                    onFinalizeFeatureDiscussion={props.onFinalizeFeatureDiscussion}
+                    onReturnToOutputView={props.onReturnToOutputView}
                     chatHistory={props.chatHistory}
                     onFollowUpSubmit={props.onFollowUpSubmit}
                     isChatLoading={props.isChatLoading}
                     chatInputValue={props.chatInputValue}
                     setChatInputValue={props.setChatInputValue}
                     originalReviewedCode={props.originalReviewedCode}
-                    initialRevisedCode={props.initialRevisedCode}
+                    revisedCode={props.revisedCode}
                     chatRevisions={props.chatRevisions}
                     appMode={props.appMode}
                     codeB={codeB}
@@ -115,9 +123,17 @@ export const ComparisonInput: React.FC<ComparisonInputProps> = (props) => {
                     onCodeLineClick={props.onCodeLineClick}
                     onClearChatRevisions={props.onClearChatRevisions}
                     onRenameChatRevision={props.onRenameChatRevision}
+                    onDeleteChatRevision={props.onDeleteChatRevision}
                     chatContext={chatContext}
                     activeFeatureForDiscussion={activeFeatureForDiscussion}
                     finalizationSummary={finalizationSummary}
+                    onNewReview={onNewReview}
+                    onOpenSaveModal={props.onOpenSaveModal}
+                    onLoadRevisionIntoEditor={props.onLoadRevisionIntoEditor}
+                    attachedFile={props.attachedFile}
+                    onAttachFileClick={props.onAttachFileClick}
+                    onRemoveFile={props.onRemoveFile}
+                    onOpenProjectFilesModal={props.onOpenProjectFilesModal}
                 />
             </div>
         );

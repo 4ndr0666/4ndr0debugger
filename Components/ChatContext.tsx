@@ -1,17 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { SupportedLanguage, ChatRevision, Feature, ChatContext as ChatContextType, FinalizationSummary } from '../types.ts';
 import { AccordionItem } from './AccordionItem.tsx';
-import { CopyIcon, CheckIcon } from './Icons.tsx';
+import { CopyIcon, CheckIcon, DeleteIcon } from './Icons.tsx';
 
 interface ChatContextProps {
   codeA: string;
   codeB?: string;
   language: SupportedLanguage;
   onLineClick: (line: string) => void;
-  initialRevisedCode: string | null;
+  revisedCode: string | null;
   chatRevisions: ChatRevision[];
   onClearChatRevisions: () => void;
   onRenameRevision: (id: string, newName: string) => void;
+  onDeleteRevision: (id: string) => void;
   appMode: 'debug' | 'single' | 'comparison';
   chatContext: ChatContextType;
   activeFeatureForDiscussion: Feature | null;
@@ -198,32 +199,10 @@ const EditableTitle: React.FC<{ initialTitle: string; onSave: (newTitle: string)
 };
 
 export const ChatContext = ({ 
-    codeA, codeB, onLineClick, initialRevisedCode, chatRevisions, onClearChatRevisions, 
-    onRenameRevision, appMode, chatContext, activeFeatureForDiscussion, finalizationSummary
+    codeA, codeB, onLineClick, revisedCode, chatRevisions, onClearChatRevisions, 
+    onRenameRevision, onDeleteRevision, appMode, chatContext, activeFeatureForDiscussion, finalizationSummary
 }: ChatContextProps) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const [isOverflowing, setIsOverflowing] = useState(false);
-
-  useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-
-    // Check for overflow. The dependency array ensures this runs when revisions change.
-    const checkOverflow = () => {
-        const hasOverflow = container.scrollHeight > container.clientHeight;
-        setIsOverflowing(hasOverflow);
-    };
-
-    // Use ResizeObserver to handle window resizing or other dynamic layout changes
-    const resizeObserver = new ResizeObserver(checkOverflow);
-    resizeObserver.observe(container);
-    
-    // Initial check and check after revisions update
-    checkOverflow();
-
-    // Cleanup observer on component unmount or when container changes
-    return () => resizeObserver.disconnect();
-  }, [chatRevisions]); // Dependency on chatRevisions is key
 
   if (chatContext === 'feature_discussion' && activeFeatureForDiscussion) {
       return <FeatureDiscussionContext feature={activeFeatureForDiscussion} />;
@@ -239,7 +218,7 @@ export const ChatContext = ({
         <h2 className="text-xl text-center font-heading">
             Revision History
         </h2>
-        {isOverflowing && (
+        {chatRevisions.length > 0 && (
           <button 
               onClick={onClearChatRevisions}
               className="text-xs uppercase text-[var(--hud-color-darker)] hover:text-[var(--hud-color)] transition-colors animate-fade-in font-mono pr-2"
@@ -266,15 +245,27 @@ export const ChatContext = ({
                 <ClickableCodeBlock code={codeA} onLineClick={onLineClick} />
             )}
         </AccordionItem>
-        {initialRevisedCode && (
+        {revisedCode && (
             <AccordionItem title="Initial Revision" defaultOpen={false}>
-                <ClickableCodeBlock code={initialRevisedCode} onLineClick={onLineClick} />
+                <ClickableCodeBlock code={revisedCode} onLineClick={onLineClick} />
             </AccordionItem>
         )}
         {chatRevisions.map((revision, index) => (
             <AccordionItem 
                 key={revision.id} 
-                title={<EditableTitle initialTitle={revision.name} onSave={(newName) => onRenameRevision(revision.id, newName)} />} 
+                title={
+                    <div className="flex items-center justify-between w-full gap-2">
+                        <EditableTitle initialTitle={revision.name} onSave={(newName) => onRenameRevision(revision.id, newName)} />
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onDeleteRevision(revision.id); }}
+                            className="p-1 text-[var(--red-color)]/70 rounded-full hover:bg-red-500/30 hover:text-[var(--red-color)] focus:outline-none focus:ring-1 focus:ring-[var(--red-color)] flex-shrink-0"
+                            title="Delete this revision"
+                            aria-label={`Delete revision ${revision.name}`}
+                        >
+                            <DeleteIcon className="w-4 h-4" />
+                        </button>
+                    </div>
+                } 
                 defaultOpen={index === chatRevisions.length - 1}
             >
                 <ClickableCodeBlock code={revision.code} onLineClick={onLineClick} />

@@ -3,7 +3,7 @@ import { GoogleGenAI, Chat, Type } from "@google/genai";
 import { Header } from './Components/Header.tsx';
 import { CodeInput } from './Components/CodeInput.tsx';
 import { ReviewOutput } from './Components/ReviewOutput.tsx';
-import { SupportedLanguage, ChatMessage, Version, ReviewProfile, LoadingAction, Toast, AppMode, ChatRevision, Feature, FeatureDecision, ChatContext, FinalizationSummary, FeatureDecisionRecord } from './types.ts';
+import { SupportedLanguage, ChatMessage, Version, ReviewProfile, LoadingAction, Toast, AppMode, ChatRevision, Feature, FeatureDecision, ChatContext, FinalizationSummary, FeatureDecisionRecord, ProjectFile } from './types.ts';
 import { SUPPORTED_LANGUAGES, GEMINI_MODELS, SYSTEM_INSTRUCTION, DEBUG_SYSTEM_INSTRUCTION, DOCS_SYSTEM_INSTRUCTION, PROFILE_SYSTEM_INSTRUCTIONS, GENERATE_TESTS_INSTRUCTION, EXPLAIN_CODE_INSTRUCTION, REVIEW_SELECTION_INSTRUCTION, COMMIT_MESSAGE_SYSTEM_INSTRUCTION, DOCS_INSTRUCTION, COMPARISON_SYSTEM_INSTRUCTION, COMPARISON_REVISION_SYSTEM_INSTRUCTION, FEATURE_MATRIX_SCHEMA, generateComparisonTemplate, generateDocsTemplate, LANGUAGE_TAG_MAP, PLACEHOLDER_MARKER } from './constants.ts';
 import { DiffViewer } from './Components/DiffViewer.tsx';
 import { ComparisonInput } from './Components/ComparisonInput.tsx';
@@ -11,9 +11,45 @@ import { VersionHistoryModal } from './Components/VersionHistoryModal.tsx';
 import { SaveVersionModal } from './Components/SaveVersionModal.tsx';
 import { ToastContainer } from './Components/ToastContainer.tsx';
 import { ApiKeyBanner } from './Components/ApiKeyBanner.tsx';
+import { DocumentationCenterModal } from './Components/DocumentationCenterModal.tsx';
+import { ProjectFilesModal } from './Components/ProjectFilesModal.tsx';
 
 type OutputType = LoadingAction;
 type ActivePanel = 'input' | 'output';
+
+// A custom hook to manage state with localStorage persistence.
+const usePersistentState = <T,>(storageKey: string, defaultValue: T): [T, React.Dispatch<React.SetStateAction<T>>] => {
+    const [state, setState] = useState<T>(() => {
+        try {
+            const item = window.localStorage.getItem(storageKey);
+            return item ? JSON.parse(item) : defaultValue;
+        } catch (error) {
+            console.error(`Error reading localStorage key "${storageKey}":`, error);
+            return defaultValue;
+        }
+    });
+
+    useEffect(() => {
+        try {
+            window.localStorage.setItem(storageKey, JSON.stringify(state));
+        } catch (error) {
+            console.error(`Error setting localStorage key "${storageKey}":`, error);
+        }
+    }, [storageKey, state]);
+
+    return [state, setState];
+};
+
+
+// A more lenient code block extractor for chat revisions.
+const extractLastCodeBlock = (responseText: string): string | null => {
+    const allCodeBlocksRegex = /`{3}(?:[a-zA-Z0-9-]*)?\n([\s\S]*?)\n`{3}/g;
+    const matches = [...responseText.matchAll(allCodeBlocksRegex)];
+    if (matches.length > 0) {
+        return matches[matches.length - 1][1].trim();
+    }
+    return null;
+};
 
 const App: React.FC = () => {
   // --- Mode State ---
@@ -45,6 +81,7 @@ const App: React.FC = () => {
   const [featureDecisions, setFeatureDecisions] = useState<Record<string, FeatureDecisionRecord>>({});
   const [allFeaturesDecided, setAllFeaturesDecided] = useState(false);
   const [finalizationSummary, setFinalizationSummary] = useState<FinalizationSummary | null>(null);
+  const [finalizationBriefing, setFinalizationBriefing] = useState<string | null>(null);
 
   // --- View & Chat State ---
   const [isInputPanelVisible, setIsInputPanelVisible] = useState(true);
@@ -57,45 +94,34 @@ const App: React.FC = () => {
   const [chatContext, setChatContext] = useState<ChatContext>('general');
   const [activeFeatureForDiscussion, setActiveFeatureForDiscussion] = useState<Feature | null>(null);
   
-  // --- Versioning State ---
-  const [versions, setVersions] = useState<Version[]>([]);
+  // --- Versioning & Modal State ---
+  const [versions, setVersions] = usePersistentState<Version[]>('codeReviewVersions', []);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [isDiffModalOpen, setIsDiffModalOpen] = useState(false);
   const [isVersionHistoryModalOpen, setIsVersionHistoryModalOpen] = useState(false);
+  const [isDocsModalOpen, setIsDocsModalOpen] = useState(false);
+  const [isProjectFilesModalOpen, setIsProjectFilesModalOpen] = useState(false);
   const [versionName, setVersionName] = useState('');
 
   // --- Toast State ---
   const [toasts, setToasts] = useState<Toast[]>([]);
   
+  // --- File Attachment & Project Files State ---
+  const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  const [fileContent, setFileContent] = useState<string | null>(null); // base64 for images, raw text for others
+  const [fileMimeType, setFileMimeType] = useState<string | null>(null);
+  const [projectFiles, setProjectFiles] = usePersistentState<ProjectFile[]>('projectFiles', []);
+
+
   const [ai] = useState(() => process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const importFileInputRef = useRef<HTMLInputElement>(null);
+  const attachFileInputRef = useRef<HTMLInputElement>(null);
   const abortStreamRef = useRef(false);
 
   const isReviewContextCurrent = reviewedCode !== null && (appMode === 'single' || appMode === 'debug' ? userOnlyCode === reviewedCode : true);
   const reviewAvailable = !!reviewFeedback && isReviewContextCurrent;
   const commitMessageAvailable = !!reviewedCode && !!revisedCode && reviewedCode !== revisedCode;
   const showOutputPanel = isLoading || !!reviewFeedback || !!error;
-
-  // Load versions from localStorage on initial render
-  useEffect(() => {
-    try {
-      const savedVersions = localStorage.getItem('codeReviewVersions');
-      if (savedVersions) {
-        setVersions(JSON.parse(savedVersions));
-      }
-    } catch (e) {
-      console.error("Failed to load versions from localStorage", e);
-    }
-  }, []);
-
-  // Save versions to localStorage whenever they change
-  useEffect(() => {
-    try {
-      localStorage.setItem('codeReviewVersions', JSON.stringify(versions));
-    } catch (e) {
-      console.error("Failed to save versions to localStorage", e);
-    }
-  }, [versions]);
 
   // Check if all features have decisions
   useEffect(() => {
@@ -210,6 +236,7 @@ const App: React.FC = () => {
     setActiveFeatureForDiscussion(null);
     setRawFeatureMatrixJson(null);
     setFinalizationSummary(null);
+    setFinalizationBriefing(null);
   }
 
   const extractFinalCodeBlock = (response: string, isInitialReview: boolean) => {
@@ -337,9 +364,12 @@ const App: React.FC = () => {
     }
   }, [ai, language, comparisonGoal, userOnlyCode, codeB]);
 
-
-  const handleGenerateDocs = useCallback(async () => {
-    if (appMode === 'comparison' || !userOnlyCode.trim() || isChatMode) return;
+  const handleTriggerDocsGeneration = useCallback(async (codeToDocument: string) => {
+    if (!codeToDocument.trim()) {
+      addToast("Cannot generate documentation for empty code.", "error");
+      return;
+    }
+    setIsDocsModalOpen(false); // Close modal before starting
     setIsLoading(true);
     setLoadingAction('docs');
     setOutputType('docs');
@@ -347,16 +377,16 @@ const App: React.FC = () => {
     resetForNewRequest();
     
     const template = generateDocsTemplate(language);
-    const fullCodeToSubmit = template.replace(PLACEHOLDER_MARKER, userOnlyCode);
+    const fullCodeToSubmit = template.replace(PLACEHOLDER_MARKER, codeToDocument);
 
     setFullCodeForReview(fullCodeToSubmit);
-    setReviewedCode(userOnlyCode);
+    setReviewedCode(codeToDocument); // Set the source code as "reviewed"
     
     await performStreamingRequest(fullCodeToSubmit, DOCS_SYSTEM_INSTRUCTION, GEMINI_MODELS.CORE_ANALYSIS);
 
     setIsLoading(false);
     setLoadingAction(null);
-  }, [ai, userOnlyCode, language, appMode, isChatMode]);
+  }, [ai, language]);
 
   const handleGenerateTests = useCallback(async () => {
     if (appMode === 'comparison' || !userOnlyCode.trim() || isChatMode) return;
@@ -464,6 +494,14 @@ const App: React.FC = () => {
 
 
   const handleStartFollowUp = useCallback(async (version?: Version, modeOverride?: AppMode) => {
+    // If a chat session already exists and we're not loading a new version, just resume it.
+    if (chatSession && !version) {
+        setIsChatMode(true);
+        setActivePanel('input');
+        setIsInputPanelVisible(true);
+        return;
+    }
+
     if (chatContext === 'feature_discussion' && activeFeatureForDiscussion && ai) {
         // Set up UI for loading state
         setIsChatMode(true);
@@ -570,7 +608,16 @@ const App: React.FC = () => {
     setIsChatMode(true);
     setActivePanel('input');
     setIsInputPanelVisible(true);
-  }, [reviewFeedback, fullCodeForReview, ai, getSystemInstructionForReview, userOnlyCode, appMode, chatInputValue, reviewedCode, chatContext, activeFeatureForDiscussion, comparisonGoal]);
+  }, [reviewFeedback, fullCodeForReview, ai, getSystemInstructionForReview, userOnlyCode, appMode, chatInputValue, reviewedCode, chatContext, activeFeatureForDiscussion, comparisonGoal, chatSession]);
+
+  const handleRemoveFile = () => {
+    setAttachedFile(null);
+    setFileContent(null);
+    setFileMimeType(null);
+    if (attachFileInputRef.current) {
+        attachFileInputRef.current.value = '';
+    }
+  };
 
   const handleFollowUpSubmit = useCallback(async (message: string, session?: Chat | null) => {
     const currentSession = session || chatSession;
@@ -578,7 +625,22 @@ const App: React.FC = () => {
 
     setIsChatLoading(true);
     setError(null);
-    setChatHistory(prev => [...prev, { id: `chat_user_${Date.now()}`, role: 'user', content: message }]);
+    
+    const userMessageForUi: ChatMessage = {
+        id: `chat_user_${Date.now()}`,
+        role: 'user',
+        content: message,
+    };
+
+    if (attachedFile && fileContent && fileMimeType) {
+        userMessageForUi.attachment = {
+            name: attachedFile.name,
+            mimeType: fileMimeType,
+            content: fileMimeType.startsWith('image/') ? `data:${fileMimeType};base64,${fileContent}` : fileContent,
+        };
+    }
+
+    setChatHistory(prev => [...prev, userMessageForUi]);
     setActivePanel('input');
     abortStreamRef.current = false;
 
@@ -626,14 +688,29 @@ const App: React.FC = () => {
         briefing += `---\n\n### 4. Final User Instructions:\n${message}\n\n`;
         briefing += `Based on this complete Canonical Action Map, please provide the final, complete, and runnable unified codebase in a single markdown block under the heading '### Revised Code'. Ensure all integrated and revised features work together seamlessly.`;
         messageToSend = briefing;
+        setFinalizationBriefing(messageToSend); // Save for versioning
     }
+
+    type ApiPart = { text: string } | { inlineData: { mimeType: string; data: string } };
+    const apiParts: ApiPart[] = [{ text: messageToSend }];
+
+    if (attachedFile && fileContent && fileMimeType) {
+        if (fileMimeType.startsWith('image/')) {
+            apiParts.push({ inlineData: { mimeType: fileMimeType, data: fileContent } });
+        } else {
+            const firstPart = apiParts[0] as { text: string };
+            firstPart.text += `\n\n--- Attached File: ${attachedFile.name} ---\n\n${fileContent}`;
+        }
+    }
+    
+    handleRemoveFile(); // Clear file from UI after preparing the payload
     
     const modelMessageId = `chat_model_${Date.now()}`;
     
     try {
       setChatHistory(prev => [...prev, { id: modelMessageId, role: 'model', content: '' }]); // Add empty placeholder
       
-      const responseStream = await currentSession.sendMessageStream({ message: messageToSend });
+      const responseStream = await currentSession.sendMessageStream({ message: apiParts });
       
       let currentResponse = "";
       for await (const chunk of responseStream) {
@@ -651,9 +728,10 @@ const App: React.FC = () => {
       }
       
       if (!abortStreamRef.current) {
-        const newRevisionCode = extractFinalCodeBlock(currentResponse, false);
+        const newRevisionCode = extractLastCodeBlock(currentResponse);
         if (newRevisionCode) {
            setRevisedCode(newRevisionCode); // Update the main revised code for diffing in finalize context
+           setReviewFeedback(currentResponse); // Update feedback to include the final generated code
           setChatRevisions(prev => {
             const lastRevisionCode = prev.length > 0 ? prev[prev.length - 1].code : revisedCode;
             if (lastRevisionCode !== newRevisionCode) {
@@ -679,7 +757,7 @@ const App: React.FC = () => {
     } finally {
       setIsChatLoading(false);
     }
-  }, [chatSession, revisedCode, chatContext, chatHistory, finalizationSummary, featureMatrix, fullCodeForReview, featureDecisions, language]);
+  }, [chatSession, revisedCode, chatContext, chatHistory, finalizationSummary, featureMatrix, fullCodeForReview, featureDecisions, language, attachedFile, fileContent, fileMimeType]);
 
   const handleCodeLineClick = (line: string) => {
     setChatInputValue(`Can you explain this line for me?\n\`\`\`\n${line}\n\`\`\``);
@@ -745,6 +823,11 @@ const App: React.FC = () => {
     addToast("Revision renamed.", "info");
   };
 
+  const handleDeleteChatRevision = (revisionId: string) => {
+    setChatRevisions(prev => prev.filter(rev => rev.id !== revisionId));
+    addToast("Revision removed.", "info");
+  };
+
   const resetAndSetMode = (mode: AppMode) => {
     setAppMode(mode);
     setIsChatMode(false);
@@ -783,6 +866,7 @@ const App: React.FC = () => {
       language,
       timestamp: Date.now(),
       chatRevisions,
+      type: 'review',
     };
 
     setVersions(prev => [newVersion, ...prev]);
@@ -790,7 +874,7 @@ const App: React.FC = () => {
     resetAndSetMode('debug');
   };
 
-  const handleEndChat = () => {
+  const handleFinalizeFeatureDiscussion = useCallback(() => {
     if (chatContext === 'feature_discussion' && activeFeatureForDiscussion) {
         const discussionHistory = chatHistory;
         
@@ -825,39 +909,59 @@ const App: React.FC = () => {
         setChatSession(null);
         setChatInputValue('');
         setIsInputPanelVisible(false); // Return focus to the output panel
-    } else {
-        if (chatHistory.length > 1) { 
-            if (window.confirm("Save this chat session to your Version History?")) {
-                handleSaveChatAndEnd();
-            } else {
-                resetAndSetMode('debug');
-            }
+    }
+  }, [chatContext, activeFeatureForDiscussion, chatHistory]);
+
+  const handleEndGeneralChat = useCallback(() => {
+    if (chatHistory.length > 1) { 
+        if (window.confirm("Save this chat session to your Version History?")) {
+            handleSaveChatAndEnd();
         } else {
             resetAndSetMode('debug');
         }
+    } else {
+        resetAndSetMode('debug');
     }
+  }, [chatHistory, handleSaveChatAndEnd]);
+
+  const handleReturnToOutputView = () => {
+    setIsChatMode(false);
+    setIsInputPanelVisible(false);
+    setActivePanel('output');
   };
 
   const handleOpenSaveModal = () => {
     const canSaveReview = !!reviewFeedback && !isChatMode && !isLoading && !error;
-    if (!canSaveReview) return;
+    const canSaveFinalization = chatContext === 'finalizing' && !!revisedCode;
+    if (!canSaveReview && !canSaveFinalization) return;
     setVersionName(`SYS_SAVE // ${new Date().toLocaleString()}`);
     setIsSaveModalOpen(true);
   };
 
   const handleConfirmSaveVersion = () => {
-    if (!versionName.trim() || !reviewFeedback || !fullCodeForReview) return;
+    if (!versionName.trim()) return;
+    if (chatContext !== 'finalizing' && (!reviewFeedback || !fullCodeForReview)) return;
     
+    const isFinalizing = chatContext === 'finalizing' || outputType === 'finalizing';
+    let versionType: Version['type'] = 'review';
+    
+    if (isFinalizing) {
+        versionType = 'finalization';
+    } else if (outputType === 'docs' || outputType === 'tests' || outputType === 'commit') {
+        versionType = outputType;
+    }
+
     const newVersion: Version = {
       id: `v_${Date.now()}`,
       name: versionName.trim(),
-      userCode: userOnlyCode, // In comparison mode, this is Code A
-      fullPrompt: fullCodeForReview,
-      feedback: reviewFeedback,
+      userCode: reviewedCode || userOnlyCode, // The original code A before revision
+      fullPrompt: isFinalizing && finalizationBriefing ? finalizationBriefing : fullCodeForReview,
+      feedback: isFinalizing && revisedCode ? revisedCode : reviewFeedback!,
       language,
       timestamp: Date.now(),
-      chatRevisions,
-      rawFeatureMatrixJson: rawFeatureMatrixJson,
+      type: versionType,
+      chatRevisions: isFinalizing ? [] : chatRevisions,
+      rawFeatureMatrixJson: isFinalizing ? rawFeatureMatrixJson : null,
     };
 
     setVersions(prevVersions => [newVersion, ...prevVersions]);
@@ -891,16 +995,18 @@ const App: React.FC = () => {
       setAppMode('single');
     }
 
-    if (version.fullPrompt.includes(DOCS_INSTRUCTION)) {
+    if (version.type === 'docs' || version.fullPrompt.includes(DOCS_INSTRUCTION)) {
       setOutputType('docs');
-    } else if (version.fullPrompt.includes(GENERATE_TESTS_INSTRUCTION)) {
+    } else if (version.type === 'tests' || version.fullPrompt.includes(GENERATE_TESTS_INSTRUCTION)) {
       setOutputType('tests');
+    } else if (version.type === 'commit') {
+      setOutputType('commit');
+    } else if (version.type === 'finalization' || version.rawFeatureMatrixJson) {
+      setOutputType('revise');
     } else if (version.fullPrompt.includes(EXPLAIN_CODE_INSTRUCTION)) {
       setOutputType('explain-selection');
     } else if (version.fullPrompt.includes(REVIEW_SELECTION_INSTRUCTION)) {
       setOutputType('review-selection');
-    } else if (version.rawFeatureMatrixJson) {
-      setOutputType('revise');
     } else {
       setOutputType('review');
     }
@@ -915,6 +1021,7 @@ const App: React.FC = () => {
   const handleExportSession = () => {
     const sessionData = {
       versions,
+      projectFiles,
       userOnlyCode,
       language,
       reviewProfile,
@@ -953,10 +1060,13 @@ const App: React.FC = () => {
         if (typeof text !== 'string') throw new Error("File is not a text file.");
         const data = JSON.parse(text);
 
-        if (!Array.isArray(data.versions)) throw new Error("Invalid session file format.");
-
-        resetAndSetMode('debug');
+        if (!Array.isArray(data.versions)) throw new Error("Invalid session file: 'versions' is missing or not an array.");
+        
+        // Perform a direct state load from the imported file.
+        // This is more robust than chaining a reset function with setters.
         setVersions(data.versions ?? []);
+        setProjectFiles(data.projectFiles ?? []);
+        setAppMode(data.appMode ?? 'debug');
         setUserOnlyCode(data.userOnlyCode ?? '');
         setLanguage(data.language ?? SUPPORTED_LANGUAGES[0].value);
         setReviewProfile(data.reviewProfile ?? 'none');
@@ -968,30 +1078,34 @@ const App: React.FC = () => {
         setChatRevisions(data.chatRevisions ?? []);
         setErrorMessage(data.errorMessage ?? '');
         setRawFeatureMatrixJson(data.rawFeatureMatrixJson ?? null);
+        setCodeB(data.codeB ?? '');
+        setComparisonGoal(data.comparisonGoal ?? '');
         
         const chatHistoryWithIds = (data.chatHistory ?? []).map((msg: Omit<ChatMessage, 'id'>, index: number) => ({
           ...msg,
           id: `imported_${Date.now()}_${index}`
         }));
         setChatHistory(chatHistoryWithIds);
-
-        setAppMode(data.appMode ?? 'debug');
-        setCodeB(data.codeB ?? '');
-        setComparisonGoal(data.comparisonGoal ?? '');
         
-        addToast('Session imported successfully!', 'success');
-        setIsInputPanelVisible(false);
+        const wasInChat = chatHistoryWithIds.length > 0;
+        setIsInputPanelVisible(!wasInChat);
+        setIsChatMode(wasInChat);
+        setActivePanel(wasInChat ? 'input' : 'output');
 
+        setError(null);
+        setOutputType(null);
+        setChatSession(null);
 
-        if (ai && chatHistoryWithIds.length > 0 && data.fullCodeForReview && data.reviewFeedback) {
+        // Restore chat session with full history if applicable
+        if (ai && wasInChat && data.fullCodeForReview && data.reviewFeedback) {
             const historyForAPI: {role: 'user' | 'model', parts: {text: string}[]}[] = [
                 { role: 'user', parts: [{ text: data.fullCodeForReview }] },
                 { role: 'model', parts: [{ text: data.reviewFeedback }] }
             ];
 
-            const qaPairs = chatHistoryWithIds.slice(1);
-            qaPairs.forEach((msg: ChatMessage) => {
-                historyForAPI.push({ role: msg.role as 'user' | 'model', parts: [{ text: msg.content }] });
+            const subsequentChatMessages = chatHistoryWithIds.slice(1);
+            subsequentChatMessages.forEach((msg: ChatMessage) => {
+                historyForAPI.push({ role: msg.role, parts: [{ text: msg.content }] });
             });
 
             const newChat = ai.chats.create({
@@ -1000,16 +1114,19 @@ const App: React.FC = () => {
                 config: { systemInstruction: getSystemInstructionForReview() }
             });
             setChatSession(newChat);
-            setIsChatMode(true);
-            setIsInputPanelVisible(true);
-        } else {
-            setIsChatMode(false);
         }
+        
+        addToast('Session imported successfully!', 'success');
+
       } catch (err) {
         const msg = err instanceof Error ? `Import failed: ${err.message}` : "Import failed: Invalid file.";
         console.error("Failed to import session:", err);
         setError(msg);
         addToast(msg, 'error');
+      } finally {
+        if(event.target) {
+            event.target.value = '';
+        }
       }
     };
     reader.onerror = () => {
@@ -1018,14 +1135,144 @@ const App: React.FC = () => {
         addToast(msg, 'error');
     }
     reader.readAsText(file);
-    
-    if(event.target) {
-      event.target.value = '';
+  };
+  
+  const handleDownloadAsFile = (content: string, filename: string, mimeType: string = 'text/markdown;charset=utf-8') => {
+    const isBase64 = !mimeType.startsWith('text/');
+    const byteString = isBase64 ? atob(content) : content;
+    const buffer = new ArrayBuffer(byteString.length);
+    const intArray = new Uint8Array(buffer);
+    for (let i = 0; i < byteString.length; i++) {
+        intArray[i] = byteString.charCodeAt(i);
     }
+    const blob = new Blob([buffer], { type: mimeType });
+    
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    addToast(`${filename} downloaded.`, 'success');
   };
 
   const handleImportClick = () => {
-    fileInputRef.current?.click();
+    importFileInputRef.current?.click();
+  };
+
+  const handleAttachFileClick = () => {
+    attachFileInputRef.current?.click();
+  };
+
+  const handleFileAttach = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const MAX_SIZE_MB = 10;
+    if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+      addToast(`File size exceeds ${MAX_SIZE_MB}MB limit.`, 'error');
+      return;
+    }
+    
+    const isImage = file.type.startsWith('image/');
+    const isText = file.type.startsWith('text/') || file.type.includes('json') || /\.(log|md|txt)$/i.test(file.name);
+    
+    if (!isImage && !isText) {
+      addToast(`Unsupported file type: ${file.type || 'unknown'}. Please use common image or text formats.`, 'error');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const result = e.target?.result as string;
+      if (!result) {
+        addToast('Failed to read file content.', 'error');
+        return;
+      }
+      setAttachedFile(file);
+      setFileMimeType(file.type);
+      if (isImage) {
+        setFileContent(result.split(',')[1]); // Store only base64 part
+      } else {
+        setFileContent(result); // Store raw text content
+      }
+    };
+    reader.onerror = () => addToast('Error reading file.', 'error');
+
+    if (isImage) {
+      reader.readAsDataURL(file);
+    } else {
+      reader.readAsText(file);
+    }
+
+    if (event.target) {
+        event.target.value = ''; // Allow re-selecting the same file
+    }
+  };
+
+  const handleLoadRevisionIntoEditor = () => {
+    if (!revisedCode) {
+        addToast('No revised code available to load.', 'error');
+        return;
+    }
+    const targetMode = appMode === 'comparison' ? 'single' : appMode;
+    resetAndSetMode(targetMode);
+    setUserOnlyCode(revisedCode);
+    setReviewedCode(revisedCode); // Set it as reviewed to allow for another cycle
+    setIsInputPanelVisible(true);
+    setActivePanel('input');
+    addToast('Revision loaded into editor.', 'success');
+  };
+  
+  const handleSaveFileToProject = (file: File) => {
+    const MAX_SIZE_MB = 10;
+    if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+      addToast(`File size exceeds ${MAX_SIZE_MB}MB limit.`, 'error');
+      return;
+    }
+    
+    const isImage = file.type.startsWith('image/');
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const result = e.target?.result as string;
+      if (!result) {
+        addToast('Failed to read file content.', 'error');
+        return;
+      }
+      const newFile: ProjectFile = {
+        id: `file_${Date.now()}`,
+        name: file.name,
+        mimeType: file.type,
+        timestamp: Date.now(),
+        content: isImage ? result.split(',')[1] : result,
+      };
+      setProjectFiles(prev => [...prev, newFile]);
+      addToast(`File "${file.name}" saved to project.`, 'success');
+    };
+    reader.onerror = () => addToast('Error reading file.', 'error');
+
+    if (isImage) {
+      reader.readAsDataURL(file);
+    } else {
+      reader.readAsText(file);
+    }
+  };
+
+  const handleDeleteProjectFile = (fileId: string) => {
+    setProjectFiles(prev => prev.filter(f => f.id !== fileId));
+    addToast('Project file deleted.', 'info');
+  };
+
+  const handleAttachProjectFile = (file: ProjectFile) => {
+    const mockFile = new File([file.content], file.name, { type: file.mimeType });
+    setAttachedFile(mockFile);
+    setFileContent(file.content);
+    setFileMimeType(file.mimeType);
+    setIsProjectFilesModalOpen(false);
+    addToast(`Attached "${file.name}" to message.`, 'info');
   };
 
   return (
@@ -1039,7 +1286,8 @@ const App: React.FC = () => {
         onImportClick={handleImportClick}
         onExportSession={handleExportSession}
         onGenerateTests={handleGenerateTests}
-        onGenerateDocs={handleGenerateDocs}
+        onOpenDocsModal={() => setIsDocsModalOpen(true)}
+        onOpenProjectFilesModal={() => setIsProjectFilesModalOpen(true)}
         onToggleVersionHistory={() => setIsVersionHistoryModalOpen(true)}
         isToolsEnabled={userOnlyCode.trim() !== '' && !isChatMode && (appMode === 'single' || appMode === 'debug')}
         isLoading={isLoading || isChatLoading}
@@ -1052,10 +1300,12 @@ const App: React.FC = () => {
         onNewReview={() => resetAndSetMode('debug')}
         isFollowUpAvailable={reviewAvailable}
         onStartFollowUp={handleStartFollowUp}
+        isChatMode={isChatMode}
+        onEndChatSession={handleEndGeneralChat}
       />
       <ApiKeyBanner />
       <main className={`flex-grow container mx-auto p-4 sm:p-6 lg:p-8 grid grid-cols-1 ${isInputPanelVisible && showOutputPanel && !isChatMode ? 'md:grid-cols-2' : ''} gap-6 lg:gap-8 animate-fade-in overflow-hidden`}>
-          {isInputPanelVisible && (
+          {isInputPanelVisible && !isChatMode && (
             <div className={`min-h-0 ${isChatMode ? 'md:col-span-2' : ''}`} onClick={() => !isChatMode && setActivePanel('input')}>
               {appMode === 'single' || appMode === 'debug' ? (
                   <CodeInput
@@ -1077,7 +1327,8 @@ const App: React.FC = () => {
                     loadingAction={loadingAction}
                     isChatMode={isChatMode}
                     onNewReview={() => resetAndSetMode(appMode)}
-                    onEndChat={handleEndChat}
+                    onFinalizeFeatureDiscussion={handleFinalizeFeatureDiscussion}
+                    onReturnToOutputView={handleReturnToOutputView}
                     onFollowUpSubmit={handleFollowUpSubmit}
                     chatHistory={chatHistory}
                     chatInputValue={chatInputValue}
@@ -1088,13 +1339,20 @@ const App: React.FC = () => {
                     appMode={appMode}
                     codeB={codeB}
                     onCodeLineClick={handleCodeLineClick}
-                    initialRevisedCode={revisedCode}
+                    revisedCode={revisedCode}
                     chatRevisions={chatRevisions}
                     onClearChatRevisions={handleClearChatRevisions}
                     onRenameChatRevision={handleRenameChatRevision}
+                    onDeleteChatRevision={handleDeleteChatRevision}
                     chatContext={chatContext}
                     activeFeatureForDiscussion={activeFeatureForDiscussion}
                     finalizationSummary={finalizationSummary}
+                    onOpenSaveModal={handleOpenSaveModal}
+                    onLoadRevisionIntoEditor={handleLoadRevisionIntoEditor}
+                    attachedFile={attachedFile}
+                    onAttachFileClick={handleAttachFileClick}
+                    onRemoveFile={handleRemoveFile}
+                    onOpenProjectFilesModal={() => setIsProjectFilesModalOpen(true)}
                   />
               ) : (
                   <ComparisonInput 
@@ -1113,7 +1371,8 @@ const App: React.FC = () => {
                     loadingAction={loadingAction}
                     isActive={activePanel === 'input'}
                     onNewReview={() => resetAndSetMode('comparison')}
-                    onEndChat={handleEndChat}
+                    onFinalizeFeatureDiscussion={handleFinalizeFeatureDiscussion}
+                    onReturnToOutputView={handleReturnToOutputView}
                     isChatMode={isChatMode}
                     onFollowUpSubmit={handleFollowUpSubmit}
                     chatHistory={chatHistory}
@@ -1123,15 +1382,118 @@ const App: React.FC = () => {
                     originalReviewedCode={reviewedCode}
                     appMode={appMode}
                     onCodeLineClick={handleCodeLineClick}
-                    initialRevisedCode={revisedCode}
+                    revisedCode={revisedCode}
                     chatRevisions={chatRevisions}
                     onClearChatRevisions={handleClearChatRevisions}
                     onRenameChatRevision={handleRenameChatRevision}
+                    onDeleteChatRevision={handleDeleteChatRevision}
                     chatContext={chatContext}
                     activeFeatureForDiscussion={activeFeatureForDiscussion}
                     finalizationSummary={finalizationSummary}
+                    onOpenSaveModal={handleOpenSaveModal}
+                    onLoadRevisionIntoEditor={handleLoadRevisionIntoEditor}
+                    attachedFile={attachedFile}
+                    onAttachFileClick={handleAttachFileClick}
+                    onRemoveFile={handleRemoveFile}
+                    onOpenProjectFilesModal={() => setIsProjectFilesModalOpen(true)}
                   />
               )}
+            </div>
+          )}
+
+          {isChatMode && (
+             <div className="md:col-span-2 min-h-0" onClick={() => setActivePanel('input')}>
+                {appMode === 'single' || appMode === 'debug' ? (
+                     <CodeInput
+                        userCode={userOnlyCode}
+                        setUserCode={setUserOnlyCode}
+                        errorMessage={errorMessage}
+                        setErrorMessage={setErrorMessage}
+                        language={language}
+                        setLanguage={setLanguage}
+                        reviewProfile={reviewProfile}
+                        setReviewProfile={setReviewProfile}
+                        customReviewProfile={customReviewProfile}
+                        setCustomReviewProfile={setCustomReviewProfile}
+                        onSubmit={handleReviewSubmit}
+                        onExplainSelection={handleExplainSelection}
+                        onReviewSelection={handleReviewSelection}
+                        isLoading={isLoading}
+                        isChatLoading={isChatLoading}
+                        loadingAction={loadingAction}
+                        isChatMode={isChatMode}
+                        onNewReview={() => resetAndSetMode(appMode)}
+                        onFinalizeFeatureDiscussion={handleFinalizeFeatureDiscussion}
+                        onReturnToOutputView={handleReturnToOutputView}
+                        onFollowUpSubmit={handleFollowUpSubmit}
+                        chatHistory={chatHistory}
+                        chatInputValue={chatInputValue}
+                        setChatInputValue={setChatInputValue}
+                        isActive={activePanel === 'input'}
+                        onStopGenerating={handleStopGenerating}
+                        originalReviewedCode={reviewedCode}
+                        appMode={appMode}
+                        codeB={codeB}
+                        onCodeLineClick={handleCodeLineClick}
+                        revisedCode={revisedCode}
+                        chatRevisions={chatRevisions}
+                        onClearChatRevisions={handleClearChatRevisions}
+                        onRenameChatRevision={handleRenameChatRevision}
+                        onDeleteChatRevision={handleDeleteChatRevision}
+                        chatContext={chatContext}
+                        activeFeatureForDiscussion={activeFeatureForDiscussion}
+                        finalizationSummary={finalizationSummary}
+                        onOpenSaveModal={handleOpenSaveModal}
+                        onLoadRevisionIntoEditor={handleLoadRevisionIntoEditor}
+                        attachedFile={attachedFile}
+                        onAttachFileClick={handleAttachFileClick}
+                        onRemoveFile={handleRemoveFile}
+                        onOpenProjectFilesModal={() => setIsProjectFilesModalOpen(true)}
+                    />
+                ) : (
+                    <ComparisonInput 
+                        codeA={userOnlyCode}
+                        setCodeA={setUserOnlyCode}
+                        codeB={codeB}
+                        setCodeB={setCodeB}
+                        language={language}
+                        setLanguage={setLanguage}
+                        goal={comparisonGoal}
+                        setGoal={setComparisonGoal}
+                        onSubmit={handleCompareAndOptimize}
+                        onCompareAndRevise={handleCompareAndRevise}
+                        isLoading={isLoading}
+                        isChatLoading={isChatLoading}
+                        loadingAction={loadingAction}
+                        isActive={activePanel === 'input'}
+                        onNewReview={() => resetAndSetMode('comparison')}
+                        onFinalizeFeatureDiscussion={handleFinalizeFeatureDiscussion}
+                        onReturnToOutputView={handleReturnToOutputView}
+                        isChatMode={isChatMode}
+                        onFollowUpSubmit={handleFollowUpSubmit}
+                        chatHistory={chatHistory}
+                        chatInputValue={chatInputValue}
+                        setChatInputValue={setChatInputValue}
+                        onStopGenerating={handleStopGenerating}
+                        originalReviewedCode={reviewedCode}
+                        appMode={appMode}
+                        onCodeLineClick={handleCodeLineClick}
+                        revisedCode={revisedCode}
+                        chatRevisions={chatRevisions}
+                        onClearChatRevisions={handleClearChatRevisions}
+                        onRenameChatRevision={handleRenameChatRevision}
+                        onDeleteChatRevision={handleDeleteChatRevision}
+                        chatContext={chatContext}
+                        activeFeatureForDiscussion={activeFeatureForDiscussion}
+                        finalizationSummary={finalizationSummary}
+                        onOpenSaveModal={handleOpenSaveModal}
+                        onLoadRevisionIntoEditor={handleLoadRevisionIntoEditor}
+                        attachedFile={attachedFile}
+                        onAttachFileClick={handleAttachFileClick}
+                        onRemoveFile={handleRemoveFile}
+                        onOpenProjectFilesModal={() => setIsProjectFilesModalOpen(true)}
+                  />
+                )}
             </div>
           )}
           
@@ -1160,6 +1522,7 @@ const App: React.FC = () => {
                   onFeatureDecision={handleFeatureDecision}
                   allFeaturesDecided={allFeaturesDecided}
                   onFinalize={handleFinalizeRevision}
+                  onDownloadOutput={() => handleDownloadAsFile(reviewFeedback!, 'documentation.md')}
                 />
             </div>
           )}
@@ -1170,10 +1533,17 @@ const App: React.FC = () => {
           </div>
           <input 
             type="file" 
-            ref={fileInputRef} 
+            ref={importFileInputRef} 
             onChange={handleImportSession}
             style={{ display: 'none' }} 
             accept=".json,application/json" 
+          />
+          <input
+            type="file"
+            ref={attachFileInputRef}
+            onChange={handleFileAttach}
+            style={{ display: 'none' }}
+            accept="image/png, image/jpeg, image/gif, image/webp, text/plain, .md, .log, .json, .txt, .js, .ts, .py, .java, .cs, .cpp, .go, .rb, .php, .html, .css, .sql, .sh"
           />
           <ToastContainer toasts={toasts} onDismiss={removeToast} />
       </footer>
@@ -1199,6 +1569,25 @@ const App: React.FC = () => {
         onLoadVersion={handleLoadVersion}
         onDeleteVersion={handleDeleteVersion}
         onStartFollowUp={handleStartFollowUp}
+      />
+      <DocumentationCenterModal
+        isOpen={isDocsModalOpen}
+        onClose={() => setIsDocsModalOpen(false)}
+        versions={versions}
+        currentUserCode={userOnlyCode}
+        onGenerate={handleTriggerDocsGeneration}
+        onLoadVersion={handleLoadVersion}
+        onDeleteVersion={handleDeleteVersion}
+        onDownload={(c, f) => handleDownloadAsFile(c, f)}
+      />
+      <ProjectFilesModal
+        isOpen={isProjectFilesModalOpen}
+        onClose={() => setIsProjectFilesModalOpen(false)}
+        projectFiles={projectFiles}
+        onUploadFile={handleSaveFileToProject}
+        onDeleteFile={handleDeleteProjectFile}
+        onAttachFile={handleAttachProjectFile}
+        onDownloadFile={handleDownloadAsFile}
       />
     </div>
   );

@@ -1,16 +1,13 @@
-
-
-
-
 import React, { useState, useRef, useEffect } from 'react';
-import { SaveIcon, ImportIcon, ExportIcon, AnimatedMenuIcon, BoltIcon, LogoIcon, ChatIcon, HistoryIcon, EyeIcon, EyeOffIcon, CodeIcon, CompareIcon as CompareIconSvg, BugIcon } from './Icons.tsx';
+import { SaveIcon, ImportIcon, ExportIcon, AnimatedMenuIcon, BoltIcon, LogoIcon, ChatIcon, HistoryIcon, EyeIcon, EyeOffIcon, CodeIcon, CompareIcon as CompareIconSvg, BugIcon, DocsIcon, FolderIcon } from './Icons.tsx';
 import { Toast } from '../types.ts';
 
 interface HeaderProps {
     onImportClick: () => void;
     onExportSession: () => void;
     onGenerateTests: () => void;
-    onGenerateDocs: () => void;
+    onOpenDocsModal: () => void;
+    onOpenProjectFilesModal: () => void;
     onToggleVersionHistory: () => void;
     isToolsEnabled: boolean;
     isLoading: boolean;
@@ -23,6 +20,8 @@ interface HeaderProps {
     onNewReview: () => void; // Kept for the clear button functionality
     isFollowUpAvailable: boolean;
     onStartFollowUp: () => void;
+    isChatMode: boolean;
+    onEndChatSession: () => void;
 }
 
 const MenuItem: React.FC<{ onClick: () => void; disabled?: boolean; children: React.ReactNode; }> = ({ onClick, disabled, children }) => (
@@ -47,7 +46,8 @@ export const Header: React.FC<HeaderProps> = ({
     onImportClick, 
     onExportSession, 
     onGenerateTests,
-    onGenerateDocs,
+    onOpenDocsModal,
+    onOpenProjectFilesModal,
     onToggleVersionHistory,
     isToolsEnabled,
     isLoading,
@@ -59,6 +59,8 @@ export const Header: React.FC<HeaderProps> = ({
     onToggleInputPanel,
     isFollowUpAvailable,
     onStartFollowUp,
+    isChatMode,
+    onEndChatSession
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -125,16 +127,22 @@ export const Header: React.FC<HeaderProps> = ({
                             <MenuItem onClick={() => handleMenuClick(onGenerateTests)} disabled={!isToolsEnabled || isLoading}>
                                 <BoltIcon className="w-4 h-4" /> Generate Unit Tests
                             </MenuItem>
-                            <MenuItem onClick={() => handleMenuClick(onGenerateDocs)} disabled={!isToolsEnabled || isLoading}>
-                                <BoltIcon className="w-4 h-4" /> Generate Documentation
+                            <MenuItem onClick={() => handleMenuClick(onOpenDocsModal)} disabled={!isToolsEnabled || isLoading}>
+                                <DocsIcon className="w-4 h-4" /> Generate Documentation
                             </MenuItem>
                              <MenuItem onClick={() => handleMenuClick(onStartFollowUp)} disabled={!isFollowUpAvailable || isLoading}>
                                 <ChatIcon className="w-4 h-4" /> Follow-up Chat
                             </MenuItem>
 
-                            <MenuDivider label="Data" />
+                            <MenuDivider label="Session" />
+                             <MenuItem onClick={() => handleMenuClick(onEndChatSession)} disabled={!isChatMode || isLoading}>
+                                <SaveIcon className="w-4 h-4" /> End & Save Chat
+                            </MenuItem>
                             <MenuItem onClick={() => handleMenuClick(onToggleVersionHistory)} disabled={isLoading}>
                                 <HistoryIcon className="w-4 h-4" /> Version History
+                            </MenuItem>
+                             <MenuItem onClick={() => handleMenuClick(onOpenProjectFilesModal)} disabled={isLoading}>
+                                <FolderIcon className="w-4 h-4" /> Project Files
                             </MenuItem>
                         </div>
                     </div>

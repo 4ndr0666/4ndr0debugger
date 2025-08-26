@@ -46,6 +46,11 @@ export interface ChatMessage {
   id: string;
   role: 'user' | 'model';
   content: string;
+  attachment?: {
+    name: string;
+    mimeType: string;
+    content: string; // data URL for images, raw text for others
+  };
 }
 
 export interface ChatRevision {
@@ -62,8 +67,17 @@ export interface Version {
   feedback: string;
   language: SupportedLanguage;
   timestamp: number;
+  type?: 'review' | 'docs' | 'tests' | 'commit' | 'finalization';
   chatRevisions?: ChatRevision[];
   rawFeatureMatrixJson?: string | null;
+}
+
+export interface ProjectFile {
+  id: string;
+  name: string;
+  content: string; // Base64 for images, raw text for others
+  mimeType: string;
+  timestamp: number;
 }
 
 export interface Feature {
