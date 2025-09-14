@@ -46,11 +46,11 @@ export interface ChatMessage {
   id: string;
   role: 'user' | 'model';
   content: string;
-  attachment?: {
+  attachments?: {
     name: string;
     mimeType: string;
     content: string; // data URL for images, raw text for others
-  };
+  }[];
 }
 
 export interface ChatRevision {
@@ -94,7 +94,7 @@ export interface FeatureDecisionRecord {
   revisedSnippet?: string;
 }
 
-export type LoadingAction = 'review' | 'docs' | 'tests' | 'commit' | 'explain-selection' | 'review-selection' | 'comparison' | 'revise' | 'finalizing' | null;
+export type LoadingAction = 'review' | 'docs' | 'tests' | 'commit' | 'explain-selection' | 'review-selection' | 'comparison' | 'revise' | 'finalizing' | 'generate-name' | null;
 
 export type AppMode = 'debug' | 'single' | 'comparison';
 

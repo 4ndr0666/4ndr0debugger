@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Button } from './Button.tsx';
+import { SparklesIcon } from './Icons.tsx';
+import { ReviewProfile, SupportedLanguage, LoadingAction } from '../types.ts';
 
 interface SaveVersionModalProps {
   isOpen: boolean;
@@ -7,10 +9,46 @@ interface SaveVersionModalProps {
   onSave: () => void;
   versionName: string;
   setVersionName: (name: string) => void;
+  onAutoGenerate: () => void;
+  isGeneratingName: boolean;
+  outputType: LoadingAction;
+  language: SupportedLanguage;
+  reviewProfile: ReviewProfile | 'none';
+  isSavingChat: boolean;
 }
 
-export const SaveVersionModal = ({ isOpen, onClose, onSave, versionName, setVersionName }: SaveVersionModalProps) => {
+export const SaveVersionModal = ({ 
+    isOpen, onClose, onSave, versionName, setVersionName, onAutoGenerate, isGeneratingName,
+    outputType, language, reviewProfile, isSavingChat
+}: SaveVersionModalProps) => {
   if (!isOpen) return null;
+
+  const suggestions = useMemo(() => {
+    const examples: string[] = [];
+    if (isSavingChat) {
+      examples.push(`Chat: ${new Date().toLocaleDateString()}`);
+      examples.push('Debugging Auth Flow');
+      examples.push('Refactoring Session');
+    } else if (outputType === 'docs') {
+      examples.push(`Docs: ${language} Service`);
+      examples.push(`API Documentation for ${language}`);
+    } else if (outputType === 'tests') {
+      examples.push(`Tests: ${language} Utilities`);
+      examples.push(`Unit Tests for Auth Logic`);
+    // FIX: Changed 'finalization' to 'finalizing' to match the LoadingAction type.
+    } else if (outputType === 'finalizing' || outputType === 'revise') {
+      examples.push('Finalized Revision');
+      examples.push('Unified Feature Set');
+    } else { // 'review', 'review-selection', etc.
+      if (reviewProfile !== 'none' && reviewProfile !== 'Custom') {
+        examples.push(`${reviewProfile} Review: ${language}`);
+      }
+      examples.push(`Initial ${language} Refactor`);
+      examples.push(`${language} Logic Cleanup`);
+    }
+    return examples.slice(0, 3); // Max 3 suggestions
+  }, [outputType, language, reviewProfile, isSavingChat]);
+
 
   const handleSaveClick = () => {
     if (versionName.trim()) {
@@ -46,25 +84,57 @@ export const SaveVersionModal = ({ isOpen, onClose, onSave, versionName, setVers
             Save Version
         </h2>
         <div className="space-y-4">
-          <label htmlFor="version-name" className="block text-sm uppercase tracking-wider text-[var(--hud-color-darker)]">
-            Version Name
-          </label>
-          <input
-            id="version-name"
-            type="text"
-            value={versionName}
-            onChange={(e) => setVersionName(e.target.value)}
-            onKeyDown={handleKeyDown}
-            className="block w-full p-2.5 font-mono text-sm text-[var(--hud-color)] bg-black border border-[var(--hud-color-darker)] focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)] focus:border-[var(--hud-color)]"
-            placeholder="e.g., Initial Refactor"
-            autoFocus
-          />
+          <div>
+            <label htmlFor="version-name" className="block text-sm uppercase tracking-wider text-[var(--hud-color-darker)] mb-2">
+              Version Name
+            </label>
+            <div className="relative">
+              <input
+                id="version-name"
+                type="text"
+                value={versionName}
+                onChange={(e) => setVersionName(e.target.value)}
+                onKeyDown={handleKeyDown}
+                className="block w-full p-2.5 pr-12 font-mono text-sm text-[var(--hud-color)] bg-black border border-[var(--hud-color-darker)] focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)] focus:border-[var(--hud-color)]"
+                placeholder="e.g., Initial Refactor"
+                autoFocus
+                disabled={isGeneratingName}
+              />
+              <Button
+                  onClick={onAutoGenerate}
+                  isLoading={isGeneratingName}
+                  disabled={isGeneratingName}
+                  variant="secondary"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 py-2 px-2 h-auto text-xs"
+                  title="Auto-generate name"
+                  aria-label="Auto-generate version name"
+              >
+                  {!isGeneratingName && <SparklesIcon className="w-4 h-4" />}
+              </Button>
+            </div>
+          </div>
+          {suggestions.length > 0 && (
+            <div className="pt-2">
+              <p className="text-xs text-center text-[var(--hud-color-darker)] mb-2 uppercase tracking-wider">Suggestions</p>
+              <div className="flex flex-wrap justify-center gap-2">
+                {suggestions.map((s, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setVersionName(s)}
+                    className="px-2 py-1 font-mono text-xs border border-[var(--hud-color-darkest)] text-[var(--hud-color-darker)] transition-all duration-150 hover:border-[var(--hud-color)] hover:text-[var(--hud-color)] hover:bg-[var(--hud-color)]/10"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         <div className="mt-6 flex justify-end space-x-3">
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSaveClick} disabled={!versionName.trim()}>
+          <Button onClick={handleSaveClick} disabled={!versionName.trim() || isGeneratingName}>
             Save
           </Button>
         </div>

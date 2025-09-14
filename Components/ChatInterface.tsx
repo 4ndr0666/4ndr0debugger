@@ -32,9 +32,9 @@ interface ChatInterfaceProps {
   activeFeatureForDiscussion: Feature | null;
   finalizationSummary: FinalizationSummary | null;
   // Attachment props
-  attachedFile: File | null;
+  attachments: { file: File; content: string; mimeType: string }[];
   onAttachFileClick: () => void;
-  onRemoveFile: () => void;
+  onRemoveAttachment: (file: File) => void;
   onOpenProjectFilesModal: () => void;
 }
 
@@ -51,9 +51,9 @@ const AttachmentPreview: React.FC<{ file: File; onRemove: () => void; }> = ({ fi
     }, [file, isImage]);
 
     return (
-        <div className="absolute bottom-full left-0 right-0 p-2 bg-black/80 border border-b-0 border-[var(--hud-color-darkest)] flex items-center justify-between animate-fade-in">
+        <div className="bg-black/50 border border-[var(--hud-color-darkest)] flex items-center justify-between p-1 rounded-sm">
             <div className="flex items-center gap-2 overflow-hidden">
-                {isImage && previewUrl && <img src={previewUrl} alt="Preview" className="w-10 h-10 object-cover border border-[var(--hud-color-darkest)]" />}
+                {isImage && previewUrl && <img src={previewUrl} alt="Preview" className="w-8 h-8 object-cover border border-[var(--hud-color-darkest)]" />}
                 <div className="text-xs text-[var(--hud-color-darker)] overflow-hidden">
                     <p className="truncate font-mono" title={file.name}>{file.name}</p>
                     <p>{(file.size / 1024).toFixed(1)} KB</p>
@@ -76,7 +76,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
     language, onCodeLineClick, revisedCode,
     chatRevisions, onClearChatRevisions, onRenameChatRevision, onDeleteChatRevision,
     chatContext, activeFeatureForDiscussion, finalizationSummary,
-    attachedFile, onAttachFileClick, onRemoveFile, onOpenProjectFilesModal,
+    attachments, onAttachFileClick, onRemoveAttachment, onOpenProjectFilesModal,
   } = props;
   
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -97,7 +97,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
   }, [chatContext, revisedCode]);
 
   const handleSend = () => {
-    if ((chatInputValue.trim() || attachedFile) && !isChatLoading) {
+    if ((chatInputValue.trim() || attachments.length > 0) && !isChatLoading) {
       onFollowUpSubmit(chatInputValue);
       setChatInputValue('');
     }
@@ -122,19 +122,25 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
   
   const generationComplete = !isChatLoading && chatContext === 'finalizing' && !!revisedCode;
 
-  const renderAttachment = (attachment: ChatMessage['attachment']) => {
-    if (!attachment) return null;
-    const isImage = attachment.mimeType.startsWith('image/');
+  const renderAttachments = (attachments?: ChatMessage['attachments']) => {
+    if (!attachments || attachments.length === 0) return null;
     return (
-      <div className="mb-2 border border-[var(--hud-color-darkest)] bg-black/30 p-2">
-        {isImage ? (
-          <img src={attachment.content} alt={attachment.name} className="max-w-xs max-h-48 object-contain" />
-        ) : (
-          <div className="text-xs text-[var(--hud-color-darker)]">
-            <p className="font-mono font-bold text-[var(--hud-color)]">{attachment.name}</p>
-            <p>Content included in prompt.</p>
-          </div>
-        )}
+      <div className="mb-2 space-y-2">
+        {attachments.map((att, index) => {
+          const isImage = att.mimeType.startsWith('image/');
+          return (
+            <div key={index} className="border border-[var(--hud-color-darkest)] bg-black/30 p-2">
+              {isImage ? (
+                <img src={att.content} alt={att.name} className="max-w-xs max-h-48 object-contain" />
+              ) : (
+                <div className="text-xs text-[var(--hud-color-darker)]">
+                  <p className="font-mono font-bold text-[var(--hud-color)]">{att.name}</p>
+                  <p>Content included in prompt.</p>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     );
   };
@@ -164,7 +170,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
                             key={msg.id} 
                             className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                             <div className={`max-w-[80%] p-3 text-sm ${msg.role === 'user' ? 'bg-transparent border border-[var(--hud-color-darker)] text-[var(--hud-color)]' : 'bg-[var(--hud-color-darkest)] text-[var(--hud-color-darker)]'}`}>
-                                {msg.role === 'user' && renderAttachment(msg.attachment)}
+                                {msg.role === 'user' && renderAttachments(msg.attachments)}
                                 <MarkdownRenderer markdown={msg.content} />
                             </div>
                             </div>
@@ -210,7 +216,13 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
                 ) : (
                     <>
                     <div className="relative w-full">
-                        {attachedFile && <AttachmentPreview file={attachedFile} onRemove={onRemoveFile} />}
+                        {attachments.length > 0 && (
+                           <div className="absolute bottom-full left-0 right-0 max-h-48 overflow-y-auto bg-black/80 border border-b-0 border-[var(--hud-color-darkest)] p-2 space-y-2 animate-fade-in">
+                                {attachments.map(att => (
+                                    <AttachmentPreview key={att.file.name + att.file.lastModified} file={att.file} onRemove={() => onRemoveAttachment(att.file)} />
+                                ))}
+                            </div>
+                        )}
                         <textarea
                             ref={inputRef}
                             value={chatInputValue}
@@ -232,7 +244,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
                                 : <span className="text-[var(--hud-color-darker)]">Your message...</span> }
                             </span>
                         )}
-                        {appMode === 'debug' && (chatInputValue.trim() || attachedFile) && !isChatLoading && (
+                        {appMode === 'debug' && (chatInputValue.trim() || attachments.length > 0) && !isChatLoading && (
                             <button
                             onClick={handleSend}
                             className="absolute right-3 bottom-2 font-mono text-xs uppercase tracking-widest transition-all duration-200 hover:text-white focus:outline-none animate-fade-in text-[var(--hud-color)] border border-[var(--hud-color)] px-3 py-1.5 hover:bg-[var(--hud-color)]/20"
@@ -256,7 +268,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
                          </button>
                          <button
                            onClick={onAttachFileClick}
-                           disabled={isChatLoading || !!attachedFile}
+                           disabled={isChatLoading}
                            className="p-3 border border-[var(--hud-color-darker)] text-[var(--hud-color-darker)] hover:text-[var(--hud-color)] hover:border-[var(--hud-color)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                            title="Attach new file"
                            aria-label="Attach new file"
@@ -266,7 +278,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
                       </div>
                     )}
                     {appMode !== 'debug' && chatContext !== 'finalizing' && (
-                        <Button onClick={handleSend} isLoading={isChatLoading} disabled={isChatLoading || (!chatInputValue.trim() && !attachedFile)}>
+                        <Button onClick={handleSend} isLoading={isChatLoading} disabled={isChatLoading || (!chatInputValue.trim() && attachments.length === 0)}>
                             Send
                         </Button>
                     )}

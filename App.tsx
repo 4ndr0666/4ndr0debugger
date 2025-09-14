@@ -102,14 +102,15 @@ const App: React.FC = () => {
   const [isDocsModalOpen, setIsDocsModalOpen] = useState(false);
   const [isProjectFilesModalOpen, setIsProjectFilesModalOpen] = useState(false);
   const [versionName, setVersionName] = useState('');
+  const [isSavingChat, setIsSavingChat] = useState(false);
+  const [isGeneratingName, setIsGeneratingName] = useState<boolean>(false);
+
 
   // --- Toast State ---
   const [toasts, setToasts] = useState<Toast[]>([]);
   
   // --- File Attachment & Project Files State ---
-  const [attachedFile, setAttachedFile] = useState<File | null>(null);
-  const [fileContent, setFileContent] = useState<string | null>(null); // base64 for images, raw text for others
-  const [fileMimeType, setFileMimeType] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<{ file: File; content: string; mimeType: string }[]>([]);
   const [projectFiles, setProjectFiles] = usePersistentState<ProjectFile[]>('projectFiles', []);
 
 
@@ -610,13 +611,8 @@ const App: React.FC = () => {
     setIsInputPanelVisible(true);
   }, [reviewFeedback, fullCodeForReview, ai, getSystemInstructionForReview, userOnlyCode, appMode, chatInputValue, reviewedCode, chatContext, activeFeatureForDiscussion, comparisonGoal, chatSession]);
 
-  const handleRemoveFile = () => {
-    setAttachedFile(null);
-    setFileContent(null);
-    setFileMimeType(null);
-    if (attachFileInputRef.current) {
-        attachFileInputRef.current.value = '';
-    }
+  const handleRemoveAttachment = (fileToRemove: File) => {
+    setAttachments(prev => prev.filter(att => att.file !== fileToRemove));
   };
 
   const handleFollowUpSubmit = useCallback(async (message: string, session?: Chat | null) => {
@@ -632,12 +628,12 @@ const App: React.FC = () => {
         content: message,
     };
 
-    if (attachedFile && fileContent && fileMimeType) {
-        userMessageForUi.attachment = {
-            name: attachedFile.name,
-            mimeType: fileMimeType,
-            content: fileMimeType.startsWith('image/') ? `data:${fileMimeType};base64,${fileContent}` : fileContent,
-        };
+    if (attachments.length > 0) {
+        userMessageForUi.attachments = attachments.map(att => ({
+            name: att.file.name,
+            mimeType: att.mimeType,
+            content: att.mimeType.startsWith('image/') ? `data:${att.mimeType};base64,${att.content}` : att.content,
+        }));
     }
 
     setChatHistory(prev => [...prev, userMessageForUi]);
@@ -694,16 +690,18 @@ const App: React.FC = () => {
     type ApiPart = { text: string } | { inlineData: { mimeType: string; data: string } };
     const apiParts: ApiPart[] = [{ text: messageToSend }];
 
-    if (attachedFile && fileContent && fileMimeType) {
-        if (fileMimeType.startsWith('image/')) {
-            apiParts.push({ inlineData: { mimeType: fileMimeType, data: fileContent } });
-        } else {
-            const firstPart = apiParts[0] as { text: string };
-            firstPart.text += `\n\n--- Attached File: ${attachedFile.name} ---\n\n${fileContent}`;
-        }
+    if (attachments.length > 0) {
+        attachments.forEach(att => {
+            if (att.mimeType.startsWith('image/')) {
+                apiParts.push({ inlineData: { mimeType: att.mimeType, data: att.content } });
+            } else {
+                const firstPart = apiParts[0] as { text: string };
+                firstPart.text += `\n\n--- Attached File: ${att.file.name} ---\n\n${att.content}`;
+            }
+        });
     }
     
-    handleRemoveFile(); // Clear file from UI after preparing the payload
+    setAttachments([]); // Clear attachments after preparing the payload
     
     const modelMessageId = `chat_model_${Date.now()}`;
     
@@ -757,7 +755,7 @@ const App: React.FC = () => {
     } finally {
       setIsChatLoading(false);
     }
-  }, [chatSession, revisedCode, chatContext, chatHistory, finalizationSummary, featureMatrix, fullCodeForReview, featureDecisions, language, attachedFile, fileContent, fileMimeType]);
+  }, [chatSession, revisedCode, chatContext, chatHistory, finalizationSummary, featureMatrix, fullCodeForReview, featureDecisions, language, attachments]);
 
   const handleCodeLineClick = (line: string) => {
     setChatInputValue(`Can you explain this line for me?\n\`\`\`\n${line}\n\`\`\``);
@@ -849,31 +847,6 @@ const App: React.FC = () => {
     setErrorMessage('');
   };
 
-  const handleSaveChatAndEnd = () => {
-    // Exclude the initial review message from the chat log to avoid duplication
-    const chatLog = chatHistory.slice(1)
-        .map(msg => `**[${msg.role.toUpperCase()}]**\n\n${msg.content}`)
-        .join('\n\n---\n\n');
-    
-    const feedbackToSave = (reviewFeedback || '') + '\n\n---\n\n## Follow-up Chat History\n\n' + chatLog;
-
-    const newVersion: Version = {
-      id: `v_${Date.now()}`,
-      name: `Follow-up Chat - ${new Date().toLocaleString()}`,
-      userCode: reviewedCode || userOnlyCode,
-      fullPrompt: fullCodeForReview,
-      feedback: feedbackToSave,
-      language,
-      timestamp: Date.now(),
-      chatRevisions,
-      type: 'review',
-    };
-
-    setVersions(prev => [newVersion, ...prev]);
-    addToast("Chat session saved.", "success");
-    resetAndSetMode('debug');
-  };
-
   const handleFinalizeFeatureDiscussion = useCallback(() => {
     if (chatContext === 'feature_discussion' && activeFeatureForDiscussion) {
         const discussionHistory = chatHistory;
@@ -913,16 +886,17 @@ const App: React.FC = () => {
   }, [chatContext, activeFeatureForDiscussion, chatHistory]);
 
   const handleEndGeneralChat = useCallback(() => {
-    if (chatHistory.length > 1) { 
-        if (window.confirm("Save this chat session to your Version History?")) {
-            handleSaveChatAndEnd();
-        } else {
-            resetAndSetMode('debug');
-        }
+    if (chatHistory.length > 1) {
+      // Use the existing save modal for a consistent UX
+      setIsSavingChat(true);
+      setVersionName(`Chat Session - ${new Date().toLocaleString()}`);
+      setIsSaveModalOpen(true);
     } else {
-        resetAndSetMode('debug');
+      // If there's no real chat history, just go back to the start.
+      resetAndSetMode('debug');
     }
-  }, [chatHistory, handleSaveChatAndEnd]);
+  }, [chatHistory]);
+
 
   const handleReturnToOutputView = () => {
     setIsChatMode(false);
@@ -938,9 +912,27 @@ const App: React.FC = () => {
     setIsSaveModalOpen(true);
   };
 
+  const handleCloseSaveModal = () => {
+    // When a user cancels saving a chat, they should return to the chat, not have the app reset.
+    // The reset to debug screen only happens on successful save.
+    setIsSaveModalOpen(false);
+    setIsSavingChat(false); // Always reset the flag
+  };
+
+
   const handleConfirmSaveVersion = () => {
     if (!versionName.trim()) return;
-    if (chatContext !== 'finalizing' && (!reviewFeedback || !fullCodeForReview)) return;
+
+    // Determine the feedback content based on whether we are saving a chat session
+    let feedbackToSave = reviewFeedback!;
+    if (isSavingChat) {
+      const chatLog = chatHistory.slice(1) // Exclude initial review from log
+        .map(msg => `**[${msg.role.toUpperCase()}]**\n\n${msg.content}`)
+        .join('\n\n---\n\n');
+      feedbackToSave = (reviewFeedback || '') + '\n\n---\n\n## Follow-up Chat History\n\n' + chatLog;
+    }
+    
+    if (chatContext !== 'finalizing' && (!feedbackToSave || !fullCodeForReview)) return;
     
     const isFinalizing = chatContext === 'finalizing' || outputType === 'finalizing';
     let versionType: Version['type'] = 'review';
@@ -956,7 +948,7 @@ const App: React.FC = () => {
       name: versionName.trim(),
       userCode: reviewedCode || userOnlyCode, // The original code A before revision
       fullPrompt: isFinalizing && finalizationBriefing ? finalizationBriefing : fullCodeForReview,
-      feedback: isFinalizing && revisedCode ? revisedCode : reviewFeedback!,
+      feedback: isFinalizing && revisedCode ? revisedCode : feedbackToSave,
       language,
       timestamp: Date.now(),
       type: versionType,
@@ -968,8 +960,43 @@ const App: React.FC = () => {
     setIsSaveModalOpen(false);
     setVersionName('');
     addToast('Version saved successfully!', 'success');
+    
+    if (isSavingChat) {
+      resetAndSetMode('debug');
+      setIsSavingChat(false);
+    }
   };
   
+  const handleGenerateVersionName = useCallback(async () => {
+    if (!ai || !reviewedCode) {
+        addToast("Cannot generate name without code context.", "error");
+        return;
+    }
+
+    setIsGeneratingName(true);
+    setLoadingAction('generate-name');
+
+    const prompt = `Based on the following code and its review feedback (if available), generate a short, descriptive version name (under 50 characters). Respond with ONLY the name itself, with no extra formatting, quotes, or explanation.\n\n### Code:\n\`\`\`${language}\n${reviewedCode}\n\`\`\`\n\n### Review Feedback:\n${reviewFeedback || "No feedback provided."}`;
+    
+    try {
+        const response = await ai.models.generateContent({
+            model: GEMINI_MODELS.FAST_TASKS,
+            contents: prompt,
+        });
+
+        const generatedName = response.text.trim().replace(/["']/g, ''); // Clean up quotes
+        setVersionName(generatedName);
+        addToast("Version name generated.", "success");
+    } catch (apiError) {
+        console.error("Version Name Generation Error:", apiError);
+        const message = apiError instanceof Error ? apiError.message : "An unexpected error occurred.";
+        addToast(`Failed to generate name: ${message}`, 'error');
+    } finally {
+        setIsGeneratingName(false);
+        setLoadingAction(null);
+    }
+  }, [ai, reviewedCode, reviewFeedback, language]);
+
   const handleLoadVersion = (version: Version) => {
     resetAndSetMode('single'); // Reset with a temporary mode
 
@@ -1167,48 +1194,49 @@ const App: React.FC = () => {
   };
 
   const handleFileAttach = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
 
     const MAX_SIZE_MB = 10;
-    if (file.size > MAX_SIZE_MB * 1024 * 1024) {
-      addToast(`File size exceeds ${MAX_SIZE_MB}MB limit.`, 'error');
-      return;
-    }
-    
-    const isImage = file.type.startsWith('image/');
-    const isText = file.type.startsWith('text/') || file.type.includes('json') || /\.(log|md|txt)$/i.test(file.name);
-    
-    if (!isImage && !isText) {
-      addToast(`Unsupported file type: ${file.type || 'unknown'}. Please use common image or text formats.`, 'error');
-      return;
-    }
+    const newAttachmentsPromises = Array.from(files).map(file => {
+        return new Promise<{ file: File; content: string; mimeType: string }>((resolve, reject) => {
+            if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+                return reject(new Error(`File "${file.name}" exceeds ${MAX_SIZE_MB}MB limit.`));
+            }
+            const isImage = file.type.startsWith('image/');
+            const isText = file.type.startsWith('text/') || file.type.includes('json') || /\.(log|md|txt)$/i.test(file.name);
+            if (!isImage && !isText) {
+                return reject(new Error(`Unsupported file type for "${file.name}": ${file.type || 'unknown'}.`));
+            }
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const result = e.target?.result as string;
-      if (!result) {
-        addToast('Failed to read file content.', 'error');
-        return;
-      }
-      setAttachedFile(file);
-      setFileMimeType(file.type);
-      if (isImage) {
-        setFileContent(result.split(',')[1]); // Store only base64 part
-      } else {
-        setFileContent(result); // Store raw text content
-      }
-    };
-    reader.onerror = () => addToast('Error reading file.', 'error');
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const result = e.target?.result as string;
+                if (!result) return reject(new Error(`Failed to read file: ${file.name}`));
+                
+                const content = isImage ? result.split(',')[1] : result;
+                resolve({ file, content, mimeType: file.type });
+            };
+            reader.onerror = () => reject(new Error(`Error reading file: ${file.name}`));
 
-    if (isImage) {
-      reader.readAsDataURL(file);
-    } else {
-      reader.readAsText(file);
-    }
+            if (isImage) {
+                reader.readAsDataURL(file);
+            } else {
+                reader.readAsText(file);
+            }
+        });
+    });
+
+    Promise.all(newAttachmentsPromises)
+        .then(newAttachments => {
+            setAttachments(prev => [...prev, ...newAttachments]);
+        })
+        .catch(error => {
+            addToast(error.message, 'error');
+        });
 
     if (event.target) {
-        event.target.value = ''; // Allow re-selecting the same file
+        event.target.value = ''; // Allow re-selecting the same file(s)
     }
   };
 
@@ -1268,9 +1296,11 @@ const App: React.FC = () => {
 
   const handleAttachProjectFile = (file: ProjectFile) => {
     const mockFile = new File([file.content], file.name, { type: file.mimeType });
-    setAttachedFile(mockFile);
-    setFileContent(file.content);
-    setFileMimeType(file.mimeType);
+    setAttachments(prev => [...prev, {
+        file: mockFile,
+        content: file.content,
+        mimeType: file.mimeType,
+    }]);
     setIsProjectFilesModalOpen(false);
     addToast(`Attached "${file.name}" to message.`, 'info');
   };
@@ -1349,9 +1379,9 @@ const App: React.FC = () => {
                     finalizationSummary={finalizationSummary}
                     onOpenSaveModal={handleOpenSaveModal}
                     onLoadRevisionIntoEditor={handleLoadRevisionIntoEditor}
-                    attachedFile={attachedFile}
+                    attachments={attachments}
                     onAttachFileClick={handleAttachFileClick}
-                    onRemoveFile={handleRemoveFile}
+                    onRemoveAttachment={handleRemoveAttachment}
                     onOpenProjectFilesModal={() => setIsProjectFilesModalOpen(true)}
                   />
               ) : (
@@ -1392,9 +1422,9 @@ const App: React.FC = () => {
                     finalizationSummary={finalizationSummary}
                     onOpenSaveModal={handleOpenSaveModal}
                     onLoadRevisionIntoEditor={handleLoadRevisionIntoEditor}
-                    attachedFile={attachedFile}
+                    attachments={attachments}
                     onAttachFileClick={handleAttachFileClick}
-                    onRemoveFile={handleRemoveFile}
+                    onRemoveAttachment={handleRemoveAttachment}
                     onOpenProjectFilesModal={() => setIsProjectFilesModalOpen(true)}
                   />
               )}
@@ -1445,9 +1475,9 @@ const App: React.FC = () => {
                         finalizationSummary={finalizationSummary}
                         onOpenSaveModal={handleOpenSaveModal}
                         onLoadRevisionIntoEditor={handleLoadRevisionIntoEditor}
-                        attachedFile={attachedFile}
+                        attachments={attachments}
                         onAttachFileClick={handleAttachFileClick}
-                        onRemoveFile={handleRemoveFile}
+                        onRemoveAttachment={handleRemoveAttachment}
                         onOpenProjectFilesModal={() => setIsProjectFilesModalOpen(true)}
                     />
                 ) : (
@@ -1488,9 +1518,9 @@ const App: React.FC = () => {
                         finalizationSummary={finalizationSummary}
                         onOpenSaveModal={handleOpenSaveModal}
                         onLoadRevisionIntoEditor={handleLoadRevisionIntoEditor}
-                        attachedFile={attachedFile}
+                        attachments={attachments}
                         onAttachFileClick={handleAttachFileClick}
-                        onRemoveFile={handleRemoveFile}
+                        onRemoveAttachment={handleRemoveAttachment}
                         onOpenProjectFilesModal={() => setIsProjectFilesModalOpen(true)}
                   />
                 )}
@@ -1544,15 +1574,22 @@ const App: React.FC = () => {
             onChange={handleFileAttach}
             style={{ display: 'none' }}
             accept="image/png, image/jpeg, image/gif, image/webp, text/plain, .md, .log, .json, .txt, .js, .ts, .py, .java, .cs, .cpp, .go, .rb, .php, .html, .css, .sql, .sh"
+            multiple
           />
           <ToastContainer toasts={toasts} onDismiss={removeToast} />
       </footer>
        <SaveVersionModal
           isOpen={isSaveModalOpen}
-          onClose={() => setIsSaveModalOpen(false)}
+          onClose={handleCloseSaveModal}
           onSave={handleConfirmSaveVersion}
           versionName={versionName}
           setVersionName={setVersionName}
+          onAutoGenerate={handleGenerateVersionName}
+          isGeneratingName={isGeneratingName}
+          outputType={outputType}
+          language={language}
+          reviewProfile={reviewProfile}
+          isSavingChat={isSavingChat}
       />
       {isDiffModalOpen && reviewedCode && revisedCode && (
           <DiffViewer 

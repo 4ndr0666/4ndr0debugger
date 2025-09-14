@@ -44,9 +44,9 @@ interface ComparisonInputProps {
   activeFeatureForDiscussion: Feature | null;
   finalizationSummary: FinalizationSummary | null;
   // Attachment props
-  attachedFile: File | null;
+  attachments: { file: File; content: string; mimeType: string }[];
   onAttachFileClick: () => void;
-  onRemoveFile: () => void;
+  onRemoveAttachment: (file: File) => void;
   onOpenProjectFilesModal: () => void;
 }
 
@@ -130,9 +130,9 @@ export const ComparisonInput: React.FC<ComparisonInputProps> = (props) => {
                     onNewReview={onNewReview}
                     onOpenSaveModal={props.onOpenSaveModal}
                     onLoadRevisionIntoEditor={props.onLoadRevisionIntoEditor}
-                    attachedFile={props.attachedFile}
+                    attachments={props.attachments}
                     onAttachFileClick={props.onAttachFileClick}
-                    onRemoveFile={props.onRemoveFile}
+                    onRemoveAttachment={props.onRemoveAttachment}
                     onOpenProjectFilesModal={props.onOpenProjectFilesModal}
                 />
             </div>

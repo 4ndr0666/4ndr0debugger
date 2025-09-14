@@ -1,5 +1,7 @@
+
 import React, { useState, useRef, useEffect } from 'react';
-import { SaveIcon, ImportIcon, ExportIcon, AnimatedMenuIcon, BoltIcon, LogoIcon, ChatIcon, HistoryIcon, EyeIcon, EyeOffIcon, CodeIcon, CompareIcon as CompareIconSvg, BugIcon, DocsIcon, FolderIcon } from './Icons.tsx';
+// FIX: Changed `CompareIcon as CompareIconSvg` to `CompareIconSvg` to import the correct icon after resolving a name collision.
+import { SaveIcon, ImportIcon, ExportIcon, AnimatedMenuIcon, BoltIcon, LogoIcon, ChatIcon, HistoryIcon, EyeIcon, EyeOffIcon, CodeIcon, CompareIconSvg, BugIcon, DocsIcon, FolderIcon } from './Icons.tsx';
 import { Toast } from '../types.ts';
 
 interface HeaderProps {
