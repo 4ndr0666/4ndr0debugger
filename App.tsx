@@ -1,3 +1,5 @@
+
+
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { GoogleGenAI, Chat, Type } from "@google/genai";
 import { Header } from './Components/Header.tsx';
@@ -136,10 +138,39 @@ const App: React.FC = () => {
 
   // Effect to handle starting a feature discussion after state has updated
   useEffect(() => {
+    // FIX: This check was moved from inside handleStartFollowUp to an effect that depends on the state it needs.
+    // This avoids a race condition where the chat would start before the context was fully set.
     if (chatContext === 'feature_discussion' && activeFeatureForDiscussion) {
       handleStartFollowUp();
     }
   }, [chatContext, activeFeatureForDiscussion]);
+
+    // Effect to load state from URL hash on initial mount
+  useEffect(() => {
+    const hash = window.location.hash.slice(1);
+    if (hash) {
+        try {
+            const decodedState = JSON.parse(atob(hash));
+            
+            // Validate and set state
+            if (decodedState.appMode) setAppMode(decodedState.appMode);
+            if (decodedState.language) setLanguage(decodedState.language);
+            if (decodedState.userOnlyCode) setUserOnlyCode(decodedState.userOnlyCode);
+            if (decodedState.codeB) setCodeB(decodedState.codeB);
+            if (decodedState.errorMessage) setErrorMessage(decodedState.errorMessage);
+            if (decodedState.comparisonGoal) setComparisonGoal(decodedState.comparisonGoal);
+            if (decodedState.reviewProfile) setReviewProfile(decodedState.reviewProfile);
+            if (decodedState.customReviewProfile) setCustomReviewProfile(decodedState.customReviewProfile);
+            
+            addToast('Shared session loaded from URL!', 'info');
+            // Clear hash so a refresh doesn't reload it again if user makes changes
+            window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        } catch (e) {
+            console.error("Failed to load state from URL hash:", e);
+            addToast('Could not load shared session from URL.', 'error');
+        }
+    }
+  }, []); // Run only once on mount
 
   const addToast = (message: string, type: Toast['type']) => {
     const id = Date.now();
@@ -405,95 +436,7 @@ const App: React.FC = () => {
     setLoadingAction(null);
   }, [ai, userOnlyCode, language, appMode, isChatMode]);
   
-  const handleExplainSelection = useCallback(async (selection: string) => {
-    setIsLoading(true);
-    setLoadingAction('explain-selection');
-    setOutputType('explain-selection');
-    setIsInputPanelVisible(false);
-    resetForNewRequest();
-
-    const prompt = `${EXPLAIN_CODE_INSTRUCTION}\n\n\`\`\`${language}\n${selection}\n\`\`\``;
-    await performStreamingRequest(prompt, SYSTEM_INSTRUCTION, GEMINI_MODELS.FAST_TASKS);
-
-    setIsLoading(false);
-    setLoadingAction(null);
-  }, [ai, language]);
-  
-  const handleReviewSelection = useCallback(async (selection: string) => {
-    setIsLoading(true);
-    setLoadingAction('review-selection');
-    setOutputType('review-selection');
-    setIsInputPanelVisible(false);
-    resetForNewRequest();
-
-    const prompt = `${REVIEW_SELECTION_INSTRUCTION}\n\n\`\`\`${language}\n${selection}\n\`\`\``;
-    await performStreamingRequest(prompt, getSystemInstructionForReview(), GEMINI_MODELS.CORE_ANALYSIS);
-
-    setIsLoading(false);
-    setLoadingAction(null);
-  }, [ai, language, getSystemInstructionForReview]);
-
-  const handleGenerateCommitMessage = useCallback(async () => {
-      if (!ai || !reviewedCode || !revisedCode) {
-          const msg = "Cannot generate commit message. Original or revised code is missing.";
-          setError(msg);
-          addToast(msg, 'error');
-          return;
-      }
-      
-      setIsLoading(true);
-      setLoadingAction('commit');
-      setOutputType('commit');
-      setIsInputPanelVisible(false);
-      resetForNewRequest();
-
-      const schema = {
-          type: Type.OBJECT,
-          properties: {
-              type: { type: Type.STRING, description: "The conventional commit type (e.g., feat, fix, chore, refactor)." },
-              scope: { type: Type.STRING, description: "Optional scope of the change (e.g., api, db, ui)."},
-              subject: { type: Type.STRING, description: "A short, imperative-mood summary of the change, under 50 chars." },
-              body: { type: Type.STRING, description: "A longer, detailed description of the changes and motivation. Use markdown newlines." }
-          },
-          required: ['type', 'subject', 'body']
-      };
-
-      const prompt = `Based on the following code changes, generate a conventional commit message.\n\n### Original Code:\n\`\`\`${language}\n${reviewedCode}\n\`\`\`\n\n### Revised Code:\n\`\`\`${language}\n${revisedCode}\n\`\`\``;
-
-      try {
-          const response = await ai.models.generateContent({
-              model: GEMINI_MODELS.FAST_TASKS,
-              contents: prompt,
-              config: {
-                  systemInstruction: COMMIT_MESSAGE_SYSTEM_INSTRUCTION,
-                  responseMimeType: 'application/json',
-                  responseSchema: schema,
-              }
-          });
-          
-          const jsonResponse = JSON.parse(response.text);
-          const { type, scope, subject, body } = jsonResponse;
-          const scopeText = scope ? `(${scope})` : '';
-          
-          const header = `${type}${scopeText}: ${subject}`;
-          const gitCommand = `git commit -m "${header}"`;
-
-          const formattedMarkdown = `### Suggested Commit Message\n\n**${header}**\n\n${body.replace(/\n/g, '\n\n')}\n\n---\n\n#### As a git command:\n\`\`\`bash\n${gitCommand}\n\`\`\``;
-          setReviewFeedback(formattedMarkdown);
-
-      } catch (apiError) {
-          console.error("Commit Message API Error:", apiError);
-          const message = apiError instanceof Error ? apiError.message : "An unexpected error occurred.";
-          setError(`Failed to generate commit message: ${message}`);
-          addToast(`Error: ${message}`, 'error');
-          setReviewFeedback(null);
-      } finally {
-          setIsLoading(false);
-          setLoadingAction(null);
-      }
-  }, [ai, reviewedCode, revisedCode, language]);
-
-
+  // FIX: Moved handleStartFollowUp before the functions that call it to resolve the "used before its declaration" error.
   const handleStartFollowUp = useCallback(async (version?: Version, modeOverride?: AppMode) => {
     // If a chat session already exists and we're not loading a new version, just resume it.
     if (chatSession && !version) {
@@ -517,7 +460,7 @@ const App: React.FC = () => {
 
         try {
             const newChat = ai.chats.create({ 
-                model: GEMINI_MODELS.FAST_TASKS, 
+                model: GEMINI_MODELS.CORE_ANALYSIS, 
                 history: [], // Start fresh for this feature
                 config: { systemInstruction }
             });
@@ -597,7 +540,7 @@ const App: React.FC = () => {
         : getSystemInstructionForReview();
 
     const newChat = ai.chats.create({ 
-      model: GEMINI_MODELS.FAST_TASKS, 
+      model: GEMINI_MODELS.CORE_ANALYSIS, 
       history: historyForAPI,
       config: {
         systemInstruction: systemInstructionForChat,
@@ -610,6 +553,109 @@ const App: React.FC = () => {
     setActivePanel('input');
     setIsInputPanelVisible(true);
   }, [reviewFeedback, fullCodeForReview, ai, getSystemInstructionForReview, userOnlyCode, appMode, chatInputValue, reviewedCode, chatContext, activeFeatureForDiscussion, comparisonGoal, chatSession]);
+
+  const handleExplainSelection = useCallback(async (selection: string) => {
+    setIsLoading(true);
+    setLoadingAction('explain-selection');
+    setOutputType('explain-selection');
+    setIsInputPanelVisible(false);
+    resetForNewRequest();
+
+    const prompt = `${EXPLAIN_CODE_INSTRUCTION}\n\n\`\`\`${language}\n${selection}\n\`\`\``;
+    setFullCodeForReview(prompt);
+    setReviewedCode(selection);
+
+    const fullResponse = await performStreamingRequest(prompt, SYSTEM_INSTRUCTION, GEMINI_MODELS.FAST_TASKS);
+
+    if (fullResponse && !abortStreamRef.current) {
+        handleStartFollowUp();
+    }
+
+    setIsLoading(false);
+    setLoadingAction(null);
+  }, [ai, language, handleStartFollowUp]);
+  
+  const handleReviewSelection = useCallback(async (selection: string) => {
+    setIsLoading(true);
+    setLoadingAction('review-selection');
+    setOutputType('review-selection');
+    setIsInputPanelVisible(false);
+    resetForNewRequest();
+
+    const prompt = `${REVIEW_SELECTION_INSTRUCTION}\n\n\`\`\`${language}\n${selection}\n\`\`\``;
+    setFullCodeForReview(prompt);
+    setReviewedCode(selection);
+
+    const fullResponse = await performStreamingRequest(prompt, getSystemInstructionForReview(), GEMINI_MODELS.CORE_ANALYSIS);
+
+    if (fullResponse && !abortStreamRef.current) {
+        handleStartFollowUp();
+    }
+
+    setIsLoading(false);
+    setLoadingAction(null);
+  }, [ai, language, getSystemInstructionForReview, handleStartFollowUp]);
+
+  const handleGenerateCommitMessage = useCallback(async () => {
+      if (!ai || !reviewedCode || !revisedCode) {
+          const msg = "Cannot generate commit message. Original or revised code is missing.";
+          setError(msg);
+          addToast(msg, 'error');
+          return;
+      }
+      
+      setIsLoading(true);
+      setLoadingAction('commit');
+      setOutputType('commit');
+      setIsInputPanelVisible(false);
+      resetForNewRequest();
+
+      const schema = {
+          type: Type.OBJECT,
+          properties: {
+              type: { type: Type.STRING, description: "The conventional commit type (e.g., feat, fix, chore, refactor)." },
+              scope: { type: Type.STRING, description: "Optional scope of the change (e.g., api, db, ui)."},
+              subject: { type: Type.STRING, description: "A short, imperative-mood summary of the change, under 50 chars." },
+              body: { type: Type.STRING, description: "A longer, detailed description of the changes and motivation. Use markdown newlines." }
+          },
+          required: ['type', 'subject', 'body']
+      };
+
+      const prompt = `Based on the following code changes, generate a conventional commit message.\n\n### Original Code:\n\`\`\`${language}\n${reviewedCode}\n\`\`\`\n\n### Revised Code:\n\`\`\`${language}\n${revisedCode}\n\`\`\``;
+
+      try {
+          const response = await ai.models.generateContent({
+              model: GEMINI_MODELS.FAST_TASKS,
+              contents: prompt,
+              config: {
+                  systemInstruction: COMMIT_MESSAGE_SYSTEM_INSTRUCTION,
+                  responseMimeType: 'application/json',
+                  responseSchema: schema,
+              }
+          });
+          
+          const jsonResponse = JSON.parse(response.text);
+          const { type, scope, subject, body } = jsonResponse;
+          const scopeText = scope ? `(${scope})` : '';
+          
+          const header = `${type}${scopeText}: ${subject}`;
+          const gitCommand = `git commit -m "${header}"`;
+
+          const formattedMarkdown = `### Suggested Commit Message\n\n**${header}**\n\n${body.replace(/\n/g, '\n\n')}\n\n---\n\n#### As a git command:\n\`\`\`bash\n${gitCommand}\n\`\`\``;
+          setReviewFeedback(formattedMarkdown);
+
+      } catch (apiError) {
+          console.error("Commit Message API Error:", apiError);
+          const message = apiError instanceof Error ? apiError.message : "An unexpected error occurred.";
+          setError(`Failed to generate commit message: ${message}`);
+          addToast(`Error: ${message}`, 'error');
+          setReviewFeedback(null);
+      } finally {
+          setIsLoading(false);
+          setLoadingAction(null);
+      }
+  }, [ai, reviewedCode, revisedCode, language]);
+
 
   const handleRemoveAttachment = (fileToRemove: File) => {
     setAttachments(prev => prev.filter(att => att.file !== fileToRemove));
@@ -731,6 +777,7 @@ const App: React.FC = () => {
            setRevisedCode(newRevisionCode); // Update the main revised code for diffing in finalize context
            setReviewFeedback(currentResponse); // Update feedback to include the final generated code
           setChatRevisions(prev => {
+            // FIX: Corrected syntax error from `prev.length - 1].code` to `prev[prev.length - 1].code` to correctly access the last revision.
             const lastRevisionCode = prev.length > 0 ? prev[prev.length - 1].code : revisedCode;
             if (lastRevisionCode !== newRevisionCode) {
               const newVersionName = `Chat Revision ${prev.length + 1}`;
@@ -1136,7 +1183,7 @@ const App: React.FC = () => {
             });
 
             const newChat = ai.chats.create({
-                model: GEMINI_MODELS.FAST_TASKS,
+                model: GEMINI_MODELS.CORE_ANALYSIS,
                 history: historyForAPI,
                 config: { systemInstruction: getSystemInstructionForReview() }
             });
@@ -1183,6 +1230,38 @@ const App: React.FC = () => {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     addToast(`${filename} downloaded.`, 'success');
+  };
+
+  const handleShare = () => {
+    try {
+        const stateToShare = {
+            appMode,
+            language,
+            userOnlyCode,
+            codeB,
+            errorMessage,
+            comparisonGoal,
+            reviewProfile,
+            customReviewProfile,
+        };
+
+        const jsonState = JSON.stringify(stateToShare);
+        const base64State = btoa(jsonState);
+        
+        const url = new URL(window.location.href);
+        url.hash = base64State;
+        
+        navigator.clipboard.writeText(url.href).then(() => {
+            addToast('Shareable link copied to clipboard!', 'success');
+        }, (err) => {
+            console.error('Could not copy text: ', err);
+            addToast('Failed to copy share link.', 'error');
+        });
+
+    } catch (e) {
+        console.error("Failed to create share link:", e);
+        addToast('Could not create share link.', 'error');
+    }
   };
 
   const handleImportClick = () => {
@@ -1315,6 +1394,7 @@ const App: React.FC = () => {
       <Header 
         onImportClick={handleImportClick}
         onExportSession={handleExportSession}
+        onShare={handleShare}
         onGenerateTests={handleGenerateTests}
         onOpenDocsModal={() => setIsDocsModalOpen(true)}
         onOpenProjectFilesModal={() => setIsProjectFilesModalOpen(true)}

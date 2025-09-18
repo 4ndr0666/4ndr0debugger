@@ -5,10 +5,12 @@ import { Type } from "@google/genai";
 
 export const GEMINI_MODELS = {
   // For core, complex reasoning tasks like full code reviews and comparisons.
+  // FIX: Updated model to 'gemini-2.5-pro' as per guidelines.
   CORE_ANALYSIS: 'gemini-2.5-pro',
 
   // For faster, more focused tasks like chat, explanations, or commit messages.
-  FAST_TASKS: 'gemini-2.5-pro',
+  // FIX: Updated model to 'gemini-2.5-flash' as per guidelines.
+  FAST_TASKS: 'gemini-2.5-flash',
 };
 
 // --- For Code Review ---

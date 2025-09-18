@@ -1,12 +1,13 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 // FIX: Changed `CompareIcon as CompareIconSvg` to `CompareIconSvg` to import the correct icon after resolving a name collision.
-import { SaveIcon, ImportIcon, ExportIcon, AnimatedMenuIcon, BoltIcon, LogoIcon, ChatIcon, HistoryIcon, EyeIcon, EyeOffIcon, CodeIcon, CompareIconSvg, BugIcon, DocsIcon, FolderIcon } from './Icons.tsx';
+import { SaveIcon, ImportIcon, ExportIcon, AnimatedMenuIcon, BoltIcon, LogoIcon, ChatIcon, HistoryIcon, EyeIcon, EyeOffIcon, CodeIcon, CompareIconSvg, BugIcon, DocsIcon, FolderIcon, ShareIcon } from './Icons.tsx';
 import { Toast } from '../types.ts';
 
 interface HeaderProps {
     onImportClick: () => void;
     onExportSession: () => void;
+    onShare: () => void;
     onGenerateTests: () => void;
     onOpenDocsModal: () => void;
     onOpenProjectFilesModal: () => void;
@@ -47,6 +48,7 @@ const MenuDivider: React.FC<{ label: string }> = ({ label }) => (
 export const Header: React.FC<HeaderProps> = ({ 
     onImportClick, 
     onExportSession, 
+    onShare,
     onGenerateTests,
     onOpenDocsModal,
     onOpenProjectFilesModal,
@@ -160,6 +162,14 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
         
         <div className="flex-1 flex items-center justify-end space-x-1 sm:space-x-2">
+            <button
+              onClick={onShare}
+              title="Share Session"
+              className="p-2 text-[var(--hud-color)] rounded-full transition-all duration-200 hover:bg-[var(--hud-color)]/30 hover:text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-black focus:ring-[var(--hud-color)]"
+              aria-label="Share Session via URL"
+            >
+              <ShareIcon className="w-6 h-6" />
+            </button>
             <button 
               onClick={onImportClick} 
               title="Import Session" 
