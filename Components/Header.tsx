@@ -1,7 +1,5 @@
-
 import React, { useState, useRef, useEffect } from 'react';
-// FIX: Changed `CompareIcon as CompareIconSvg` to `CompareIconSvg` to import the correct icon after resolving a name collision.
-import { SaveIcon, ImportIcon, ExportIcon, AnimatedMenuIcon, BoltIcon, LogoIcon, ChatIcon, HistoryIcon, EyeIcon, EyeOffIcon, CodeIcon, CompareIconSvg, BugIcon, DocsIcon, FolderIcon, ShareIcon } from './Icons.tsx';
+import { SaveIcon, ImportIcon, ExportIcon, AnimatedMenuIcon, BoltIcon, LogoIcon, ChatIcon, HistoryIcon, EyeIcon, EyeOffIcon, CodeIcon, CompareIconSvg, BugIcon, DocsIcon, FolderIcon, ShareIcon, ShieldIcon } from './Icons.tsx';
 import { Toast } from '../types.ts';
 
 interface HeaderProps {
@@ -18,6 +16,7 @@ interface HeaderProps {
     onStartDebug: () => void;
     onStartSingleReview: () => void;
     onStartComparison: () => void;
+    onStartAudit: () => void;
     isInputPanelVisible: boolean;
     onToggleInputPanel: () => void;
     onNewReview: () => void; // Kept for the clear button functionality
@@ -59,6 +58,7 @@ export const Header: React.FC<HeaderProps> = ({
     onStartDebug,
     onStartSingleReview,
     onStartComparison,
+    onStartAudit,
     isInputPanelVisible,
     onToggleInputPanel,
     isFollowUpAvailable,
@@ -108,7 +108,7 @@ export const Header: React.FC<HeaderProps> = ({
                     <AnimatedMenuIcon isOpen={isMenuOpen} />
                 </button>
                 {isMenuOpen && (
-                    <div className="absolute left-0 z-20 mt-2 w-64 origin-top-left bg-black/90 backdrop-blur-sm border border-[var(--hud-color-darker)] focus:outline-none">
+                    <div className="absolute left-0 z-20 mt-2 w-64 origin-top-left bg-black/50 backdrop-blur-md border border-[var(--hud-color-darker)] focus:outline-none">
                         <div className="p-1" role="menu" aria-orientation="vertical">
                             <MenuDivider label="Modes" />
                              <MenuItem onClick={() => handleMenuClick(onStartDebug)} disabled={isLoading}>
@@ -119,6 +119,9 @@ export const Header: React.FC<HeaderProps> = ({
                             </MenuItem>
                             <MenuItem onClick={() => handleMenuClick(onStartComparison)} disabled={isLoading}>
                                 <CompareIconSvg className="w-4 h-4" /> Comparative Analysis
+                            </MenuItem>
+                            <MenuItem onClick={() => handleMenuClick(onStartAudit)} disabled={isLoading}>
+                                <ShieldIcon className="w-4 h-4" /> Code Audit
                             </MenuItem>
 
                             <MenuDivider label="View" />

@@ -208,9 +208,15 @@ export const ChatContext = ({
       return <FeatureDiscussionContext feature={activeFeatureForDiscussion} />;
   }
 
-  if (chatContext === 'finalizing' && finalizationSummary) {
+  if (chatContext === 'finalization' && finalizationSummary) {
       return <FinalizationContext summary={finalizationSummary} />;
   }
+
+  const handleClearRevisions = () => {
+    if (window.confirm('Are you sure you want to clear all chat revisions? This cannot be undone.')) {
+      onClearChatRevisions();
+    }
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -220,7 +226,7 @@ export const ChatContext = ({
         </h2>
         {chatRevisions.length > 0 && (
           <button 
-              onClick={onClearChatRevisions}
+              onClick={handleClearRevisions}
               className="text-xs uppercase text-[var(--hud-color-darker)] hover:text-[var(--hud-color)] transition-colors animate-fade-in font-mono pr-2"
               title="Clear chat revision history"
           >

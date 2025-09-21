@@ -91,7 +91,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
   
   useEffect(() => {
     // Auto-focus input when chat mode is entered
-    if (chatContext !== 'finalizing' || !revisedCode) {
+    if (chatContext !== 'finalization' || !revisedCode) {
       inputRef.current?.focus();
     }
   }, [chatContext, revisedCode]);
@@ -112,7 +112,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
   
   const chatTitle = chatContext === 'feature_discussion' 
     ? `DISCUSSING: ${activeFeatureForDiscussion?.name}`.toUpperCase()
-    : chatContext === 'finalizing'
+    : chatContext === 'finalization'
     ? 'FINALIZING REVISION'
     : (appMode === 'debug' ? 'DEBUGGING SESSION' : 'FOLLOW-UP CHAT');
   
@@ -120,7 +120,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
   const endButtonText = isGeneralChat ? 'Back to Output' : 'Finalize Discussion';
   const endButtonAction = isGeneralChat ? onReturnToOutputView : onFinalizeFeatureDiscussion;
   
-  const generationComplete = !isChatLoading && chatContext === 'finalizing' && !!revisedCode;
+  const generationComplete = !isChatLoading && chatContext === 'finalization' && !!revisedCode;
 
   const renderAttachments = (attachments?: ChatMessage['attachments']) => {
     if (!attachments || attachments.length === 0) return null;
@@ -149,7 +149,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
     <div className="flex flex-col h-full">
         <div className="flex justify-between items-center flex-shrink-0">
             <h3 className="text-xl font-heading truncate pr-4" title={chatTitle}>{chatTitle}</h3>
-            {chatContext !== 'finalizing' && (
+            {chatContext !== 'finalization' && (
               <Button onClick={endButtonAction} variant="secondary" className="py-1 px-3 text-xs">
                   {endButtonText}
               </Button>
@@ -230,14 +230,14 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
                             onKeyDown={handleKeyDown}
                             rows={2}
                             className="block w-full p-2 pr-36 font-mono text-sm text-[var(--hud-color)] bg-black border border-[var(--hud-color-darker)] focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)] focus:border-[var(--hud-color)] resize-y placeholder:text-transparent"
-                            placeholder={chatContext === 'finalizing' ? "Final instructions..." : " "}
+                            placeholder={chatContext === 'finalization' ? "Final instructions..." : " "}
                             disabled={isChatLoading}
                             aria-label="Follow-up message input"
                         />
                         {!chatInputValue && !isChatLoading && (
                             <span className="absolute left-[13px] top-[9px] pointer-events-none font-mono text-sm text-[var(--hud-color)]" aria-hidden="true">
                                 <span className="blinking-prompt">❯ </span>
-                                {chatContext === 'finalizing' ? 
+                                {chatContext === 'finalization' ? 
                                 <span className="text-[var(--hud-color-darker)]">Final instructions...</span>
                                 : appMode === 'debug' ? 
                                 <span className="text-[var(--hud-color-darker)]">Terminal Output...</span>
@@ -255,7 +255,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
                             </button>
                         )}
                     </div>
-                    {chatContext !== 'finalizing' && (
+                    {chatContext !== 'finalization' && (
                       <div className="flex items-center space-x-2">
                          <button
                            onClick={onOpenProjectFilesModal}
@@ -277,12 +277,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
                          </button>
                       </div>
                     )}
-                    {appMode !== 'debug' && chatContext !== 'finalizing' && (
+                    {appMode !== 'debug' && chatContext !== 'finalization' && (
                         <Button onClick={handleSend} isLoading={isChatLoading} disabled={isChatLoading || (!chatInputValue.trim() && attachments.length === 0)}>
                             Send
                         </Button>
                     )}
-                    {chatContext === 'finalizing' && (
+                    {chatContext === 'finalization' && (
                         <Button onClick={handleSend} isLoading={isChatLoading} disabled={isChatLoading}>
                             Generate Revision
                         </Button>

@@ -47,6 +47,12 @@ export const ProjectFilesModal = ({
     }
   };
 
+  const handleDeleteClick = (fileId: string, fileName: string) => {
+    if (window.confirm(`Are you sure you want to permanently delete the file "${fileName}"? This cannot be undone.`)) {
+        onDeleteFile(fileId);
+    }
+  };
+
   return (
     <div
       className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4 transition-opacity duration-300 animate-fade-in"
@@ -103,7 +109,7 @@ export const ProjectFilesModal = ({
                                 <button onClick={() => onDownloadFile(file.content, file.name, file.mimeType)} title="Download File" className="p-1.5 text-[var(--hud-color)] rounded-full hover:bg-[var(--hud-color)]/20 focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)]">
                                     <ImportIcon className="w-4 h-4" />
                                 </button>
-                                <button onClick={() => onDeleteFile(file.id)} title="Delete File" className="p-1.5 text-[var(--red-color)]/70 rounded-full hover:bg-red-500/30 hover:text-[var(--red-color)] focus:outline-none focus:ring-1 focus:ring-[var(--red-color)]">
+                                <button onClick={() => handleDeleteClick(file.id, file.name)} title="Delete File" className="p-1.5 text-[var(--red-color)]/70 rounded-full hover:bg-red-500/30 hover:text-[var(--red-color)] focus:outline-none focus:ring-1 focus:ring-[var(--red-color)]">
                                     <DeleteIcon className="w-4 h-4" />
                                 </button>
                             </div>

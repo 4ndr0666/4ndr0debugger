@@ -6,7 +6,7 @@ import { Header } from './Components/Header.tsx';
 import { CodeInput } from './Components/CodeInput.tsx';
 import { ReviewOutput } from './Components/ReviewOutput.tsx';
 import { SupportedLanguage, ChatMessage, Version, ReviewProfile, LoadingAction, Toast, AppMode, ChatRevision, Feature, FeatureDecision, ChatContext, FinalizationSummary, FeatureDecisionRecord, ProjectFile } from './types.ts';
-import { SUPPORTED_LANGUAGES, GEMINI_MODELS, SYSTEM_INSTRUCTION, DEBUG_SYSTEM_INSTRUCTION, DOCS_SYSTEM_INSTRUCTION, PROFILE_SYSTEM_INSTRUCTIONS, GENERATE_TESTS_INSTRUCTION, EXPLAIN_CODE_INSTRUCTION, REVIEW_SELECTION_INSTRUCTION, COMMIT_MESSAGE_SYSTEM_INSTRUCTION, DOCS_INSTRUCTION, COMPARISON_SYSTEM_INSTRUCTION, COMPARISON_REVISION_SYSTEM_INSTRUCTION, FEATURE_MATRIX_SCHEMA, generateComparisonTemplate, generateDocsTemplate, LANGUAGE_TAG_MAP, PLACEHOLDER_MARKER } from './constants.ts';
+import { SUPPORTED_LANGUAGES, GEMINI_MODELS, SYSTEM_INSTRUCTION, DEBUG_SYSTEM_INSTRUCTION, DOCS_SYSTEM_INSTRUCTION, PROFILE_SYSTEM_INSTRUCTIONS, GENERATE_TESTS_INSTRUCTION, EXPLAIN_CODE_INSTRUCTION, REVIEW_SELECTION_INSTRUCTION, COMMIT_MESSAGE_SYSTEM_INSTRUCTION, DOCS_INSTRUCTION, COMPARISON_SYSTEM_INSTRUCTION, COMPARISON_REVISION_SYSTEM_INSTRUCTION, FEATURE_MATRIX_SCHEMA, generateComparisonTemplate, LANGUAGE_TAG_MAP, PLACEHOLDER_MARKER, AUDIT_SYSTEM_INSTRUCTION, generateAuditTemplate } from './constants.ts';
 import { DiffViewer } from './Components/DiffViewer.tsx';
 import { ComparisonInput } from './Components/ComparisonInput.tsx';
 import { VersionHistoryModal } from './Components/VersionHistoryModal.tsx';
@@ -15,6 +15,7 @@ import { ToastContainer } from './Components/ToastContainer.tsx';
 import { ApiKeyBanner } from './Components/ApiKeyBanner.tsx';
 import { DocumentationCenterModal } from './Components/DocumentationCenterModal.tsx';
 import { ProjectFilesModal } from './Components/ProjectFilesModal.tsx';
+import { AuditInput } from './Components/AuditInput.tsx';
 
 type OutputType = LoadingAction;
 type ActivePanel = 'input' | 'output';
@@ -85,6 +86,8 @@ const App: React.FC = () => {
   const [finalizationSummary, setFinalizationSummary] = useState<FinalizationSummary | null>(null);
   const [finalizationBriefing, setFinalizationBriefing] = useState<string | null>(null);
 
+  // --- Audit Mode State (No longer needs selected standards) ---
+
   // --- View & Chat State ---
   const [isInputPanelVisible, setIsInputPanelVisible] = useState(true);
   const [isChatMode, setIsChatMode] = useState<boolean>(false);
@@ -121,7 +124,7 @@ const App: React.FC = () => {
   const attachFileInputRef = useRef<HTMLInputElement>(null);
   const abortStreamRef = useRef(false);
 
-  const isReviewContextCurrent = reviewedCode !== null && (appMode === 'single' || appMode === 'debug' ? userOnlyCode === reviewedCode : true);
+  const isReviewContextCurrent = reviewedCode !== null && (appMode === 'single' || appMode === 'debug' || appMode === 'audit' ? userOnlyCode === reviewedCode : true);
   const reviewAvailable = !!reviewFeedback && isReviewContextCurrent;
   const commitMessageAvailable = !!reviewedCode && !!revisedCode && reviewedCode !== revisedCode;
   const showOutputPanel = isLoading || !!reviewFeedback || !!error;
@@ -138,8 +141,6 @@ const App: React.FC = () => {
 
   // Effect to handle starting a feature discussion after state has updated
   useEffect(() => {
-    // FIX: This check was moved from inside handleStartFollowUp to an effect that depends on the state it needs.
-    // This avoids a race condition where the chat would start before the context was fully set.
     if (chatContext === 'feature_discussion' && activeFeatureForDiscussion) {
       handleStartFollowUp();
     }
@@ -214,7 +215,6 @@ const App: React.FC = () => {
           systemInstruction: systemInstruction,
           temperature: 0.3,
           maxOutputTokens: 8192,
-          thinkingConfig: { thinkingBudget: 1024 },
         },
       });
 
@@ -311,7 +311,7 @@ const App: React.FC = () => {
     setReviewedCode(userOnlyCode);
 
     const systemInstruction = appMode === 'debug'
-      ? DEBUG_SYSTEM_INSTRUCTION
+      ? `${SYSTEM_INSTRUCTION}\n\n${DEBUG_SYSTEM_INSTRUCTION}`
       : getSystemInstructionForReview();
     
     const fullResponse = await performStreamingRequest(fullCodeToSubmit, systemInstruction, GEMINI_MODELS.CORE_ANALYSIS);
@@ -324,6 +324,28 @@ const App: React.FC = () => {
     setLoadingAction(null);
   }, [ai, getSystemInstructionForReview, userOnlyCode, language, appMode]);
 
+  const handleAuditSubmit = useCallback(async () => {
+    setIsLoading(true);
+    setLoadingAction('audit');
+    setOutputType('audit');
+    setIsInputPanelVisible(false);
+    resetForNewRequest();
+
+    const fullCodeToSubmit = generateAuditTemplate(language, userOnlyCode);
+
+    setFullCodeForReview(fullCodeToSubmit);
+    setReviewedCode(userOnlyCode);
+
+    const fullResponse = await performStreamingRequest(fullCodeToSubmit, `${SYSTEM_INSTRUCTION}\n\n${AUDIT_SYSTEM_INSTRUCTION}`, GEMINI_MODELS.CORE_ANALYSIS);
+
+    if (fullResponse) {
+        setRevisedCode(extractFinalCodeBlock(fullResponse, true));
+    }
+
+    setIsLoading(false);
+    setLoadingAction(null);
+  }, [ai, userOnlyCode, language]);
+
   const handleCompareAndOptimize = useCallback(async () => {
     setIsLoading(true);
     setLoadingAction('comparison');
@@ -335,7 +357,7 @@ const App: React.FC = () => {
     setFullCodeForReview(prompt); // Save for versioning
     setReviewedCode(userOnlyCode); // Set Code A as the "before" for diffing
 
-    const fullResponse = await performStreamingRequest(prompt, COMPARISON_SYSTEM_INSTRUCTION, GEMINI_MODELS.CORE_ANALYSIS);
+    const fullResponse = await performStreamingRequest(prompt, `${SYSTEM_INSTRUCTION}\n\n${COMPARISON_SYSTEM_INSTRUCTION}`, GEMINI_MODELS.CORE_ANALYSIS);
     
     if (fullResponse) {
         setRevisedCode(extractFinalCodeBlock(fullResponse, true));
@@ -367,7 +389,7 @@ const App: React.FC = () => {
             model: GEMINI_MODELS.CORE_ANALYSIS,
             contents: prompt,
             config: {
-                systemInstruction: COMPARISON_REVISION_SYSTEM_INSTRUCTION,
+                systemInstruction: `${SYSTEM_INSTRUCTION}\n\n${COMPARISON_REVISION_SYSTEM_INSTRUCTION}`,
                 responseMimeType: 'application/json',
                 responseSchema: FEATURE_MATRIX_SCHEMA,
             }
@@ -408,13 +430,13 @@ const App: React.FC = () => {
     setIsInputPanelVisible(false);
     resetForNewRequest();
     
-    const template = generateDocsTemplate(language);
-    const fullCodeToSubmit = template.replace(PLACEHOLDER_MARKER, codeToDocument);
+    const prompt = `\`\`\`${LANGUAGE_TAG_MAP[language]}\n${codeToDocument}\n\`\`\``;
 
-    setFullCodeForReview(fullCodeToSubmit);
+    setFullCodeForReview(prompt);
     setReviewedCode(codeToDocument); // Set the source code as "reviewed"
     
-    await performStreamingRequest(fullCodeToSubmit, DOCS_SYSTEM_INSTRUCTION, GEMINI_MODELS.CORE_ANALYSIS);
+    const systemInstruction = `${SYSTEM_INSTRUCTION}\n\n${DOCS_SYSTEM_INSTRUCTION}\n\n${DOCS_INSTRUCTION}`;
+    await performStreamingRequest(prompt, systemInstruction, GEMINI_MODELS.CORE_ANALYSIS);
 
     setIsLoading(false);
     setLoadingAction(null);
@@ -429,14 +451,14 @@ const App: React.FC = () => {
     resetForNewRequest();
     setReviewedCode(userOnlyCode);
 
-    const prompt = `${GENERATE_TESTS_INSTRUCTION}\n\n\`\`\`${language}\n${userOnlyCode}\n\`\`\``;
-    await performStreamingRequest(prompt, SYSTEM_INSTRUCTION, GEMINI_MODELS.CORE_ANALYSIS);
+    const prompt = `\`\`\`${language}\n${userOnlyCode}\n\`\`\``;
+    setFullCodeForReview(prompt);
+    await performStreamingRequest(prompt, `${SYSTEM_INSTRUCTION}\n\n${GENERATE_TESTS_INSTRUCTION}`, GEMINI_MODELS.CORE_ANALYSIS);
 
     setIsLoading(false);
     setLoadingAction(null);
   }, [ai, userOnlyCode, language, appMode, isChatMode]);
   
-  // FIX: Moved handleStartFollowUp before the functions that call it to resolve the "used before its declaration" error.
   const handleStartFollowUp = useCallback(async (version?: Version, modeOverride?: AppMode) => {
     // If a chat session already exists and we're not loading a new version, just resume it.
     if (chatSession && !version) {
@@ -454,7 +476,7 @@ const App: React.FC = () => {
         setIsChatLoading(true);
         setChatHistory([]); // Clear any previous history
 
-        const systemInstruction = `You are a senior software architect. Your task is to initiate a discussion about a specific software feature, keeping a shared project goal in mind. You will be given a "Shared Goal", the "Name" of the feature, and its "Description". Your response MUST begin by referencing the shared goal and explaining how it relates to the feature. You should then provide your initial thoughts, suggestions, or questions to kickstart a productive conversation. Example starters: "To align with our shared goal of ${comparisonGoal || '...'}, I think we should approach the '${activeFeatureForDiscussion.name}' feature by..." or "Considering the goal is to ${comparisonGoal || '...'}, my initial recommendation for '${activeFeatureForDiscussion.name}' is...".`;
+        const systemInstruction = `${SYSTEM_INSTRUCTION}\n\nYou are a senior software architect. Your task is to initiate a discussion about a specific software feature, keeping a shared project goal in mind. You will be given a "Shared Goal", the "Name" of the feature, and its "Description". Your response MUST begin by referencing the shared goal and explaining how it relates to the feature. You should then provide your initial thoughts, suggestions, or questions to kickstart a productive conversation. Example starters: "To align with our shared goal of ${comparisonGoal || '...'}, I think we should approach the '${activeFeatureForDiscussion.name}' feature by..." or "Considering the goal is to ${comparisonGoal || '...'}, my initial recommendation for '${activeFeatureForDiscussion.name}' is...".`;
         
         const primerPrompt = `Shared Goal: "${comparisonGoal || 'create the best possible unified code'}"\n\nFeature Name: "${activeFeatureForDiscussion.name}"\nFeature Description: "${activeFeatureForDiscussion.description}"\n\nPlease start the discussion.`;
 
@@ -536,7 +558,7 @@ const App: React.FC = () => {
     }
     
     const systemInstructionForChat = (modeOverride || appMode) === 'debug'
-        ? DEBUG_SYSTEM_INSTRUCTION
+        ? `${SYSTEM_INSTRUCTION}\n\n${DEBUG_SYSTEM_INSTRUCTION}`
         : getSystemInstructionForReview();
 
     const newChat = ai.chats.create({ 
@@ -561,11 +583,11 @@ const App: React.FC = () => {
     setIsInputPanelVisible(false);
     resetForNewRequest();
 
-    const prompt = `${EXPLAIN_CODE_INSTRUCTION}\n\n\`\`\`${language}\n${selection}\n\`\`\``;
+    const prompt = `\`\`\`${language}\n${selection}\n\`\`\``;
     setFullCodeForReview(prompt);
     setReviewedCode(selection);
 
-    const fullResponse = await performStreamingRequest(prompt, SYSTEM_INSTRUCTION, GEMINI_MODELS.FAST_TASKS);
+    const fullResponse = await performStreamingRequest(prompt, `${SYSTEM_INSTRUCTION}\n\n${EXPLAIN_CODE_INSTRUCTION}`, GEMINI_MODELS.FAST_TASKS);
 
     if (fullResponse && !abortStreamRef.current) {
         handleStartFollowUp();
@@ -582,11 +604,12 @@ const App: React.FC = () => {
     setIsInputPanelVisible(false);
     resetForNewRequest();
 
-    const prompt = `${REVIEW_SELECTION_INSTRUCTION}\n\n\`\`\`${language}\n${selection}\n\`\`\``;
+    const prompt = `\`\`\`${language}\n${selection}\n\`\`\``;
     setFullCodeForReview(prompt);
     setReviewedCode(selection);
-
-    const fullResponse = await performStreamingRequest(prompt, getSystemInstructionForReview(), GEMINI_MODELS.CORE_ANALYSIS);
+    
+    const systemInstruction = `${getSystemInstructionForReview()}\n\n${REVIEW_SELECTION_INSTRUCTION}`;
+    const fullResponse = await performStreamingRequest(prompt, systemInstruction, GEMINI_MODELS.CORE_ANALYSIS);
 
     if (fullResponse && !abortStreamRef.current) {
         handleStartFollowUp();
@@ -628,7 +651,7 @@ const App: React.FC = () => {
               model: GEMINI_MODELS.FAST_TASKS,
               contents: prompt,
               config: {
-                  systemInstruction: COMMIT_MESSAGE_SYSTEM_INSTRUCTION,
+                  systemInstruction: `${SYSTEM_INSTRUCTION}\n\n${COMMIT_MESSAGE_SYSTEM_INSTRUCTION}`,
                   responseMimeType: 'application/json',
                   responseSchema: schema,
               }
@@ -689,7 +712,7 @@ const App: React.FC = () => {
     let messageToSend = message;
 
     // Special handling for the first message in the finalization context.
-    if (chatContext === 'finalizing' && chatHistory.length === 1) {
+    if (chatContext === 'finalization' && chatHistory.length === 1) {
         if (!featureMatrix || !finalizationSummary) {
             const err = "Finalization context is missing. Cannot proceed.";
             setError(err);
@@ -777,7 +800,6 @@ const App: React.FC = () => {
            setRevisedCode(newRevisionCode); // Update the main revised code for diffing in finalize context
            setReviewFeedback(currentResponse); // Update feedback to include the final generated code
           setChatRevisions(prev => {
-            // FIX: Corrected syntax error from `prev.length - 1].code` to `prev[prev.length - 1].code` to correctly access the last revision.
             const lastRevisionCode = prev.length > 0 ? prev[prev.length - 1].code : revisedCode;
             if (lastRevisionCode !== newRevisionCode) {
               const newVersionName = `Chat Revision ${prev.length + 1}`;
@@ -822,8 +844,8 @@ const App: React.FC = () => {
   const handleFinalizeRevision = useCallback(() => {
     if (!featureMatrix || !ai) return;
 
-    setLoadingAction('finalizing');
-    setOutputType('finalizing');
+    setLoadingAction('finalization');
+    setOutputType('finalization');
 
     const included = featureMatrix.filter(f => featureDecisions[f.name]?.decision === 'include');
     const removed = featureMatrix.filter(f => featureDecisions[f.name]?.decision === 'remove');
@@ -832,7 +854,7 @@ const App: React.FC = () => {
     setFinalizationSummary(summary);
 
     // Set up UI for finalization, but wait for user input.
-    setChatContext('finalizing');
+    setChatContext('finalization');
     setIsChatMode(true);
     setActivePanel('input');
     setIsInputPanelVisible(true);
@@ -849,7 +871,7 @@ const App: React.FC = () => {
       model: GEMINI_MODELS.CORE_ANALYSIS,
       history: [], 
       config: {
-        systemInstruction: COMPARISON_SYSTEM_INSTRUCTION,
+        systemInstruction: `${SYSTEM_INSTRUCTION}\n\n${COMPARISON_SYSTEM_INSTRUCTION}`,
       }
     });
     setChatSession(newChat);
@@ -953,7 +975,7 @@ const App: React.FC = () => {
 
   const handleOpenSaveModal = () => {
     const canSaveReview = !!reviewFeedback && !isChatMode && !isLoading && !error;
-    const canSaveFinalization = chatContext === 'finalizing' && !!revisedCode;
+    const canSaveFinalization = chatContext === 'finalization' && !!revisedCode;
     if (!canSaveReview && !canSaveFinalization) return;
     setVersionName(`SYS_SAVE // ${new Date().toLocaleString()}`);
     setIsSaveModalOpen(true);
@@ -979,14 +1001,14 @@ const App: React.FC = () => {
       feedbackToSave = (reviewFeedback || '') + '\n\n---\n\n## Follow-up Chat History\n\n' + chatLog;
     }
     
-    if (chatContext !== 'finalizing' && (!feedbackToSave || !fullCodeForReview)) return;
+    if (chatContext !== 'finalization' && (!feedbackToSave || !fullCodeForReview)) return;
     
-    const isFinalizing = chatContext === 'finalizing' || outputType === 'finalizing';
+    const isFinalizing = chatContext === 'finalization' || outputType === 'finalization';
     let versionType: Version['type'] = 'review';
     
     if (isFinalizing) {
         versionType = 'finalization';
-    } else if (outputType === 'docs' || outputType === 'tests' || outputType === 'commit') {
+    } else if (outputType === 'audit' || outputType === 'docs' || outputType === 'tests' || outputType === 'commit') {
         versionType = outputType;
     }
 
@@ -1029,6 +1051,9 @@ const App: React.FC = () => {
         const response = await ai.models.generateContent({
             model: GEMINI_MODELS.FAST_TASKS,
             contents: prompt,
+            config: {
+                systemInstruction: SYSTEM_INSTRUCTION
+            }
         });
 
         const generatedName = response.text.trim().replace(/["']/g, ''); // Clean up quotes
@@ -1061,7 +1086,9 @@ const App: React.FC = () => {
     setActivePanel('output');
     setIsInputPanelVisible(false);
     
-    if (version.fullPrompt.includes('### Codebase B')) {
+    if (version.type === 'audit') {
+        setAppMode('audit');
+    } else if (version.fullPrompt.includes('### Codebase B')) {
       setAppMode('comparison');
     } else if (version.fullPrompt.includes('### Error Message / Context')) {
       setAppMode('debug');
@@ -1075,6 +1102,8 @@ const App: React.FC = () => {
       setOutputType('tests');
     } else if (version.type === 'commit') {
       setOutputType('commit');
+    } else if (version.type === 'audit') {
+      setOutputType('audit');
     } else if (version.type === 'finalization' || version.rawFeatureMatrixJson) {
       setOutputType('revise');
     } else if (version.fullPrompt.includes(EXPLAIN_CODE_INSTRUCTION)) {
@@ -1384,6 +1413,121 @@ const App: React.FC = () => {
     addToast(`Attached "${file.name}" to message.`, 'info');
   };
 
+  const renderInputComponent = () => {
+    switch(appMode) {
+      case 'single':
+      case 'debug':
+        return (
+          <CodeInput
+            userCode={userOnlyCode}
+            setUserCode={setUserOnlyCode}
+            errorMessage={errorMessage}
+            setErrorMessage={setErrorMessage}
+            language={language}
+            setLanguage={setLanguage}
+            reviewProfile={reviewProfile}
+            setReviewProfile={setReviewProfile}
+            customReviewProfile={customReviewProfile}
+            setCustomReviewProfile={setCustomReviewProfile}
+            onSubmit={handleReviewSubmit}
+            onExplainSelection={handleExplainSelection}
+            onReviewSelection={handleReviewSelection}
+            isLoading={isLoading}
+            isChatLoading={isChatLoading}
+            loadingAction={loadingAction}
+            isChatMode={isChatMode}
+            onNewReview={() => resetAndSetMode(appMode)}
+            onFinalizeFeatureDiscussion={handleFinalizeFeatureDiscussion}
+            onReturnToOutputView={handleReturnToOutputView}
+            onFollowUpSubmit={handleFollowUpSubmit}
+            chatHistory={chatHistory}
+            chatInputValue={chatInputValue}
+            setChatInputValue={setChatInputValue}
+            isActive={activePanel === 'input'}
+            onStopGenerating={handleStopGenerating}
+            originalReviewedCode={reviewedCode}
+            appMode={appMode}
+            codeB={codeB}
+            onCodeLineClick={handleCodeLineClick}
+            revisedCode={revisedCode}
+            chatRevisions={chatRevisions}
+            onClearChatRevisions={handleClearChatRevisions}
+            onRenameChatRevision={handleRenameChatRevision}
+            onDeleteChatRevision={handleDeleteChatRevision}
+            chatContext={chatContext}
+            activeFeatureForDiscussion={activeFeatureForDiscussion}
+            finalizationSummary={finalizationSummary}
+            onOpenSaveModal={handleOpenSaveModal}
+            onLoadRevisionIntoEditor={handleLoadRevisionIntoEditor}
+            attachments={attachments}
+            onAttachFileClick={handleAttachFileClick}
+            onRemoveAttachment={handleRemoveAttachment}
+            onOpenProjectFilesModal={() => setIsProjectFilesModalOpen(true)}
+          />
+        );
+      case 'comparison':
+        return (
+          <ComparisonInput 
+            codeA={userOnlyCode}
+            setCodeA={setUserOnlyCode}
+            codeB={codeB}
+            setCodeB={setCodeB}
+            language={language}
+            setLanguage={setLanguage}
+            goal={comparisonGoal}
+            setGoal={setComparisonGoal}
+            onSubmit={handleCompareAndOptimize}
+            onCompareAndRevise={handleCompareAndRevise}
+            isLoading={isLoading}
+            isChatLoading={isChatLoading}
+            loadingAction={loadingAction}
+            isActive={activePanel === 'input'}
+            onNewReview={() => resetAndSetMode('comparison')}
+            onFinalizeFeatureDiscussion={handleFinalizeFeatureDiscussion}
+            onReturnToOutputView={handleReturnToOutputView}
+            isChatMode={isChatMode}
+            onFollowUpSubmit={handleFollowUpSubmit}
+            chatHistory={chatHistory}
+            chatInputValue={chatInputValue}
+            setChatInputValue={setChatInputValue}
+            onStopGenerating={handleStopGenerating}
+            originalReviewedCode={reviewedCode}
+            appMode={appMode}
+            onCodeLineClick={handleCodeLineClick}
+            revisedCode={revisedCode}
+            chatRevisions={chatRevisions}
+            onClearChatRevisions={handleClearChatRevisions}
+            onRenameChatRevision={handleRenameChatRevision}
+            onDeleteChatRevision={handleDeleteChatRevision}
+            chatContext={chatContext}
+            activeFeatureForDiscussion={activeFeatureForDiscussion}
+            finalizationSummary={finalizationSummary}
+            onOpenSaveModal={handleOpenSaveModal}
+            onLoadRevisionIntoEditor={handleLoadRevisionIntoEditor}
+            attachments={attachments}
+            onAttachFileClick={handleAttachFileClick}
+            onRemoveAttachment={handleRemoveAttachment}
+            onOpenProjectFilesModal={() => setIsProjectFilesModalOpen(true)}
+          />
+        );
+      case 'audit':
+        return (
+          <AuditInput
+            userCode={userOnlyCode}
+            setUserCode={setUserOnlyCode}
+            language={language}
+            setLanguage={setLanguage}
+            onSubmit={handleAuditSubmit}
+            isLoading={isLoading}
+            onStopGenerating={handleStopGenerating}
+            isActive={activePanel === 'input'}
+          />
+        );
+      default:
+        return null;
+    }
+  }
+
   return (
     <div className="h-screen flex flex-col relative">
       <div className="fixed top-1/4 left-8 w-1/4 h-px bg-[var(--hud-color-darker)] opacity-50"></div>
@@ -1405,6 +1549,7 @@ const App: React.FC = () => {
         onStartDebug={() => resetAndSetMode('debug')}
         onStartSingleReview={() => resetAndSetMode('single')}
         onStartComparison={() => resetAndSetMode('comparison')}
+        onStartAudit={() => resetAndSetMode('audit')}
         isInputPanelVisible={isInputPanelVisible}
         onToggleInputPanel={() => setIsInputPanelVisible(p => !p)}
         onNewReview={() => resetAndSetMode('debug')}
@@ -1415,195 +1560,9 @@ const App: React.FC = () => {
       />
       <ApiKeyBanner />
       <main className={`flex-grow container mx-auto p-4 sm:p-6 lg:p-8 grid grid-cols-1 ${isInputPanelVisible && showOutputPanel && !isChatMode ? 'md:grid-cols-2' : ''} gap-6 lg:gap-8 animate-fade-in overflow-hidden`}>
-          {isInputPanelVisible && !isChatMode && (
+          {isInputPanelVisible && (
             <div className={`min-h-0 ${isChatMode ? 'md:col-span-2' : ''}`} onClick={() => !isChatMode && setActivePanel('input')}>
-              {appMode === 'single' || appMode === 'debug' ? (
-                  <CodeInput
-                    userCode={userOnlyCode}
-                    setUserCode={setUserOnlyCode}
-                    errorMessage={errorMessage}
-                    setErrorMessage={setErrorMessage}
-                    language={language}
-                    setLanguage={setLanguage}
-                    reviewProfile={reviewProfile}
-                    setReviewProfile={setReviewProfile}
-                    customReviewProfile={customReviewProfile}
-                    setCustomReviewProfile={setCustomReviewProfile}
-                    onSubmit={handleReviewSubmit}
-                    onExplainSelection={handleExplainSelection}
-                    onReviewSelection={handleReviewSelection}
-                    isLoading={isLoading}
-                    isChatLoading={isChatLoading}
-                    loadingAction={loadingAction}
-                    isChatMode={isChatMode}
-                    onNewReview={() => resetAndSetMode(appMode)}
-                    onFinalizeFeatureDiscussion={handleFinalizeFeatureDiscussion}
-                    onReturnToOutputView={handleReturnToOutputView}
-                    onFollowUpSubmit={handleFollowUpSubmit}
-                    chatHistory={chatHistory}
-                    chatInputValue={chatInputValue}
-                    setChatInputValue={setChatInputValue}
-                    isActive={activePanel === 'input'}
-                    onStopGenerating={handleStopGenerating}
-                    originalReviewedCode={reviewedCode}
-                    appMode={appMode}
-                    codeB={codeB}
-                    onCodeLineClick={handleCodeLineClick}
-                    revisedCode={revisedCode}
-                    chatRevisions={chatRevisions}
-                    onClearChatRevisions={handleClearChatRevisions}
-                    onRenameChatRevision={handleRenameChatRevision}
-                    onDeleteChatRevision={handleDeleteChatRevision}
-                    chatContext={chatContext}
-                    activeFeatureForDiscussion={activeFeatureForDiscussion}
-                    finalizationSummary={finalizationSummary}
-                    onOpenSaveModal={handleOpenSaveModal}
-                    onLoadRevisionIntoEditor={handleLoadRevisionIntoEditor}
-                    attachments={attachments}
-                    onAttachFileClick={handleAttachFileClick}
-                    onRemoveAttachment={handleRemoveAttachment}
-                    onOpenProjectFilesModal={() => setIsProjectFilesModalOpen(true)}
-                  />
-              ) : (
-                  <ComparisonInput 
-                    codeA={userOnlyCode}
-                    setCodeA={setUserOnlyCode}
-                    codeB={codeB}
-                    setCodeB={setCodeB}
-                    language={language}
-                    setLanguage={setLanguage}
-                    goal={comparisonGoal}
-                    setGoal={setComparisonGoal}
-                    onSubmit={handleCompareAndOptimize}
-                    onCompareAndRevise={handleCompareAndRevise}
-                    isLoading={isLoading}
-                    isChatLoading={isChatLoading}
-                    loadingAction={loadingAction}
-                    isActive={activePanel === 'input'}
-                    onNewReview={() => resetAndSetMode('comparison')}
-                    onFinalizeFeatureDiscussion={handleFinalizeFeatureDiscussion}
-                    onReturnToOutputView={handleReturnToOutputView}
-                    isChatMode={isChatMode}
-                    onFollowUpSubmit={handleFollowUpSubmit}
-                    chatHistory={chatHistory}
-                    chatInputValue={chatInputValue}
-                    setChatInputValue={setChatInputValue}
-                    onStopGenerating={handleStopGenerating}
-                    originalReviewedCode={reviewedCode}
-                    appMode={appMode}
-                    onCodeLineClick={handleCodeLineClick}
-                    revisedCode={revisedCode}
-                    chatRevisions={chatRevisions}
-                    onClearChatRevisions={handleClearChatRevisions}
-                    onRenameChatRevision={handleRenameChatRevision}
-                    onDeleteChatRevision={handleDeleteChatRevision}
-                    chatContext={chatContext}
-                    activeFeatureForDiscussion={activeFeatureForDiscussion}
-                    finalizationSummary={finalizationSummary}
-                    onOpenSaveModal={handleOpenSaveModal}
-                    onLoadRevisionIntoEditor={handleLoadRevisionIntoEditor}
-                    attachments={attachments}
-                    onAttachFileClick={handleAttachFileClick}
-                    onRemoveAttachment={handleRemoveAttachment}
-                    onOpenProjectFilesModal={() => setIsProjectFilesModalOpen(true)}
-                  />
-              )}
-            </div>
-          )}
-
-          {isChatMode && (
-             <div className="md:col-span-2 min-h-0" onClick={() => setActivePanel('input')}>
-                {appMode === 'single' || appMode === 'debug' ? (
-                     <CodeInput
-                        userCode={userOnlyCode}
-                        setUserCode={setUserOnlyCode}
-                        errorMessage={errorMessage}
-                        setErrorMessage={setErrorMessage}
-                        language={language}
-                        setLanguage={setLanguage}
-                        reviewProfile={reviewProfile}
-                        setReviewProfile={setReviewProfile}
-                        customReviewProfile={customReviewProfile}
-                        setCustomReviewProfile={setCustomReviewProfile}
-                        onSubmit={handleReviewSubmit}
-                        onExplainSelection={handleExplainSelection}
-                        onReviewSelection={handleReviewSelection}
-                        isLoading={isLoading}
-                        isChatLoading={isChatLoading}
-                        loadingAction={loadingAction}
-                        isChatMode={isChatMode}
-                        onNewReview={() => resetAndSetMode(appMode)}
-                        onFinalizeFeatureDiscussion={handleFinalizeFeatureDiscussion}
-                        onReturnToOutputView={handleReturnToOutputView}
-                        onFollowUpSubmit={handleFollowUpSubmit}
-                        chatHistory={chatHistory}
-                        chatInputValue={chatInputValue}
-                        setChatInputValue={setChatInputValue}
-                        isActive={activePanel === 'input'}
-                        onStopGenerating={handleStopGenerating}
-                        originalReviewedCode={reviewedCode}
-                        appMode={appMode}
-                        codeB={codeB}
-                        onCodeLineClick={handleCodeLineClick}
-                        revisedCode={revisedCode}
-                        chatRevisions={chatRevisions}
-                        onClearChatRevisions={handleClearChatRevisions}
-                        onRenameChatRevision={handleRenameChatRevision}
-                        onDeleteChatRevision={handleDeleteChatRevision}
-                        chatContext={chatContext}
-                        activeFeatureForDiscussion={activeFeatureForDiscussion}
-                        finalizationSummary={finalizationSummary}
-                        onOpenSaveModal={handleOpenSaveModal}
-                        onLoadRevisionIntoEditor={handleLoadRevisionIntoEditor}
-                        attachments={attachments}
-                        onAttachFileClick={handleAttachFileClick}
-                        onRemoveAttachment={handleRemoveAttachment}
-                        onOpenProjectFilesModal={() => setIsProjectFilesModalOpen(true)}
-                    />
-                ) : (
-                    <ComparisonInput 
-                        codeA={userOnlyCode}
-                        setCodeA={setUserOnlyCode}
-                        codeB={codeB}
-                        setCodeB={setCodeB}
-                        language={language}
-                        setLanguage={setLanguage}
-                        goal={comparisonGoal}
-                        setGoal={setComparisonGoal}
-                        onSubmit={handleCompareAndOptimize}
-                        onCompareAndRevise={handleCompareAndRevise}
-                        isLoading={isLoading}
-                        isChatLoading={isChatLoading}
-                        loadingAction={loadingAction}
-                        isActive={activePanel === 'input'}
-                        onNewReview={() => resetAndSetMode('comparison')}
-                        onFinalizeFeatureDiscussion={handleFinalizeFeatureDiscussion}
-                        onReturnToOutputView={handleReturnToOutputView}
-                        isChatMode={isChatMode}
-                        onFollowUpSubmit={handleFollowUpSubmit}
-                        chatHistory={chatHistory}
-                        chatInputValue={chatInputValue}
-                        setChatInputValue={setChatInputValue}
-                        onStopGenerating={handleStopGenerating}
-                        originalReviewedCode={reviewedCode}
-                        appMode={appMode}
-                        onCodeLineClick={handleCodeLineClick}
-                        revisedCode={revisedCode}
-                        chatRevisions={chatRevisions}
-                        onClearChatRevisions={handleClearChatRevisions}
-                        onRenameChatRevision={handleRenameChatRevision}
-                        onDeleteChatRevision={handleDeleteChatRevision}
-                        chatContext={chatContext}
-                        activeFeatureForDiscussion={activeFeatureForDiscussion}
-                        finalizationSummary={finalizationSummary}
-                        onOpenSaveModal={handleOpenSaveModal}
-                        onLoadRevisionIntoEditor={handleLoadRevisionIntoEditor}
-                        attachments={attachments}
-                        onAttachFileClick={handleAttachFileClick}
-                        onRemoveAttachment={handleRemoveAttachment}
-                        onOpenProjectFilesModal={() => setIsProjectFilesModalOpen(true)}
-                  />
-                )}
+              {renderInputComponent()}
             </div>
           )}
           

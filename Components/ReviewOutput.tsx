@@ -115,7 +115,7 @@ export const ReviewOutput = ({
         case 'review-selection': return 'Selection Review';
         case 'comparison': return 'Comparative Analysis';
         case 'revise': return 'Comparative Revision';
-        case 'finalizing': return 'Finalizing Revision';
+        case 'finalization': return 'Finalizing Revision';
         default: return 'Analysis';
     }
   }, [showLoading, loadingAction, outputType, appMode]);

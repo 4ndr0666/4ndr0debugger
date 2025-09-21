@@ -67,7 +67,7 @@ export interface Version {
   feedback: string;
   language: SupportedLanguage;
   timestamp: number;
-  type?: 'review' | 'docs' | 'tests' | 'commit' | 'finalization';
+  type?: 'review' | 'docs' | 'tests' | 'commit' | 'finalization' | 'audit';
   chatRevisions?: ChatRevision[];
   rawFeatureMatrixJson?: string | null;
 }
@@ -94,11 +94,11 @@ export interface FeatureDecisionRecord {
   revisedSnippet?: string;
 }
 
-export type LoadingAction = 'review' | 'docs' | 'tests' | 'commit' | 'explain-selection' | 'review-selection' | 'comparison' | 'revise' | 'finalizing' | 'generate-name' | null;
+export type LoadingAction = 'review' | 'docs' | 'tests' | 'commit' | 'explain-selection' | 'review-selection' | 'comparison' | 'revise' | 'finalization' | 'generate-name' | 'audit' | null;
 
-export type AppMode = 'debug' | 'single' | 'comparison';
+export type AppMode = 'debug' | 'single' | 'comparison' | 'audit';
 
-export type ChatContext = 'general' | 'feature_discussion' | 'finalizing';
+export type ChatContext = 'general' | 'feature_discussion' | 'finalization';
 
 export interface FinalizationSummary {
   included: Feature[];

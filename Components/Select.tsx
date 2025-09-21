@@ -1,5 +1,3 @@
-
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 
 interface SelectOption {
@@ -150,7 +148,7 @@ export const Select = ({
       {isOpen && (
         <ul
           ref={listRef}
-          className="absolute z-10 w-full mt-1 bg-black/90 backdrop-blur-sm border border-[var(--hud-color)] max-h-60 overflow-auto focus:outline-none text-base sm:text-sm p-1"
+          className="absolute z-10 w-full mt-1 bg-black/50 backdrop-blur-md border border-[var(--hud-color)] max-h-60 overflow-auto focus:outline-none text-base sm:text-sm p-1"
           role="listbox"
           aria-activedescendant={id && highlightedIndex >= 0 ? `${id}-option-${highlightedIndex}` : undefined}
           tabIndex={-1}

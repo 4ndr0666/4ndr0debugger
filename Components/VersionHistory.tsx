@@ -34,6 +34,12 @@ export const VersionHistory = ({ versions, onLoadVersion, onDeleteVersion, onSta
     );
   }
 
+  const handleDeleteClick = (versionId: string, versionName: string) => {
+    if (window.confirm(`Are you sure you want to delete the version "${versionName}"? This action cannot be undone.`)) {
+      onDeleteVersion(versionId);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
       <h3 className="text-lg text-center mb-4 flex-shrink-0">Saved Versions</h3>
@@ -54,7 +60,7 @@ export const VersionHistory = ({ versions, onLoadVersion, onDeleteVersion, onSta
                  <button onClick={() => onStartFollowUp(version)} title="Follow-up on this Version" className="p-1.5 text-[var(--hud-color)] rounded-full hover:bg-[var(--hud-color)]/20 focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)]">
                    <ChatIcon className="w-4 h-4" />
                  </button>
-                 <button onClick={() => onDeleteVersion(version.id)} title="Delete Version" className="p-1.5 text-[var(--red-color)]/70 rounded-full hover:bg-red-500/30 hover:text-[var(--red-color)] focus:outline-none focus:ring-1 focus:ring-[var(--red-color)]">
+                 <button onClick={() => handleDeleteClick(version.id, version.name)} title="Delete Version" className="p-1.5 text-[var(--red-color)]/70 rounded-full hover:bg-red-500/30 hover:text-[var(--red-color)] focus:outline-none focus:ring-1 focus:ring-[var(--red-color)]">
                     <DeleteIcon className="w-4 h-4"/>
                  </button>
               </div>

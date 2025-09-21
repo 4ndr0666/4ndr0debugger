@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Button } from './Button.tsx';
 import { SparklesIcon } from './Icons.tsx';
 import { ReviewProfile, SupportedLanguage, LoadingAction } from '../types.ts';
@@ -21,6 +21,14 @@ export const SaveVersionModal = ({
     isOpen, onClose, onSave, versionName, setVersionName, onAutoGenerate, isGeneratingName,
     outputType, language, reviewProfile, isSavingChat
 }: SaveVersionModalProps) => {
+  const [suggestionsVisible, setSuggestionsVisible] = useState(true);
+
+  useEffect(() => {
+    if (isOpen) {
+      setSuggestionsVisible(true);
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const suggestions = useMemo(() => {
@@ -35,12 +43,15 @@ export const SaveVersionModal = ({
     } else if (outputType === 'tests') {
       examples.push(`Tests: ${language} Utilities`);
       examples.push(`Unit Tests for Auth Logic`);
-    // FIX: Changed 'finalization' to 'finalizing' to match the LoadingAction type.
-    } else if (outputType === 'finalizing' || outputType === 'revise') {
+    } else if (outputType === 'audit') {
+        examples.push(`OSCP Audit: ${language}`);
+        examples.push(`Security Audit: ${new Date().toLocaleDateString()}`);
+        examples.push(`Code Hardening Review`);
+    } else if (outputType === 'finalization' || outputType === 'revise') {
       examples.push('Finalized Revision');
       examples.push('Unified Feature Set');
     } else { // 'review', 'review-selection', etc.
-      if (reviewProfile !== 'none' && reviewProfile !== 'Custom') {
+      if (reviewProfile !== 'none' && reviewProfile !== ReviewProfile.CUSTOM) {
         examples.push(`${reviewProfile} Review: ${language}`);
       }
       examples.push(`Initial ${language} Refactor`);
@@ -95,7 +106,7 @@ export const SaveVersionModal = ({
                 value={versionName}
                 onChange={(e) => setVersionName(e.target.value)}
                 onKeyDown={handleKeyDown}
-                className="block w-full p-2.5 pr-12 font-mono text-sm text-[var(--hud-color)] bg-black border border-[var(--hud-color-darker)] focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)] focus:border-[var(--hud-color)]"
+                className="block w-full p-3 pr-12 font-mono text-base text-[var(--hud-color)] bg-black border border-[var(--hud-color-darker)] focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)] focus:border-[var(--hud-color)]"
                 placeholder="e.g., Initial Refactor"
                 autoFocus
                 disabled={isGeneratingName}
@@ -113,14 +124,17 @@ export const SaveVersionModal = ({
               </Button>
             </div>
           </div>
-          {suggestions.length > 0 && (
-            <div className="pt-2">
+          {suggestionsVisible && suggestions.length > 0 && (
+            <div className="pt-2 animate-fade-in">
               <p className="text-xs text-center text-[var(--hud-color-darker)] mb-2 uppercase tracking-wider">Suggestions</p>
               <div className="flex flex-wrap justify-center gap-2">
                 {suggestions.map((s, i) => (
                   <button
                     key={i}
-                    onClick={() => setVersionName(s)}
+                    onClick={() => {
+                      setVersionName(s);
+                      setSuggestionsVisible(false);
+                    }}
                     className="px-2 py-1 font-mono text-xs border border-[var(--hud-color-darkest)] text-[var(--hud-color-darker)] transition-all duration-150 hover:border-[var(--hud-color)] hover:text-[var(--hud-color)] hover:bg-[var(--hud-color)]/10"
                   >
                     {s}
