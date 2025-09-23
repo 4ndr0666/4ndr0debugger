@@ -48,6 +48,7 @@ interface ComparisonInputProps {
   onAttachFileClick: () => void;
   onRemoveAttachment: (file: File) => void;
   onOpenProjectFilesModal: () => void;
+  onSaveGeneratedFile: (filename: string, content: string) => void;
 }
 
 const CodeEditor: React.FC<{
@@ -134,6 +135,7 @@ export const ComparisonInput: React.FC<ComparisonInputProps> = (props) => {
                     onAttachFileClick={props.onAttachFileClick}
                     onRemoveAttachment={props.onRemoveAttachment}
                     onOpenProjectFilesModal={props.onOpenProjectFilesModal}
+                    onSaveGeneratedFile={props.onSaveGeneratedFile}
                 />
             </div>
         );

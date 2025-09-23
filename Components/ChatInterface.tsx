@@ -36,6 +36,7 @@ interface ChatInterfaceProps {
   onAttachFileClick: () => void;
   onRemoveAttachment: (file: File) => void;
   onOpenProjectFilesModal: () => void;
+  onSaveGeneratedFile: (filename: string, content: string) => void;
 }
 
 const AttachmentPreview: React.FC<{ file: File; onRemove: () => void; }> = ({ file, onRemove }) => {
@@ -77,6 +78,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
     chatRevisions, onClearChatRevisions, onRenameChatRevision, onDeleteChatRevision,
     chatContext, activeFeatureForDiscussion, finalizationSummary,
     attachments, onAttachFileClick, onRemoveAttachment, onOpenProjectFilesModal,
+    onSaveGeneratedFile,
   } = props;
   
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -171,7 +173,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
                             className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                             <div className={`max-w-[80%] p-3 text-sm ${msg.role === 'user' ? 'bg-transparent border border-[var(--hud-color-darker)] text-[var(--hud-color)]' : 'bg-[var(--hud-color-darkest)] text-[var(--hud-color-darker)]'}`}>
                                 {msg.role === 'user' && renderAttachments(msg.attachments)}
-                                <MarkdownRenderer markdown={msg.content} />
+                                <MarkdownRenderer markdown={msg.content} onSaveGeneratedFile={onSaveGeneratedFile} />
                             </div>
                             </div>
                         ))}

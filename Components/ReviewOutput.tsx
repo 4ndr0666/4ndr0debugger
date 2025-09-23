@@ -32,6 +32,7 @@ interface ReviewOutputProps {
   allFeaturesDecided: boolean;
   onFinalize: () => void;
   onDownloadOutput: () => void;
+  onSaveGeneratedFile: (filename: string, content: string) => void;
 }
 
 const analysisSteps = [
@@ -79,7 +80,7 @@ export const ReviewOutput = ({
     onSaveVersion, isActive, outputType, onShowDiff, canCompare,
     addToast, onStartFollowUp, onGenerateCommitMessage, reviewAvailable,
     appMode, featureMatrix, featureDecisions, onFeatureDecision, allFeaturesDecided, onFinalize,
-    onDownloadOutput
+    onDownloadOutput, onSaveGeneratedFile
 }: ReviewOutputProps) => {
   const [copied, setCopied] = useState(false);
   const showLoading = isLoading || isChatLoading;
@@ -186,7 +187,7 @@ export const ReviewOutput = ({
             {outputType === 'revise' && featureMatrix ? (
               <FeatureMatrix features={featureMatrix} decisions={featureDecisions} onDecision={onFeatureDecision} />
             ) : (
-              feedback && <div className="space-y-4"><MarkdownRenderer markdown={feedback} /></div>
+              feedback && <div className="space-y-4"><MarkdownRenderer markdown={feedback} onSaveGeneratedFile={onSaveGeneratedFile} /></div>
             )}
             {isLoading && feedback && outputType !== 'revise' && <LoadingSpinner size="w-5 h-5" className="mx-auto mt-4" />}
             </div>

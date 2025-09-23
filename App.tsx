@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { GoogleGenAI, Chat, Type } from "@google/genai";
 import { Header } from './Components/Header.tsx';
@@ -44,13 +45,19 @@ const usePersistentState = <T,>(storageKey: string, defaultValue: T): [T, React.
 };
 
 
-// A more lenient code block extractor for chat revisions.
-const extractLastCodeBlock = (responseText: string): string | null => {
-    const allCodeBlocksRegex = /`{3}(?:[a-zA-Z0-9-]*)?\n([\s\S]*?)\n`{3}/g;
+// Extracts the last non-markdown code block to treat as a script revision.
+const extractLastScriptBlock = (responseText: string): string | null => {
+    const allCodeBlocksRegex = /`{3}(?:([a-zA-Z0-9-]*))?\n([\s\S]*?)\n`{3}/g;
     const matches = [...responseText.matchAll(allCodeBlocksRegex)];
-    if (matches.length > 0) {
-        return matches[matches.length - 1][1].trim();
+
+    for (let i = matches.length - 1; i >= 0; i--) {
+        const lang = (matches[i][1] || '').toLowerCase();
+        const code = matches[i][2].trim();
+        if (lang !== 'markdown' && lang !== 'md') {
+            return code;
+        }
     }
+    
     return null;
 };
 
@@ -795,7 +802,7 @@ const App: React.FC = () => {
       }
       
       if (!abortStreamRef.current) {
-        const newRevisionCode = extractLastCodeBlock(currentResponse);
+        const newRevisionCode = extractLastScriptBlock(currentResponse);
         if (newRevisionCode) {
            setRevisedCode(newRevisionCode); // Update the main revised code for diffing in finalize context
            setReviewFeedback(currentResponse); // Update feedback to include the final generated code
@@ -1397,6 +1404,18 @@ const App: React.FC = () => {
     }
   };
 
+  const handleSaveGeneratedFileToProject = (filename: string, content: string) => {
+    const newFile: ProjectFile = {
+      id: `file_${Date.now()}`,
+      name: filename,
+      mimeType: 'text/markdown',
+      timestamp: Date.now(),
+      content: content,
+    };
+    setProjectFiles(prev => [...prev, newFile]);
+    addToast(`File "${filename}" saved to project.`, 'success');
+  };
+
   const handleDeleteProjectFile = (fileId: string) => {
     setProjectFiles(prev => prev.filter(f => f.id !== fileId));
     addToast('Project file deleted.', 'info');
@@ -1463,6 +1482,7 @@ const App: React.FC = () => {
             onAttachFileClick={handleAttachFileClick}
             onRemoveAttachment={handleRemoveAttachment}
             onOpenProjectFilesModal={() => setIsProjectFilesModalOpen(true)}
+            onSaveGeneratedFile={handleSaveGeneratedFileToProject}
           />
         );
       case 'comparison':
@@ -1508,6 +1528,7 @@ const App: React.FC = () => {
             onAttachFileClick={handleAttachFileClick}
             onRemoveAttachment={handleRemoveAttachment}
             onOpenProjectFilesModal={() => setIsProjectFilesModalOpen(true)}
+            onSaveGeneratedFile={handleSaveGeneratedFileToProject}
           />
         );
       case 'audit':
@@ -1592,13 +1613,14 @@ const App: React.FC = () => {
                   allFeaturesDecided={allFeaturesDecided}
                   onFinalize={handleFinalizeRevision}
                   onDownloadOutput={() => handleDownloadAsFile(reviewFeedback!, 'documentation.md')}
+                  onSaveGeneratedFile={handleSaveGeneratedFileToProject}
                 />
             </div>
           )}
       </main>
       <footer className="py-4 text-center">
           <div className="flex justify-center items-center space-x-6 text-xs text-[var(--hud-color-darker)]">
-            <span>4ndr0⫌ebugger &copy; 2024</span>
+            <span>4ndr0⫌ebugger &copy; 2025</span>
           </div>
           <input 
             type="file" 

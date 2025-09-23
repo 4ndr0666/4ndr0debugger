@@ -1,8 +1,10 @@
 
+
 import React from 'react';
 import { CodeBlock } from './CodeBlock.tsx';
 import ErrorBoundary from './ErrorBoundary.tsx';
 import { AccordionItem } from './AccordionItem.tsx';
+import { GeneratedFile } from './GeneratedFile.tsx';
 
 // Helper to parse simple inline markdown (bold, italic, code) into React nodes.
 const parseInlineMarkdown = (text: string): React.ReactNode => {
@@ -81,27 +83,48 @@ const TextBlock: React.FC<{ text: string }> = ({ text }) => {
   return <>{elements}</>;
 };
 
-export const MarkdownRenderer: React.FC<{ markdown: string }> = ({ markdown }) => {
+export const MarkdownRenderer: React.FC<{ 
+  markdown: string;
+  onSaveGeneratedFile?: (filename: string, content: string) => void; 
+}> = ({ markdown, onSaveGeneratedFile }) => {
   if (!markdown) return null;
 
-  // This regex finds headings like "### REVISED CODE" and the code block that immediately follows.
-  // It captures the heading and the code block separately.
   const revisedCodeRegex = /(#+\s*(?:REVISED|UPDATED|FULL|OPTIMIZED|ENHANCED)[\s\w]*(?:CODE|REVISION))\s*\n(```(?:[a-zA-Z0-9-]*)\n[\s\S]*?\n```)/gi;
-
-  // The split method with a capturing group creates an array of:
-  // [text_before, captured_heading, captured_code_block, text_after, ...]
   const parts = markdown.split(revisedCodeRegex);
 
   const renderRegularPart = (part: string, key: string | number) => {
-    // This function handles rendering standard text and code blocks.
-    const subParts = part.split(/(```(?:[a-zA-Z0-9-]*)\n[\s\S]*?\n```)/g);
+    const subParts = part.split(/(```(?:[a-zA-Z0-9-:]*)\n[\s\S]*?\n```)/g);
     return (
       <React.Fragment key={key}>
         {subParts.map((subPart, subIndex) => {
           if (!subPart) return null;
-          const codeBlockMatch = subPart.match(/^```([a-zA-Z0-9-]*)\n([\s\S]*?)\n```$/);
+          const codeBlockMatch = subPart.match(/^```([a-zA-Z0-9-:]*)\n([\s\S]*?)\n```$/);
           if (codeBlockMatch) {
-            const [, language, code] = codeBlockMatch;
+            const [, langInfo, code] = codeBlockMatch;
+            const language = (langInfo || '').split(':')[0].trim().toLowerCase();
+            const filenameFromInfo = (langInfo || '').split(':')[1]?.trim();
+            
+            if ((language === 'markdown' || language === 'md') && onSaveGeneratedFile) {
+                let filename = filenameFromInfo;
+                if (!filename) {
+                  const firstLine = code.trim().split('\n')[0];
+                  if (firstLine.startsWith('# ')) {
+                    // Sanitize filename
+                    filename = firstLine.substring(2).trim().replace(/[<>:"/\\|?*]/g, '').replace(/\s/g, '_');
+                  } else {
+                    filename = `document-${Date.now()}.md`;
+                  }
+                }
+                 if (!filename.toLowerCase().endsWith('.md')) {
+                    filename += '.md';
+                }
+                return (
+                  <ErrorBoundary key={`sub-${subIndex}`}>
+                    <GeneratedFile filename={filename} content={code.trim()} onSave={onSaveGeneratedFile} />
+                  </ErrorBoundary>
+                );
+            }
+
             return (
               <ErrorBoundary key={`sub-${subIndex}`}>
                 <CodeBlock code={code.trim()} language={language} />
@@ -117,12 +140,10 @@ export const MarkdownRenderer: React.FC<{ markdown: string }> = ({ markdown }) =
   return (
     <>
       {parts.map((part, index) => {
-        // Every 3rd element starting from 0 is a regular text part.
         if (index % 3 === 0) {
           return renderRegularPart(part, index);
         }
         
-        // Every 3rd element starting from 1 is a captured heading.
         if (index % 3 === 1) {
           const title = part.replace(/#+\s*/, '');
           const codeBlockPart = parts[index + 1];
@@ -140,8 +161,6 @@ export const MarkdownRenderer: React.FC<{ markdown: string }> = ({ markdown }) =
           }
         }
         
-        // Every 3rd element starting from 2 is a captured code block which is handled
-        // with its preceding heading, so we render nothing here.
         return null;
       })}
     </>

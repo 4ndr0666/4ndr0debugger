@@ -37,9 +37,9 @@ export const ProjectFilesModal = ({
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      onUploadFile(file);
+    const files = event.target.files;
+    if (files) {
+      Array.from(files).forEach(file => onUploadFile(file));
     }
     // Reset file input to allow uploading the same file again
     if (event.target) {
@@ -84,12 +84,13 @@ export const ProjectFilesModal = ({
         </div>
 
         <div className="flex-shrink-0 my-4">
-            <Button onClick={handleUploadClick} className="w-full">Upload New File</Button>
+            <Button onClick={handleUploadClick} className="w-full">Upload New File(s)</Button>
             <input 
               type="file"
               ref={uploadInputRef}
               onChange={handleFileChange}
               className="hidden"
+              multiple
             />
         </div>
 

@@ -53,6 +53,7 @@ interface CodeInputProps {
   onAttachFileClick: () => void;
   onRemoveAttachment: (file: File) => void;
   onOpenProjectFilesModal: () => void;
+  onSaveGeneratedFile: (filename: string, content: string) => void;
 }
 
 export const CodeInput: React.FC<CodeInputProps> = (props) => {
@@ -63,7 +64,8 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
     customReviewProfile, setCustomReviewProfile,
     onExplainSelection, onReviewSelection,
     isChatMode, isActive, onStopGenerating, appMode,
-    errorMessage, setErrorMessage, chatContext, activeFeatureForDiscussion, finalizationSummary
+    errorMessage, setErrorMessage, chatContext, activeFeatureForDiscussion, finalizationSummary,
+    onSaveGeneratedFile
   } = props;
   
   const [selectedText, setSelectedText] = useState('');
@@ -132,6 +134,7 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
             onAttachFileClick={props.onAttachFileClick}
             onRemoveAttachment={props.onRemoveAttachment}
             onOpenProjectFilesModal={props.onOpenProjectFilesModal}
+            onSaveGeneratedFile={onSaveGeneratedFile}
           />
       </div>
     );
