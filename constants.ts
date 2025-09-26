@@ -1,5 +1,6 @@
 
 
+
 import { LanguageOption, SupportedLanguage, ProfileOption, ReviewProfile } from './types.ts';
 import { Type } from "@google/genai";
 
@@ -206,6 +207,166 @@ export const FEATURE_MATRIX_SCHEMA = {
     required: ['features']
 };
 
+// --- For Engine Synthesizer ---
+export const ENGINE_SYNTHESIZER_SYSTEM_INSTRUCTION = `You are an expert security researcher specializing in web application reconnaissance. Analyze the provided URL and predict its API structure. Based on the domain name, path, and common web patterns, identify the most likely URL endpoints for these actions: 
+1. **Generate Content**: An endpoint that starts a process (e.g., creating a video, running a task).
+2. **Check Status**: An endpoint to poll for the progress of a task, likely using an ID.
+3. **Check Credits**: An endpoint to check a user's resource balance. 
+
+Also, predict the most likely JSON keys for:
+1. **Auth Token**: A JWT or session token key (e.g., 'authToken', 'jwt').
+2. **Task ID**: The ID of a job or task (e.g., 'taskId', 'jobId').
+3. **Credit Amount**: A key for the user's credit/balance (e.g., 'credits', 'balance').
+
+Return ONLY a JSON object matching the provided schema. If a value cannot be determined with high confidence, return an empty string for that key.`;
+
+export const ENGINE_USERSCRIPT_TEMPLATE = `// ==UserScript==
+// @name         Synthesized Payload for __TARGET_HOSTNAME__
+// @namespace    http://tampermonkey.net/
+// @version      2025.1
+// @description  Automated reconnaissance and interaction userscript, synthesized by DPSE.
+// @author       DPSE
+// @match        *://__TARGET_MATCH_URL__/*
+// @grant        GM_xmlhttpRequest
+// @grant        GM_setValue
+// @grant        GM_getValue
+// @connect      *
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    // --- [ Operator Configuration ] ---
+    // Heuristically identified values. VERIFY AND UPDATE THESE BEFORE EXECUTION.
+    const config = {
+        endpoints: {
+            generate: "__TARGET_GENERATE_ENDPOINT_HEURISTIC__", // e.g., /api/v4/video/create
+            status: "__TARGET_STATUS_ENDPOINT_HEURISTIC__",     // e.g., /api/v4/task/{taskId}
+            credits: "__TARGET_CREDITS_ENDPOINT_HEURISTIC__"    // e.g., /api/v4/user/credits
+        },
+        keys: {
+            authToken: "__TARGET_AUTH_KEY_HEURISTIC__",       // Key for auth token in web storage
+            creditAmount: "__TARGET_CREDIT_KEY_HEURISTIC__",  // Key for credit amount in credits response
+            taskId: "__TARGET_TASKID_KEY_HEURISTIC__"         // Key for task ID in generate response
+        },
+        settings: {
+            pollingIntervalMs: 5000,
+            maxConcurrentJobs: 3,
+            payload: { /* Define the payload for the generate request here */ }
+        }
+    };
+
+    // --- [ UI Panel ] ---
+    function createUIPanel() {
+        const panel = document.createElement('div');
+        panel.style.cssText = 'position:fixed; top:10px; right:10px; z-index:9999; background:rgba(0,20,20,0.9); border:1px solid #00fefe; padding:15px; color:#00fefe; font-family:monospace;';
+        panel.innerHTML = \`
+            <h3 style="margin:0 0 10px 0; font-family:Orbitron,monospace; text-transform:uppercase;">DPSE Payload</h3>
+            <div id="dpse-status">STATUS: IDLE</div>
+            <div id="dpse-credits" style="margin-top:5px;">CREDITS: N/A</div>
+            <button id="dpse-start-btn" style="background:#00fefe; color:black; border:none; padding:5px 10px; margin-top:10px; cursor:pointer;">START</button>
+            <button id="dpse-stop-btn" style="background:#ff003c; color:black; border:none; padding:5px 10px; margin-top:10px; cursor:pointer;">STOP</button>
+        \`;
+        document.body.appendChild(panel);
+
+        document.getElementById('dpse-start-btn').onclick = run;
+        document.getElementById('dpse-stop-btn').onclick = stop;
+    }
+
+    const updateUI = (status, credits) => {
+        const statusEl = document.getElementById('dpse-status');
+        const creditsEl = document.getElementById('dpse-credits');
+        if (statusEl && status) statusEl.textContent = \`STATUS: \${status}\`;
+        if (creditsEl && credits !== undefined) creditsEl.textContent = \`CREDITS: \${credits}\`;
+    };
+    
+    // --- [ Core Logic ] ---
+    let isRunning = false;
+    let authToken = null;
+
+    const log = (message) => console.log(\`[DPSE] \${message}\`);
+
+    const apiRequest = (method, url, headers = {}, data = null) => {
+        return new Promise((resolve, reject) => {
+            GM_xmlhttpRequest({
+                method,
+                url,
+                headers,
+                data: data ? JSON.stringify(data) : null,
+                onload: response => {
+                    if (response.status >= 200 && response.status < 300) {
+                        try {
+                            resolve(JSON.parse(response.responseText));
+                        } catch (e) {
+                            resolve(response.responseText);
+                        }
+                    } else {
+                        reject(new Error(\`\${response.status}: \${response.statusText}\`));
+                    }
+                },
+                onerror: error => reject(error)
+            });
+        });
+    };
+    
+    async function getAuthToken() {
+        const token = localStorage.getItem(config.keys.authToken) || sessionStorage.getItem(config.keys.authToken);
+        if (token) {
+            log("Auth token found in web storage.");
+            return token;
+        }
+        log("Auth token not found. Operator intervention required.");
+        return null;
+    }
+    
+    async function checkCredits() {
+        if (!config.endpoints.credits || config.endpoints.credits === 'NOT_FOUND') return;
+        try {
+            const headers = authToken ? { 'Authorization': \`Bearer \${authToken}\` } : {};
+            const data = await apiRequest('GET', config.endpoints.credits, headers);
+            const credits = data[config.keys.creditAmount];
+            updateUI(null, credits);
+            log(\`Credits check successful: \${credits}\`);
+            return credits;
+        } catch (e) {
+            log(\`Credit check failed: \${e.message}\`);
+        }
+    }
+
+    async function run() {
+        if (isRunning) return;
+        isRunning = true;
+        log("Starting operation...");
+        updateUI("RUNNING");
+        
+        authToken = await getAuthToken();
+        if (!authToken) {
+            updateUI("ERROR: No Auth Token");
+            isRunning = false;
+            return;
+        }
+        await checkCredits();
+
+        // TODO: Implement main generation/polling loop here.
+        // Example:
+        // const response = await apiRequest('POST', config.endpoints.generate, { 'Authorization': \`Bearer \${authToken}\` }, config.settings.payload);
+        // const taskId = response[config.keys.taskId];
+        // pollStatus(taskId);
+    }
+    
+    function stop() {
+        if (!isRunning) return;
+        isRunning = false;
+        log("Stopping operation.");
+        updateUI("STOPPED");
+    }
+
+    // --- [ Initialization ] ---
+    log("Payload initialized. Verify config before starting.");
+    createUIPanel();
+
+})();
+`;
 
 export const PLACEHOLDER_MARKER = "❯ awaiting input...";
 

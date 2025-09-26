@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { SupportedLanguage, ChatRevision, Feature, ChatContext as ChatContextType, FinalizationSummary } from '../types.ts';
 import { AccordionItem } from './AccordionItem.tsx';
 import { CopyIcon, CheckIcon, DeleteIcon } from './Icons.tsx';
+import { EditableTitle } from './EditableTitle.tsx';
 
 interface ChatContextProps {
   codeA: string;
@@ -137,67 +138,6 @@ const ClickableCodeBlock: React.FC<{
     );
 };
 
-const EditableTitle: React.FC<{ initialTitle: string; onSave: (newTitle: string) => void }> = ({ initialTitle, onSave }) => {
-    const [isEditing, setIsEditing] = useState(false);
-    const [title, setTitle] = useState(initialTitle);
-    const inputRef = useRef<HTMLInputElement>(null);
-
-    useEffect(() => {
-        if (isEditing) {
-            inputRef.current?.focus();
-            inputRef.current?.select();
-        }
-    }, [isEditing]);
-    
-    useEffect(() => {
-        setTitle(initialTitle);
-    }, [initialTitle]);
-
-    const handleSave = () => {
-        if (title.trim()) {
-            onSave(title.trim());
-        } else {
-            setTitle(initialTitle); // Revert if empty
-        }
-        setIsEditing(false);
-    };
-
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            handleSave();
-        }
-        if (e.key === 'Escape') {
-            setTitle(initialTitle);
-            setIsEditing(false);
-        }
-    };
-
-    if (isEditing) {
-        return (
-            <input
-                ref={inputRef}
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                onBlur={handleSave}
-                onKeyDown={handleKeyDown}
-                className="bg-transparent text-base font-heading text-[var(--hud-color)] w-full outline-none border-b border-b-[var(--hud-color-darker)]"
-            />
-        );
-    }
-
-    return (
-        <span
-            onClick={() => setIsEditing(true)}
-            className="font-heading text-base cursor-pointer"
-            title="Click to rename"
-        >
-            {title}
-        </span>
-    );
-};
-
 export const ChatContext = ({ 
     codeA, codeB, onLineClick, revisedCode, chatRevisions, onClearChatRevisions, 
     onRenameRevision, onDeleteRevision, appMode, chatContext, activeFeatureForDiscussion, finalizationSummary
@@ -261,7 +201,12 @@ export const ChatContext = ({
                 key={revision.id} 
                 title={
                     <div className="flex items-center justify-between w-full gap-2">
-                        <EditableTitle initialTitle={revision.name} onSave={(newName) => onRenameRevision(revision.id, newName)} />
+                        <EditableTitle 
+                            initialTitle={revision.name} 
+                            onSave={(newName) => onRenameRevision(revision.id, newName)} 
+                            className="font-heading text-base cursor-pointer"
+                            inputClassName="bg-transparent text-base font-heading text-[var(--hud-color)] w-full outline-none border-b border-b-[var(--hud-color-darker)]"
+                        />
                         <button
                             onClick={(e) => { e.stopPropagation(); onDeleteRevision(revision.id); }}
                             className="p-1 text-[var(--red-color)]/70 rounded-full hover:bg-red-500/30 hover:text-[var(--red-color)] focus:outline-none focus:ring-1 focus:ring-[var(--red-color)] flex-shrink-0"

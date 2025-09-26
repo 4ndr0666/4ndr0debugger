@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { SaveIcon, ImportIcon, ExportIcon, AnimatedMenuIcon, BoltIcon, LogoIcon, ChatIcon, HistoryIcon, EyeIcon, EyeOffIcon, CodeIcon, CompareIconSvg, BugIcon, DocsIcon, FolderIcon, ShareIcon, ShieldIcon } from './Icons.tsx';
-import { Toast } from '../types.ts';
+import { SaveIcon, ImportIcon, ExportIcon, AnimatedMenuIcon, BoltIcon, LogoIcon, ChatIcon, HistoryIcon, EyeIcon, EyeOffIcon, CodeIcon, CompareIconSvg, BugIcon, DocsIcon, FolderIcon, ShareIcon, ShieldIcon, EngineIcon } from './Icons.tsx';
 
 interface HeaderProps {
     onImportClick: () => void;
@@ -12,11 +11,11 @@ interface HeaderProps {
     onToggleVersionHistory: () => void;
     isToolsEnabled: boolean;
     isLoading: boolean;
-    addToast: (message: string, type: Toast['type']) => void;
     onStartDebug: () => void;
     onStartSingleReview: () => void;
     onStartComparison: () => void;
     onStartAudit: () => void;
+    onStartEngine: () => void;
     isInputPanelVisible: boolean;
     onToggleInputPanel: () => void;
     onNewReview: () => void; // Kept for the clear button functionality
@@ -54,11 +53,11 @@ export const Header: React.FC<HeaderProps> = ({
     onToggleVersionHistory,
     isToolsEnabled,
     isLoading,
-    addToast,
     onStartDebug,
     onStartSingleReview,
     onStartComparison,
     onStartAudit,
+    onStartEngine,
     isInputPanelVisible,
     onToggleInputPanel,
     isFollowUpAvailable,
@@ -88,7 +87,6 @@ export const Header: React.FC<HeaderProps> = ({
   
   const handleExport = () => {
       onExportSession();
-      addToast('Session exported successfully!', 'success');
   }
 
   return (
@@ -122,6 +120,9 @@ export const Header: React.FC<HeaderProps> = ({
                             </MenuItem>
                             <MenuItem onClick={() => handleMenuClick(onStartAudit)} disabled={isLoading}>
                                 <ShieldIcon className="w-4 h-4" /> Code Audit
+                            </MenuItem>
+                            <MenuItem onClick={() => handleMenuClick(onStartEngine)} disabled={isLoading}>
+                                <EngineIcon className="w-4 h-4" /> Customized Engines
                             </MenuItem>
 
                             <MenuDivider label="View" />

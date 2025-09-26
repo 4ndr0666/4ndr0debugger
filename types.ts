@@ -1,5 +1,6 @@
 
 
+
 export enum SupportedLanguage {
   JAVASCRIPT = 'JavaScript',
   TYPESCRIPT = 'TypeScript',
@@ -40,6 +41,13 @@ export interface ProfileOption {
 export interface LanguageOption {
   value: SupportedLanguage;
   label: string;
+}
+
+// FIX: Add missing Toast interface for toast notifications.
+export interface Toast {
+  id: number;
+  message: string;
+  type: 'success' | 'error' | 'info';
 }
 
 export interface ChatMessage {
@@ -96,7 +104,7 @@ export interface FeatureDecisionRecord {
 
 export type LoadingAction = 'review' | 'docs' | 'tests' | 'commit' | 'explain-selection' | 'review-selection' | 'comparison' | 'revise' | 'finalization' | 'generate-name' | 'audit' | null;
 
-export type AppMode = 'debug' | 'single' | 'comparison' | 'audit';
+export type AppMode = 'debug' | 'single' | 'comparison' | 'audit' | 'engine';
 
 export type ChatContext = 'general' | 'feature_discussion' | 'finalization';
 
@@ -104,10 +112,4 @@ export interface FinalizationSummary {
   included: Feature[];
   removed: Feature[];
   revised: Feature[];
-}
-
-export interface Toast {
-  id: number;
-  message: string;
-  type: 'success' | 'error' | 'info';
 }

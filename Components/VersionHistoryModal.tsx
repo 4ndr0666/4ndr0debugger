@@ -9,6 +9,7 @@ interface VersionHistoryModalProps {
   onLoadVersion: (version: Version) => void;
   onDeleteVersion: (versionId: string) => void;
   onStartFollowUp: (version: Version) => void;
+  onRenameVersion: (versionId: string, newName: string) => void;
 }
 
 export const VersionHistoryModal = ({ isOpen, onClose, ...versionHistoryProps }: VersionHistoryModalProps) => {

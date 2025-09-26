@@ -1,22 +1,19 @@
-
-
-
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { GoogleGenAI, Chat, Type } from "@google/genai";
 import { Header } from './Components/Header.tsx';
 import { CodeInput } from './Components/CodeInput.tsx';
 import { ReviewOutput } from './Components/ReviewOutput.tsx';
-import { SupportedLanguage, ChatMessage, Version, ReviewProfile, LoadingAction, Toast, AppMode, ChatRevision, Feature, FeatureDecision, ChatContext, FinalizationSummary, FeatureDecisionRecord, ProjectFile } from './types.ts';
+import { SupportedLanguage, ChatMessage, Version, ReviewProfile, LoadingAction, AppMode, ChatRevision, Feature, FeatureDecision, ChatContext, FinalizationSummary, FeatureDecisionRecord, ProjectFile } from './types.ts';
 import { SUPPORTED_LANGUAGES, GEMINI_MODELS, SYSTEM_INSTRUCTION, DEBUG_SYSTEM_INSTRUCTION, DOCS_SYSTEM_INSTRUCTION, PROFILE_SYSTEM_INSTRUCTIONS, GENERATE_TESTS_INSTRUCTION, EXPLAIN_CODE_INSTRUCTION, REVIEW_SELECTION_INSTRUCTION, COMMIT_MESSAGE_SYSTEM_INSTRUCTION, DOCS_INSTRUCTION, COMPARISON_SYSTEM_INSTRUCTION, COMPARISON_REVISION_SYSTEM_INSTRUCTION, FEATURE_MATRIX_SCHEMA, generateComparisonTemplate, LANGUAGE_TAG_MAP, PLACEHOLDER_MARKER, AUDIT_SYSTEM_INSTRUCTION, generateAuditTemplate } from './constants.ts';
 import { DiffViewer } from './Components/DiffViewer.tsx';
 import { ComparisonInput } from './Components/ComparisonInput.tsx';
 import { VersionHistoryModal } from './Components/VersionHistoryModal.tsx';
 import { SaveVersionModal } from './Components/SaveVersionModal.tsx';
-import { ToastContainer } from './Components/ToastContainer.tsx';
 import { ApiKeyBanner } from './Components/ApiKeyBanner.tsx';
 import { DocumentationCenterModal } from './Components/DocumentationCenterModal.tsx';
 import { ProjectFilesModal } from './Components/ProjectFilesModal.tsx';
 import { AuditInput } from './Components/AuditInput.tsx';
+import { EngineSynthesizer } from './Components/EngineSynthesizer.tsx';
 
 type OutputType = LoadingAction;
 type ActivePanel = 'input' | 'output';
@@ -47,7 +44,7 @@ const usePersistentState = <T,>(storageKey: string, defaultValue: T): [T, React.
 
 // Extracts the last non-markdown code block to treat as a script revision.
 const extractLastScriptBlock = (responseText: string): string | null => {
-    const allCodeBlocksRegex = /`{3}(?:([a-zA-Z0-9-]*))?\n([\s\S]*?)\n`{3}/g;
+    const allCodeBlocksRegex = /`{3}(?:([a-zA-Z0-9-]*))?\n([\sS]*?)\n`{3}/g;
     const matches = [...responseText.matchAll(allCodeBlocksRegex)];
 
     for (let i = matches.length - 1; i >= 0; i--) {
@@ -118,9 +115,6 @@ const App: React.FC = () => {
   const [isGeneratingName, setIsGeneratingName] = useState<boolean>(false);
 
 
-  // --- Toast State ---
-  const [toasts, setToasts] = useState<Toast[]>([]);
-  
   // --- File Attachment & Project Files State ---
   const [attachments, setAttachments] = useState<{ file: File; content: string; mimeType: string }[]>([]);
   const [projectFiles, setProjectFiles] = usePersistentState<ProjectFile[]>('projectFiles', []);
@@ -170,25 +164,13 @@ const App: React.FC = () => {
             if (decodedState.reviewProfile) setReviewProfile(decodedState.reviewProfile);
             if (decodedState.customReviewProfile) setCustomReviewProfile(decodedState.customReviewProfile);
             
-            addToast('Shared session loaded from URL!', 'info');
             // Clear hash so a refresh doesn't reload it again if user makes changes
             window.history.replaceState(null, '', window.location.pathname + window.location.search);
         } catch (e) {
             console.error("Failed to load state from URL hash:", e);
-            addToast('Could not load shared session from URL.', 'error');
         }
     }
   }, []); // Run only once on mount
-
-  const addToast = (message: string, type: Toast['type']) => {
-    const id = Date.now();
-    setToasts(prev => [...prev, { id, message, type }]);
-  };
-
-  const removeToast = (id: number) => {
-    setToasts(prev => prev.filter(t => t.id !== id));
-  };
-
 
   const getSystemInstructionForReview = useCallback(() => {
     let instruction = SYSTEM_INSTRUCTION;
@@ -201,11 +183,43 @@ const App: React.FC = () => {
   }, [reviewProfile, customReviewProfile]);
 
 
-  const performStreamingRequest = async (fullCode: string, systemInstruction: string, model: string) => {
+  const buildPromptWithProjectFiles = (mainPrompt: string, options: { textOnly?: boolean } = {}): string | { parts: any[] } => {
+    if (projectFiles.length === 0) {
+      return mainPrompt;
+    }
+
+    let combinedText = `The user has provided the following project files for context. Use them to inform your response.\n\n`;
+    const imageParts: { inlineData: { mimeType: string; data: string; } }[] = [];
+
+    projectFiles.forEach(file => {
+      if (file.mimeType.startsWith('image/') && !options.textOnly) {
+        imageParts.push({
+          inlineData: {
+            mimeType: file.mimeType,
+            data: file.content, // content is base64 for images
+          },
+        });
+        combinedText += `- Image file attached: ${file.name}\n`;
+      } else if (!file.mimeType.startsWith('image/')) {
+        // Embed text-based files directly.
+        combinedText += `--- PROJECT FILE: ${file.name} ---\n\`\`\`\n${file.content}\n\`\`\`\n--- END OF FILE: ${file.name} ---\n\n`;
+      }
+    });
+
+    combinedText += `\n---\n\nHere is the user's primary request:\n\n${mainPrompt}`;
+
+    if (imageParts.length === 0) {
+      return combinedText;
+    }
+
+    const parts = [{ text: combinedText }, ...imageParts];
+    return { parts };
+  };
+
+  const performStreamingRequest = async (contents: string | { parts: any[] }, systemInstruction: string, model: string) => {
     if (!ai) {
       const msg = "Error: API Key not configured.";
       setError(msg);
-      addToast(msg, 'error');
       setIsLoading(false);
       setLoadingAction(null);
       return;
@@ -217,7 +231,7 @@ const App: React.FC = () => {
       setReviewFeedback(''); // Start with an empty string for streaming
       const responseStream = await ai.models.generateContentStream({
         model: model,
-        contents: fullCode,
+        contents: contents,
         config: {
           systemInstruction: systemInstruction,
           temperature: 0.3,
@@ -241,7 +255,6 @@ const App: React.FC = () => {
       console.error("API Error:", apiError);
       const message = apiError instanceof Error ? apiError.message : "An unexpected error occurred.";
       setError(`Failed to get review: ${message}`);
-      addToast(`API Error: ${message}`, 'error');
       setReviewFeedback(null);
       setReviewedCode(null);
       setRevisedCode(null);
@@ -254,7 +267,6 @@ const App: React.FC = () => {
     setIsLoading(false);
     setIsChatLoading(false); // also stop chat loading if applicable
     setLoadingAction(null);
-    addToast("Generation stopped.", "info");
   };
 
 
@@ -321,7 +333,8 @@ const App: React.FC = () => {
       ? `${SYSTEM_INSTRUCTION}\n\n${DEBUG_SYSTEM_INSTRUCTION}`
       : getSystemInstructionForReview();
     
-    const fullResponse = await performStreamingRequest(fullCodeToSubmit, systemInstruction, GEMINI_MODELS.CORE_ANALYSIS);
+    const contents = buildPromptWithProjectFiles(fullCodeToSubmit);
+    const fullResponse = await performStreamingRequest(contents, systemInstruction, GEMINI_MODELS.CORE_ANALYSIS);
 
     if (fullResponse) {
         setRevisedCode(extractFinalCodeBlock(fullResponse, true));
@@ -329,7 +342,7 @@ const App: React.FC = () => {
 
     setIsLoading(false);
     setLoadingAction(null);
-  }, [ai, getSystemInstructionForReview, userOnlyCode, language, appMode]);
+  }, [ai, getSystemInstructionForReview, userOnlyCode, language, appMode, projectFiles]);
 
   const handleAuditSubmit = useCallback(async () => {
     setIsLoading(true);
@@ -342,8 +355,9 @@ const App: React.FC = () => {
 
     setFullCodeForReview(fullCodeToSubmit);
     setReviewedCode(userOnlyCode);
-
-    const fullResponse = await performStreamingRequest(fullCodeToSubmit, `${SYSTEM_INSTRUCTION}\n\n${AUDIT_SYSTEM_INSTRUCTION}`, GEMINI_MODELS.CORE_ANALYSIS);
+    
+    const contents = buildPromptWithProjectFiles(fullCodeToSubmit);
+    const fullResponse = await performStreamingRequest(contents, `${SYSTEM_INSTRUCTION}\n\n${AUDIT_SYSTEM_INSTRUCTION}`, GEMINI_MODELS.CORE_ANALYSIS);
 
     if (fullResponse) {
         setRevisedCode(extractFinalCodeBlock(fullResponse, true));
@@ -351,7 +365,7 @@ const App: React.FC = () => {
 
     setIsLoading(false);
     setLoadingAction(null);
-  }, [ai, userOnlyCode, language]);
+  }, [ai, userOnlyCode, language, projectFiles]);
 
   const handleCompareAndOptimize = useCallback(async () => {
     setIsLoading(true);
@@ -363,8 +377,9 @@ const App: React.FC = () => {
     const prompt = generateComparisonTemplate(language, comparisonGoal, userOnlyCode, codeB);
     setFullCodeForReview(prompt); // Save for versioning
     setReviewedCode(userOnlyCode); // Set Code A as the "before" for diffing
-
-    const fullResponse = await performStreamingRequest(prompt, `${SYSTEM_INSTRUCTION}\n\n${COMPARISON_SYSTEM_INSTRUCTION}`, GEMINI_MODELS.CORE_ANALYSIS);
+    
+    const contents = buildPromptWithProjectFiles(prompt);
+    const fullResponse = await performStreamingRequest(contents, `${SYSTEM_INSTRUCTION}\n\n${COMPARISON_SYSTEM_INSTRUCTION}`, GEMINI_MODELS.CORE_ANALYSIS);
     
     if (fullResponse) {
         setRevisedCode(extractFinalCodeBlock(fullResponse, true));
@@ -372,13 +387,12 @@ const App: React.FC = () => {
     
     setIsLoading(false);
     setLoadingAction(null);
-  }, [ai, language, comparisonGoal, userOnlyCode, codeB]);
+  }, [ai, language, comparisonGoal, userOnlyCode, codeB, projectFiles]);
 
   const handleCompareAndRevise = useCallback(async () => {
     if (!ai) {
       const msg = "Error: API Key not configured.";
       setError(msg);
-      addToast(msg, 'error');
       return;
     }
     setIsLoading(true);
@@ -391,10 +405,12 @@ const App: React.FC = () => {
     setFullCodeForReview(prompt);
     setReviewedCode(userOnlyCode);
 
+    const contents = buildPromptWithProjectFiles(prompt, { textOnly: true }) as string;
+
     try {
         const response = await ai.models.generateContent({
             model: GEMINI_MODELS.CORE_ANALYSIS,
-            contents: prompt,
+            contents: contents,
             config: {
                 systemInstruction: `${SYSTEM_INSTRUCTION}\n\n${COMPARISON_REVISION_SYSTEM_INSTRUCTION}`,
                 responseMimeType: 'application/json',
@@ -416,18 +432,17 @@ const App: React.FC = () => {
         console.error("Comparative Revision API Error:", apiError);
         const message = apiError instanceof Error ? apiError.message : "An unexpected error occurred.";
         setError(`Failed to generate feature matrix: ${message}`);
-        addToast(`API Error: ${message}`, 'error');
         setFeatureMatrix(null);
         setReviewFeedback(null);
     } finally {
         setIsLoading(false);
         setLoadingAction(null);
     }
-  }, [ai, language, comparisonGoal, userOnlyCode, codeB]);
+  }, [ai, language, comparisonGoal, userOnlyCode, codeB, projectFiles]);
 
   const handleTriggerDocsGeneration = useCallback(async (codeToDocument: string) => {
     if (!codeToDocument.trim()) {
-      addToast("Cannot generate documentation for empty code.", "error");
+      console.error("Cannot generate documentation for empty code.");
       return;
     }
     setIsDocsModalOpen(false); // Close modal before starting
@@ -443,11 +458,12 @@ const App: React.FC = () => {
     setReviewedCode(codeToDocument); // Set the source code as "reviewed"
     
     const systemInstruction = `${SYSTEM_INSTRUCTION}\n\n${DOCS_SYSTEM_INSTRUCTION}\n\n${DOCS_INSTRUCTION}`;
-    await performStreamingRequest(prompt, systemInstruction, GEMINI_MODELS.CORE_ANALYSIS);
+    const contents = buildPromptWithProjectFiles(prompt);
+    await performStreamingRequest(contents, systemInstruction, GEMINI_MODELS.CORE_ANALYSIS);
 
     setIsLoading(false);
     setLoadingAction(null);
-  }, [ai, language]);
+  }, [ai, language, projectFiles]);
 
   const handleGenerateTests = useCallback(async () => {
     if (appMode === 'comparison' || !userOnlyCode.trim() || isChatMode) return;
@@ -460,11 +476,13 @@ const App: React.FC = () => {
 
     const prompt = `\`\`\`${language}\n${userOnlyCode}\n\`\`\``;
     setFullCodeForReview(prompt);
-    await performStreamingRequest(prompt, `${SYSTEM_INSTRUCTION}\n\n${GENERATE_TESTS_INSTRUCTION}`, GEMINI_MODELS.CORE_ANALYSIS);
+
+    const contents = buildPromptWithProjectFiles(prompt);
+    await performStreamingRequest(contents, `${SYSTEM_INSTRUCTION}\n\n${GENERATE_TESTS_INSTRUCTION}`, GEMINI_MODELS.CORE_ANALYSIS);
 
     setIsLoading(false);
     setLoadingAction(null);
-  }, [ai, userOnlyCode, language, appMode, isChatMode]);
+  }, [ai, userOnlyCode, language, appMode, isChatMode, projectFiles]);
   
   const handleStartFollowUp = useCallback(async (version?: Version, modeOverride?: AppMode) => {
     // If a chat session already exists and we're not loading a new version, just resume it.
@@ -593,8 +611,9 @@ const App: React.FC = () => {
     const prompt = `\`\`\`${language}\n${selection}\n\`\`\``;
     setFullCodeForReview(prompt);
     setReviewedCode(selection);
-
-    const fullResponse = await performStreamingRequest(prompt, `${SYSTEM_INSTRUCTION}\n\n${EXPLAIN_CODE_INSTRUCTION}`, GEMINI_MODELS.FAST_TASKS);
+    
+    const contents = buildPromptWithProjectFiles(prompt);
+    const fullResponse = await performStreamingRequest(contents, `${SYSTEM_INSTRUCTION}\n\n${EXPLAIN_CODE_INSTRUCTION}`, GEMINI_MODELS.FAST_TASKS);
 
     if (fullResponse && !abortStreamRef.current) {
         handleStartFollowUp();
@@ -602,7 +621,7 @@ const App: React.FC = () => {
 
     setIsLoading(false);
     setLoadingAction(null);
-  }, [ai, language, handleStartFollowUp]);
+  }, [ai, language, handleStartFollowUp, projectFiles]);
   
   const handleReviewSelection = useCallback(async (selection: string) => {
     setIsLoading(true);
@@ -616,7 +635,8 @@ const App: React.FC = () => {
     setReviewedCode(selection);
     
     const systemInstruction = `${getSystemInstructionForReview()}\n\n${REVIEW_SELECTION_INSTRUCTION}`;
-    const fullResponse = await performStreamingRequest(prompt, systemInstruction, GEMINI_MODELS.CORE_ANALYSIS);
+    const contents = buildPromptWithProjectFiles(prompt);
+    const fullResponse = await performStreamingRequest(contents, systemInstruction, GEMINI_MODELS.CORE_ANALYSIS);
 
     if (fullResponse && !abortStreamRef.current) {
         handleStartFollowUp();
@@ -624,13 +644,12 @@ const App: React.FC = () => {
 
     setIsLoading(false);
     setLoadingAction(null);
-  }, [ai, language, getSystemInstructionForReview, handleStartFollowUp]);
+  }, [ai, language, getSystemInstructionForReview, handleStartFollowUp, projectFiles]);
 
   const handleGenerateCommitMessage = useCallback(async () => {
       if (!ai || !reviewedCode || !revisedCode) {
           const msg = "Cannot generate commit message. Original or revised code is missing.";
           setError(msg);
-          addToast(msg, 'error');
           return;
       }
       
@@ -652,11 +671,12 @@ const App: React.FC = () => {
       };
 
       const prompt = `Based on the following code changes, generate a conventional commit message.\n\n### Original Code:\n\`\`\`${language}\n${reviewedCode}\n\`\`\`\n\n### Revised Code:\n\`\`\`${language}\n${revisedCode}\n\`\`\``;
+      const contents = buildPromptWithProjectFiles(prompt, { textOnly: true }) as string;
 
       try {
           const response = await ai.models.generateContent({
               model: GEMINI_MODELS.FAST_TASKS,
-              contents: prompt,
+              contents: contents,
               config: {
                   systemInstruction: `${SYSTEM_INSTRUCTION}\n\n${COMMIT_MESSAGE_SYSTEM_INSTRUCTION}`,
                   responseMimeType: 'application/json',
@@ -678,13 +698,12 @@ const App: React.FC = () => {
           console.error("Commit Message API Error:", apiError);
           const message = apiError instanceof Error ? apiError.message : "An unexpected error occurred.";
           setError(`Failed to generate commit message: ${message}`);
-          addToast(`Error: ${message}`, 'error');
           setReviewFeedback(null);
       } finally {
           setIsLoading(false);
           setLoadingAction(null);
       }
-  }, [ai, reviewedCode, revisedCode, language]);
+  }, [ai, reviewedCode, revisedCode, language, projectFiles]);
 
 
   const handleRemoveAttachment = (fileToRemove: File) => {
@@ -723,7 +742,6 @@ const App: React.FC = () => {
         if (!featureMatrix || !finalizationSummary) {
             const err = "Finalization context is missing. Cannot proceed.";
             setError(err);
-            addToast(err, 'error');
             setIsChatLoading(false);
             return;
         }
@@ -825,7 +843,6 @@ const App: React.FC = () => {
         console.error("Chat API Error:", apiError);
         const errorMsg = apiError instanceof Error ? apiError.message : "An unexpected error occurred.";
         setError(`Failed to get response: ${errorMsg}`);
-        addToast(`Chat Error: ${errorMsg}`, 'error');
         setChatHistory(prev => prev.filter(msg => msg.id !== modelMessageId && msg.role !== 'user' || msg.content !== message));
       }
     } finally {
@@ -844,7 +861,6 @@ const App: React.FC = () => {
         setChatContext('feature_discussion');
     } else {
         setFeatureDecisions(prev => ({ ...prev, [feature.name]: { decision } }));
-        addToast(`Feature "${feature.name}" marked to '${decision}'.`, 'info');
     }
   };
 
@@ -887,19 +903,16 @@ const App: React.FC = () => {
 
   const handleClearChatRevisions = () => {
     setChatRevisions([]);
-    addToast("Revision history cleared.", "info");
   };
 
   const handleRenameChatRevision = (revisionId: string, newName: string) => {
     setChatRevisions(prev => prev.map(rev => 
         rev.id === revisionId ? { ...rev, name: newName } : rev
     ));
-    addToast("Revision renamed.", "info");
   };
 
   const handleDeleteChatRevision = (revisionId: string) => {
     setChatRevisions(prev => prev.filter(rev => rev.id !== revisionId));
-    addToast("Revision removed.", "info");
   };
 
   const resetAndSetMode = (mode: AppMode) => {
@@ -948,7 +961,6 @@ const App: React.FC = () => {
                 revisedSnippet: revisedSnippet || undefined
             } 
         }));
-        addToast(`Discussion for "${activeFeatureForDiscussion.name}" complete.${revisedSnippet ? ' Snippet captured.' : ''}`, 'info');
         
         // Reset UI state to return to the feature matrix view.
         setIsChatMode(false);
@@ -1035,7 +1047,6 @@ const App: React.FC = () => {
     setVersions(prevVersions => [newVersion, ...prevVersions]);
     setIsSaveModalOpen(false);
     setVersionName('');
-    addToast('Version saved successfully!', 'success');
     
     if (isSavingChat) {
       resetAndSetMode('debug');
@@ -1045,36 +1056,55 @@ const App: React.FC = () => {
   
   const handleGenerateVersionName = useCallback(async () => {
     if (!ai || !reviewedCode) {
-        addToast("Cannot generate name without code context.", "error");
+        console.error("Cannot generate name without code context.");
         return;
     }
 
     setIsGeneratingName(true);
     setLoadingAction('generate-name');
+    
+    const schema = {
+        type: Type.OBJECT,
+        properties: {
+            type: { type: Type.STRING, description: "The conventional commit type (e.g., feat, fix, refactor, security, docs, perf)." },
+            summary: { type: Type.STRING, description: "A short, imperative summary of the change, under 50 chars." }
+        },
+        required: ['type', 'summary']
+    };
 
-    const prompt = `Based on the following code and its review feedback (if available), generate a short, descriptive version name (under 50 characters). Respond with ONLY the name itself, with no extra formatting, quotes, or explanation.\n\n### Code:\n\`\`\`${language}\n${reviewedCode}\n\`\`\`\n\n### Review Feedback:\n${reviewFeedback || "No feedback provided."}`;
+    const prompt = `Analyze the following code changes and the AI review to generate a concise, descriptive version name in the style of a conventional commit.
+    
+### Original Code:
+\`\`\`${language}\n${reviewedCode}\n\`\`\`
+
+${revisedCode ? `### Revised Code:\n\`\`\`${language}\n${revisedCode}\n\`\`\`` : ''}
+
+### AI Review Feedback:
+${reviewFeedback || "No feedback provided."}`;
     
     try {
         const response = await ai.models.generateContent({
             model: GEMINI_MODELS.FAST_TASKS,
             contents: prompt,
             config: {
-                systemInstruction: SYSTEM_INSTRUCTION
+                systemInstruction: "You are an expert software developer who creates concise, descriptive commit summaries. Your task is to analyze code changes and generate a structured version name. Respond ONLY with the requested JSON object.",
+                responseMimeType: 'application/json',
+                responseSchema: schema,
             }
         });
 
-        const generatedName = response.text.trim().replace(/["']/g, ''); // Clean up quotes
+        const jsonResponse = JSON.parse(response.text);
+        const { type, summary } = jsonResponse;
+        const generatedName = `${type}: ${summary}`;
         setVersionName(generatedName);
-        addToast("Version name generated.", "success");
     } catch (apiError) {
         console.error("Version Name Generation Error:", apiError);
-        const message = apiError instanceof Error ? apiError.message : "An unexpected error occurred.";
-        addToast(`Failed to generate name: ${message}`, 'error');
+        setVersionName("AI Name Generation Failed"); // Provide feedback
     } finally {
         setIsGeneratingName(false);
         setLoadingAction(null);
     }
-  }, [ai, reviewedCode, reviewFeedback, language]);
+  }, [ai, reviewedCode, revisedCode, reviewFeedback, language]);
 
   const handleLoadVersion = (version: Version) => {
     resetAndSetMode('single'); // Reset with a temporary mode
@@ -1120,12 +1150,16 @@ const App: React.FC = () => {
     } else {
       setOutputType('review');
     }
-    addToast(`Version "${version.name}" loaded.`, 'info');
   };
 
   const handleDeleteVersion = (versionId: string) => {
     setVersions(prevVersions => prevVersions.filter(v => v.id !== versionId));
-    addToast('Version deleted.', 'info');
+  };
+
+  const handleRenameVersion = (versionId: string, newName: string) => {
+    setVersions(prev => prev.map(v => 
+        v.id === versionId ? { ...v, name: newName } : v
+    ));
   };
 
   const handleExportSession = () => {
@@ -1226,13 +1260,10 @@ const App: React.FC = () => {
             setChatSession(newChat);
         }
         
-        addToast('Session imported successfully!', 'success');
-
       } catch (err) {
         const msg = err instanceof Error ? `Import failed: ${err.message}` : "Import failed: Invalid file.";
         console.error("Failed to import session:", err);
         setError(msg);
-        addToast(msg, 'error');
       } finally {
         if(event.target) {
             event.target.value = '';
@@ -1242,7 +1273,6 @@ const App: React.FC = () => {
     reader.onerror = () => {
         const msg = "Failed to read the selected file.";
         setError(msg);
-        addToast(msg, 'error');
     }
     reader.readAsText(file);
   };
@@ -1265,7 +1295,6 @@ const App: React.FC = () => {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    addToast(`${filename} downloaded.`, 'success');
   };
 
   const handleShare = () => {
@@ -1288,15 +1317,13 @@ const App: React.FC = () => {
         url.hash = base64State;
         
         navigator.clipboard.writeText(url.href).then(() => {
-            addToast('Shareable link copied to clipboard!', 'success');
+            // success
         }, (err) => {
             console.error('Could not copy text: ', err);
-            addToast('Failed to copy share link.', 'error');
         });
 
     } catch (e) {
         console.error("Failed to create share link:", e);
-        addToast('Could not create share link.', 'error');
     }
   };
 
@@ -1347,7 +1374,7 @@ const App: React.FC = () => {
             setAttachments(prev => [...prev, ...newAttachments]);
         })
         .catch(error => {
-            addToast(error.message, 'error');
+            setError(error.message);
         });
 
     if (event.target) {
@@ -1357,7 +1384,7 @@ const App: React.FC = () => {
 
   const handleLoadRevisionIntoEditor = () => {
     if (!revisedCode) {
-        addToast('No revised code available to load.', 'error');
+        setError('No revised code available to load.');
         return;
     }
     const targetMode = appMode === 'comparison' ? 'single' : appMode;
@@ -1366,13 +1393,12 @@ const App: React.FC = () => {
     setReviewedCode(revisedCode); // Set it as reviewed to allow for another cycle
     setIsInputPanelVisible(true);
     setActivePanel('input');
-    addToast('Revision loaded into editor.', 'success');
   };
   
   const handleSaveFileToProject = (file: File) => {
     const MAX_SIZE_MB = 10;
     if (file.size > MAX_SIZE_MB * 1024 * 1024) {
-      addToast(`File size exceeds ${MAX_SIZE_MB}MB limit.`, 'error');
+      setError(`File size exceeds ${MAX_SIZE_MB}MB limit.`);
       return;
     }
     
@@ -1382,7 +1408,7 @@ const App: React.FC = () => {
     reader.onload = (e) => {
       const result = e.target?.result as string;
       if (!result) {
-        addToast('Failed to read file content.', 'error');
+        setError('Failed to read file content.');
         return;
       }
       const newFile: ProjectFile = {
@@ -1393,9 +1419,8 @@ const App: React.FC = () => {
         content: isImage ? result.split(',')[1] : result,
       };
       setProjectFiles(prev => [...prev, newFile]);
-      addToast(`File "${file.name}" saved to project.`, 'success');
     };
-    reader.onerror = () => addToast('Error reading file.', 'error');
+    reader.onerror = () => setError('Error reading file.');
 
     if (isImage) {
       reader.readAsDataURL(file);
@@ -1413,12 +1438,10 @@ const App: React.FC = () => {
       content: content,
     };
     setProjectFiles(prev => [...prev, newFile]);
-    addToast(`File "${filename}" saved to project.`, 'success');
   };
 
   const handleDeleteProjectFile = (fileId: string) => {
     setProjectFiles(prev => prev.filter(f => f.id !== fileId));
-    addToast('Project file deleted.', 'info');
   };
 
   const handleAttachProjectFile = (file: ProjectFile) => {
@@ -1429,7 +1452,6 @@ const App: React.FC = () => {
         mimeType: file.mimeType,
     }]);
     setIsProjectFilesModalOpen(false);
-    addToast(`Attached "${file.name}" to message.`, 'info');
   };
 
   const renderInputComponent = () => {
@@ -1544,6 +1566,8 @@ const App: React.FC = () => {
             isActive={activePanel === 'input'}
           />
         );
+      case 'engine':
+        return <EngineSynthesizer ai={ai} />;
       default:
         return null;
     }
@@ -1566,11 +1590,11 @@ const App: React.FC = () => {
         onToggleVersionHistory={() => setIsVersionHistoryModalOpen(true)}
         isToolsEnabled={userOnlyCode.trim() !== '' && !isChatMode && (appMode === 'single' || appMode === 'debug')}
         isLoading={isLoading || isChatLoading}
-        addToast={addToast}
         onStartDebug={() => resetAndSetMode('debug')}
         onStartSingleReview={() => resetAndSetMode('single')}
         onStartComparison={() => resetAndSetMode('comparison')}
         onStartAudit={() => resetAndSetMode('audit')}
+        onStartEngine={() => resetAndSetMode('engine')}
         isInputPanelVisible={isInputPanelVisible}
         onToggleInputPanel={() => setIsInputPanelVisible(p => !p)}
         onNewReview={() => resetAndSetMode('debug')}
@@ -1580,14 +1604,14 @@ const App: React.FC = () => {
         onEndChatSession={handleEndGeneralChat}
       />
       <ApiKeyBanner />
-      <main className={`flex-grow container mx-auto p-4 sm:p-6 lg:p-8 grid grid-cols-1 ${isInputPanelVisible && showOutputPanel && !isChatMode ? 'md:grid-cols-2' : ''} gap-6 lg:gap-8 animate-fade-in overflow-hidden`}>
+      <main className={`flex-grow container mx-auto p-4 sm:p-6 lg:p-8 grid grid-cols-1 ${appMode !== 'engine' && isInputPanelVisible && showOutputPanel && !isChatMode ? 'md:grid-cols-2' : ''} gap-6 lg:gap-8 animate-fade-in overflow-hidden`}>
           {isInputPanelVisible && (
-            <div className={`min-h-0 ${isChatMode ? 'md:col-span-2' : ''}`} onClick={() => !isChatMode && setActivePanel('input')}>
+            <div className={`min-h-0 ${isChatMode || appMode === 'engine' ? 'md:col-span-2' : ''}`} onClick={() => !isChatMode && setActivePanel('input')}>
               {renderInputComponent()}
             </div>
           )}
           
-          {showOutputPanel && !isChatMode && (
+          {appMode !== 'engine' && showOutputPanel && !isChatMode && (
             <div className="min-h-0" onClick={() => setActivePanel('output')}>
                 <ReviewOutput
                   feedback={reviewFeedback}
@@ -1602,7 +1626,6 @@ const App: React.FC = () => {
                   onShowDiff={() => setIsDiffModalOpen(true)}
                   canCompare={commitMessageAvailable}
                   isActive={activePanel === 'output'}
-                  addToast={addToast}
                   onStartFollowUp={handleStartFollowUp}
                   onGenerateCommitMessage={handleGenerateCommitMessage}
                   reviewAvailable={reviewAvailable}
@@ -1637,7 +1660,6 @@ const App: React.FC = () => {
             accept="image/png, image/jpeg, image/gif, image/webp, text/plain, .md, .log, .json, .txt, .js, .ts, .py, .java, .cs, .cpp, .go, .rb, .php, .html, .css, .sql, .sh"
             multiple
           />
-          <ToastContainer toasts={toasts} onDismiss={removeToast} />
       </footer>
        <SaveVersionModal
           isOpen={isSaveModalOpen}
@@ -1667,6 +1689,7 @@ const App: React.FC = () => {
         onLoadVersion={handleLoadVersion}
         onDeleteVersion={handleDeleteVersion}
         onStartFollowUp={handleStartFollowUp}
+        onRenameVersion={handleRenameVersion}
       />
       <DocumentationCenterModal
         isOpen={isDocsModalOpen}

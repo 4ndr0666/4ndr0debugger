@@ -1,8 +1,10 @@
 
 
+
+
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { MarkdownRenderer } from './MarkdownRenderer.tsx';
-import { LoadingAction, Toast, SupportedLanguage, AppMode, Version, Feature, FeatureDecision, FeatureDecisionRecord } from '../types.ts';
+import { LoadingAction, SupportedLanguage, AppMode, Version, Feature, FeatureDecision, FeatureDecisionRecord } from '../types.ts';
 import { SaveIcon, CopyIcon, CheckIcon, CompareIcon, ChatIcon, CommitIcon, BugIcon, BoltIcon, ImportIcon } from './Icons.tsx';
 import { LoadingSpinner } from './LoadingSpinner.tsx';
 import { Button } from './Button.tsx';
@@ -21,7 +23,6 @@ interface ReviewOutputProps {
   onShowDiff: () => void;
   canCompare: boolean;
   isActive: boolean;
-  addToast: (message: string, type: Toast['type']) => void;
   onStartFollowUp: (version?: Version, modeOverride?: AppMode) => void;
   onGenerateCommitMessage: () => void;
   reviewAvailable: boolean;
@@ -78,7 +79,7 @@ const AnalysisLoader: React.FC = () => {
 export const ReviewOutput = ({ 
     feedback, revisedCode, language, isLoading, isChatLoading, loadingAction, error, 
     onSaveVersion, isActive, outputType, onShowDiff, canCompare,
-    addToast, onStartFollowUp, onGenerateCommitMessage, reviewAvailable,
+    onStartFollowUp, onGenerateCommitMessage, reviewAvailable,
     appMode, featureMatrix, featureDecisions, onFeatureDecision, allFeaturesDecided, onFinalize,
     onDownloadOutput, onSaveGeneratedFile
 }: ReviewOutputProps) => {
@@ -92,11 +93,9 @@ export const ReviewOutput = ({
     if (!feedback) return;
     navigator.clipboard.writeText(feedback).then(() => {
       setCopied(true);
-      addToast('Copied to clipboard!', 'success');
       setTimeout(() => setCopied(false), 2500);
     }).catch(err => {
       console.error('Failed to copy markdown: ', err);
-      addToast('Failed to copy to clipboard.', 'error');
     });
   };
 
