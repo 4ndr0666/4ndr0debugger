@@ -1,17 +1,18 @@
 
 
 import React, { useRef, useState, useEffect, useMemo } from 'react';
+import { useAppContext } from '../AppContext.tsx';
 import { MarkdownRenderer } from './MarkdownRenderer.tsx';
-import { LoadingAction, Toast, SupportedLanguage, AppMode, Version, Feature, FeatureDecision, FeatureDecisionRecord } from '../types.ts';
-import { SaveIcon, CopyIcon, CheckIcon, CompareIcon, ChatIcon, CommitIcon, BugIcon, BoltIcon, ImportIcon } from './Icons.tsx';
+import { LoadingAction, AppMode, Version, Feature, FeatureDecision, FeatureDecisionRecord, ProjectFile, ReviewProfile } from '../types.ts';
+import { SaveIcon, CopyIcon, CheckIcon, CompareIcon, ChatIcon, CommitIcon, BugIcon, BoltIcon, ImportIcon, RootCauseIcon, EngineIcon } from './Icons.tsx';
 import { LoadingSpinner } from './LoadingSpinner.tsx';
 import { Button } from './Button.tsx';
 import { FeatureMatrix } from './FeatureMatrix.tsx';
+import { PayloadSynthesizer } from './EngineSynthesizer.tsx';
 
 interface ReviewOutputProps {
   feedback: string | null;
   revisedCode: string | null;
-  language: SupportedLanguage;
   isLoading: boolean;
   isChatLoading: boolean;
   loadingAction: LoadingAction;
@@ -21,11 +22,9 @@ interface ReviewOutputProps {
   onShowDiff: () => void;
   canCompare: boolean;
   isActive: boolean;
-  addToast: (message: string, type: Toast['type']) => void;
   onStartFollowUp: (version?: Version, modeOverride?: AppMode) => void;
   onGenerateCommitMessage: () => void;
   reviewAvailable: boolean;
-  appMode: AppMode;
   featureMatrix: Feature[] | null;
   featureDecisions: Record<string, FeatureDecisionRecord>;
   onFeatureDecision: (feature: Feature, decision: FeatureDecision) => void;
@@ -33,6 +32,8 @@ interface ReviewOutputProps {
   onFinalize: () => void;
   onDownloadOutput: () => void;
   onSaveGeneratedFile: (filename: string, content: string) => void;
+  onAnalyzeRootCause: () => void;
+  errorMessage: string; // User-provided error message for context
 }
 
 const analysisSteps = [
@@ -76,13 +77,15 @@ const AnalysisLoader: React.FC = () => {
 
 
 export const ReviewOutput = ({ 
-    feedback, revisedCode, language, isLoading, isChatLoading, loadingAction, error, 
+    feedback, revisedCode, isLoading, isChatLoading, loadingAction, error, 
     onSaveVersion, isActive, outputType, onShowDiff, canCompare,
-    addToast, onStartFollowUp, onGenerateCommitMessage, reviewAvailable,
-    appMode, featureMatrix, featureDecisions, onFeatureDecision, allFeaturesDecided, onFinalize,
-    onDownloadOutput, onSaveGeneratedFile
+    onStartFollowUp, onGenerateCommitMessage, reviewAvailable,
+    featureMatrix, featureDecisions, onFeatureDecision, allFeaturesDecided, onFinalize,
+    onDownloadOutput, onSaveGeneratedFile, onAnalyzeRootCause
 }: ReviewOutputProps) => {
+  const { appMode, reviewProfile, userOnlyCode } = useAppContext();
   const [copied, setCopied] = useState(false);
+  const [showSynthesizer, setShowSynthesizer] = useState(false);
   const showLoading = isLoading || isChatLoading;
   const canCopy = !showLoading && !error && feedback;
 
@@ -92,11 +95,9 @@ export const ReviewOutput = ({
     if (!feedback) return;
     navigator.clipboard.writeText(feedback).then(() => {
       setCopied(true);
-      addToast('Copied to clipboard!', 'success');
       setTimeout(() => setCopied(false), 2500);
     }).catch(err => {
       console.error('Failed to copy markdown: ', err);
-      addToast('Failed to copy to clipboard.', 'error');
     });
   };
 
@@ -117,9 +118,15 @@ export const ReviewOutput = ({
         case 'comparison': return 'Comparative Analysis';
         case 'revise': return 'Comparative Revision';
         case 'finalization': return 'Finalizing Revision';
+        case 'root-cause': return 'Root Cause Analysis';
         default: return 'Analysis';
     }
   }, [showLoading, loadingAction, outputType, appMode]);
+  
+  useEffect(() => {
+    setShowSynthesizer(false);
+  }, [feedback]);
+
 
   useEffect(() => {
     const contentElement = contentRef.current;
@@ -184,17 +191,19 @@ export const ReviewOutput = ({
             ref={contentRef}
             className="overflow-auto h-full pr-2 text-[var(--hud-color-darker)] leading-relaxed"
             >
-            {outputType === 'revise' && featureMatrix ? (
+            {showSynthesizer ? (
+              <PayloadSynthesizer initialCode={revisedCode || userOnlyCode} onClose={() => setShowSynthesizer(false)} />
+            ) : outputType === 'revise' && featureMatrix ? (
               <FeatureMatrix features={featureMatrix} decisions={featureDecisions} onDecision={onFeatureDecision} />
             ) : (
               feedback && <div className="space-y-4"><MarkdownRenderer markdown={feedback} onSaveGeneratedFile={onSaveGeneratedFile} /></div>
             )}
-            {isLoading && feedback && outputType !== 'revise' && <LoadingSpinner size="w-5 h-5" className="mx-auto mt-4" />}
+            {isLoading && feedback && outputType !== 'revise' && !showSynthesizer && <LoadingSpinner size="w-5 h-5" className="mx-auto mt-4" />}
             </div>
         )}
       </div>
 
-      {!isLoading && !error && reviewAvailable && (
+      {!isLoading && !error && reviewAvailable && !showSynthesizer && (
         <div className="flex-shrink-0 pt-4 mt-4 border-t border-[var(--hud-color-darker)] flex flex-wrap justify-center items-center gap-3 animate-fade-in">
             {outputType === 'revise' ? (
               <>
@@ -211,10 +220,22 @@ export const ReviewOutput = ({
               </>
             ) : (
               <>
+                {reviewProfile === ReviewProfile.REDTEAM && (
+                  <Button onClick={() => setShowSynthesizer(true)} variant="danger" className="post-review-button">
+                    <EngineIcon className="w-4 h-4 mr-2" />
+                    Synthesize Payload
+                  </Button>
+                )}
                 {outputType === 'docs' && (
                   <Button onClick={onDownloadOutput} variant="primary" className="post-review-button">
                     <ImportIcon className="w-4 h-4 mr-2" />
                     Download .md
+                  </Button>
+                )}
+                {appMode === 'debug' && reviewAvailable && revisedCode && (
+                  <Button onClick={onAnalyzeRootCause} variant="primary" className="post-review-button">
+                      <RootCauseIcon className="w-4 h-4 mr-2"/>
+                      Analyze Root Cause
                   </Button>
                 )}
                 {appMode === 'single' ? (

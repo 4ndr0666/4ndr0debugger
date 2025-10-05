@@ -1,9 +1,8 @@
 
-import React, { ReactNode } from 'react';
 
-interface Props {
-  children: ReactNode;
-}
+import React from 'react';
+
+type Props = React.PropsWithChildren<{}>;
 
 interface State {
   hasError: boolean;
@@ -11,21 +10,21 @@ interface State {
 }
 
 class ErrorBoundary extends React.Component<Props, State> {
-  public state: State = {
+  state: State = {
     hasError: false,
     error: null,
   };
 
-  public static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error): State {
     // Update state so the next render will show the fallback UI.
     return { hasError: true, error };
   }
 
-  public componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error("ErrorBoundary caught an error:", error, errorInfo);
   }
 
-  public render() {
+  render() {
     if (this.state.hasError) {
       return (
         <div className="relative group bg-black/70 border border-[var(--red-color)] my-3 text-left p-4">
@@ -41,8 +40,9 @@ class ErrorBoundary extends React.Component<Props, State> {
         </div>
       );
     }
-
-    return this.props.children;
+    // Destructuring props to avoid potential `this` context issues with some TypeScript configurations.
+    const { children } = this.props;
+    return children;
   }
 }
 

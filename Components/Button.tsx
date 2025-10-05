@@ -1,17 +1,23 @@
+
+
 import React from 'react';
 import { LoadingSpinner } from './LoadingSpinner.tsx';
 
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+// Changed to a type alias with an intersection. This correctly merges
+// custom props with all standard button attributes, fixing numerous type errors
+// where props like `onClick` and `disabled` were not being recognized.
+type ButtonProps = {
   variant?: 'primary' | 'secondary' | 'danger';
   isLoading?: boolean;
   children: React.ReactNode;
-}
+} & React.ComponentPropsWithoutRef<'button'>;
 
 export const Button = ({ 
   children, 
   variant = 'primary', 
   isLoading = false, 
   className, 
+  disabled, // Destructure disabled prop for direct use.
   ...props 
 }: ButtonProps) => {
   const baseStyle = "px-6 py-2.5 font-semibold text-sm uppercase tracking-wider focus:outline-none transition-all duration-150 flex items-center justify-center border";
@@ -27,8 +33,8 @@ export const Button = ({
   return (
     <button
       type="button"
-      className={`${baseStyle} ${variantStyles[variant]} ${isLoading || props.disabled ? disabledStyles : ''} ${className || ''}`}
-      disabled={isLoading || props.disabled}
+      className={`${baseStyle} ${variantStyles[variant]} ${isLoading || disabled ? disabledStyles : ''} ${className || ''}`}
+      disabled={isLoading || disabled}
       {...props}
     >
       {isLoading && (

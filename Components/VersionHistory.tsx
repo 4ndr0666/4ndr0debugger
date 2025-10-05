@@ -1,12 +1,14 @@
 import React from 'react';
 import { Version } from '../types.ts';
-import { LoadIcon, ChatIcon, DeleteIcon } from './Icons.tsx';
+import { SaveIcon as LoadIcon, ChatIcon, DeleteIcon } from './Icons.tsx';
+import { EditableTitle } from './EditableTitle.tsx';
 
 interface VersionHistoryProps {
   versions: Version[];
   onLoadVersion: (version: Version) => void;
   onDeleteVersion: (versionId: string) => void;
   onStartFollowUp: (version: Version) => void;
+  onRenameVersion: (versionId: string, newName: string) => void;
 }
 
 const timeAgo = (timestamp: number): string => {
@@ -24,7 +26,7 @@ const timeAgo = (timestamp: number): string => {
     return "just now";
 }
 
-export const VersionHistory = ({ versions, onLoadVersion, onDeleteVersion, onStartFollowUp }: VersionHistoryProps) => {
+export const VersionHistory = ({ versions, onLoadVersion, onDeleteVersion, onStartFollowUp, onRenameVersion }: VersionHistoryProps) => {
   if (versions.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center text-[var(--hud-color-darker)]">
@@ -47,8 +49,15 @@ export const VersionHistory = ({ versions, onLoadVersion, onDeleteVersion, onSta
         {versions.map(version => (
           <div key={version.id} className="p-3 bg-black/50 border border-[var(--hud-color-darkest)]">
             <div className="flex justify-between items-start">
-              <div>
-                <p className="font-semibold text-[var(--hud-color)] uppercase tracking-wider">{version.name}</p>
+              <div className="flex-grow overflow-hidden mr-2">
+                <div className="font-semibold text-[var(--hud-color)] uppercase tracking-wider">
+                   <EditableTitle 
+                    initialTitle={version.name}
+                    onSave={(newName) => onRenameVersion(version.id, newName)}
+                    className="cursor-pointer hover:text-white"
+                    inputClassName="bg-transparent font-semibold text-[var(--hud-color)] uppercase tracking-wider w-full outline-none border-b border-b-[var(--hud-color-darker)]"
+                  />
+                </div>
                 <p className="text-xs text-[var(--hud-color-darker)]">
                   {version.language} &middot; {timeAgo(version.timestamp)}
                 </p>

@@ -1,27 +1,30 @@
+
+
+
 import React from 'react';
+import { useAppContext } from '../AppContext.tsx';
 import { SupportedLanguage } from '../types.ts';
 import { Button } from './Button.tsx';
 import { Select } from './Select.tsx';
 import { SUPPORTED_LANGUAGES } from '../constants.ts';
 import { StopIcon } from './Icons.tsx';
+import { ContextFilesSelector } from './ContextFilesSelector.tsx';
 
 interface AuditInputProps {
-  userCode: string;
-  setUserCode: (code: string) => void;
-  language: SupportedLanguage;
-  setLanguage: (language: SupportedLanguage) => void;
   onSubmit: () => void;
   isLoading: boolean;
   onStopGenerating: () => void;
   isActive: boolean;
+  contextFileIds: Set<string>;
+  onContextFileSelectionChange: (fileId: string, isSelected: boolean) => void;
 }
 
 export const AuditInput: React.FC<AuditInputProps> = ({
-  userCode, setUserCode, language, setLanguage, 
-  onSubmit, isLoading, onStopGenerating, isActive,
+  onSubmit, isLoading, onStopGenerating, isActive, contextFileIds, onContextFileSelectionChange
 }) => {
+  const { userOnlyCode, setUserOnlyCode, language, setLanguage } = useAppContext();
   const activeClass = isActive ? 'active' : '';
-  const canSubmit = userCode.trim() !== '';
+  const canSubmit = userOnlyCode.trim() !== '';
 
   const textareaClasses = `
     block w-full h-full p-3 pr-10 font-mono text-sm text-[var(--hud-color)]
@@ -47,34 +50,36 @@ export const AuditInput: React.FC<AuditInputProps> = ({
             <p className="text-sm text-center text-[var(--hud-color-darker)] mb-4">
                 Provide your code for a comprehensive security audit based on industry best practices.
             </p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="md:col-span-1">
-                    <Select
-                        id="language-select-audit"
-                        label="Language"
-                        options={SUPPORTED_LANGUAGES}
-                        value={language}
-                        onChange={(newLang) => setLanguage(newLang as SupportedLanguage)}
-                        disabled={isLoading}
-                    />
+            <Select
+                id="language-select-audit"
+                label="Language"
+                options={SUPPORTED_LANGUAGES}
+                value={language}
+                onChange={(newLang) => setLanguage(newLang as SupportedLanguage)}
+                disabled={isLoading}
+            />
+            
+            <ContextFilesSelector 
+                selectedFileIds={contextFileIds}
+                onSelectionChange={onContextFileSelectionChange}
+            />
+
+            <div className="relative flex-grow min-h-[250px]">
+                <textarea
+                id="code-input-audit"
+                className={textareaClasses}
+                value={userOnlyCode}
+                onChange={(e) => setUserOnlyCode(e.target.value)}
+                disabled={isLoading}
+                aria-label="Code input area for audit"
+                placeholder=" "
+                />
+                {!userOnlyCode && !isLoading && (
+                <div className="absolute top-3 left-3 pointer-events-none font-mono text-sm text-[var(--hud-color)]" aria-hidden="true">
+                    <span className="blinking-prompt">❯ </span>
+                    <span className="text-[var(--hud-color-darker)]">Awaiting input...</span>
                 </div>
-                <div className="md:col-span-2 relative min-h-[200px]">
-                    <textarea
-                    id="code-input-audit"
-                    className={textareaClasses}
-                    value={userCode}
-                    onChange={(e) => setUserCode(e.target.value)}
-                    disabled={isLoading}
-                    aria-label="Code input area for audit"
-                    placeholder=" "
-                    />
-                    {!userCode && !isLoading && (
-                    <div className="absolute top-3 left-3 pointer-events-none font-mono text-sm text-[var(--hud-color)]" aria-hidden="true">
-                        <span className="blinking-prompt">❯ </span>
-                        <span className="text-[var(--hud-color-darker)]">Awaiting input...</span>
-                    </div>
-                    )}
-                </div>
+                )}
             </div>
         </div>
       </div>

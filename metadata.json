@@ -1,5 +1,5 @@
 {
-  "name": "4ndr0debug2",
+  "name": "4ndr0debug v2.0.1",
   "description": "Automatic debugger leveraging Gemini 2.5 Pro for core analysis and Gemini 2.5 Flash for auxiliary tasks. Provides feedback on quality, bugs, style, and potential improvements across multiple modes including single review, comparison, and security audits.",
   "requestFramePermissions": [],
   "prompt": ""

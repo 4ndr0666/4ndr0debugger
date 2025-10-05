@@ -1,22 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { SupportedLanguage, ChatMessage, ReviewProfile, LoadingAction, ChatRevision, Feature, ChatContext, FinalizationSummary } from '../types.ts';
+
+import React, { useState, useRef } from 'react';
+import { useAppContext } from '../AppContext.tsx';
+import { SupportedLanguage, ChatMessage, ReviewProfile, LoadingAction, ChatRevision, Feature, ChatContext, FinalizationSummary, ChatFile, FeatureDecisionRecord } from '../types.ts';
 import { Button } from './Button.tsx';
 import { Select } from './Select.tsx';
 import { SUPPORTED_LANGUAGES, generateReviewerTemplate, generateDebuggerTemplate, PLACEHOLDER_MARKER, REVIEW_PROFILES } from '../constants.ts';
 import { ChatInterface } from './ChatInterface.tsx';
 import { StopIcon } from './Icons.tsx';
+import { ContextFilesSelector } from './ContextFilesSelector.tsx';
 
 interface CodeInputProps {
-  userCode: string;
-  setUserCode: (code: string) => void;
-  errorMessage: string;
-  setErrorMessage: (error: string) => void;
-  language: SupportedLanguage;
-  setLanguage: (language: SupportedLanguage) => void;
-  reviewProfile: ReviewProfile | 'none';
-  setReviewProfile: (profile: ReviewProfile | 'none') => void;
-  customReviewProfile: string;
-  setCustomReviewProfile: (value: string) => void;
   onSubmit: (fullCode: string) => void;
   onExplainSelection: (selection: string) => void;
   onReviewSelection: (selection: string) => void;
@@ -24,7 +17,6 @@ interface CodeInputProps {
   isChatLoading: boolean;
   loadingAction: LoadingAction;
   isChatMode: boolean;
-  onNewReview: () => void;
   onFinalizeFeatureDiscussion: () => void;
   onReturnToOutputView: () => void;
   onFollowUpSubmit: (message: string) => void;
@@ -34,40 +26,45 @@ interface CodeInputProps {
   isActive: boolean;
   onStopGenerating: () => void;
   onOpenSaveModal: () => void;
-  onLoadRevisionIntoEditor: () => void;
-  // Context props for chat
+  onSaveChatSession: () => void;
+  onLoadRevisionIntoEditor?: () => void;
   originalReviewedCode: string | null;
   revisedCode: string | null;
   chatRevisions: ChatRevision[];
-  appMode: 'debug' | 'single' | 'comparison';
   codeB: string | null;
   onCodeLineClick: (line: string) => void;
   onClearChatRevisions: () => void;
   onRenameChatRevision: (id: string, newName: string) => void;
   onDeleteChatRevision: (id: string) => void;
+  chatFiles: ChatFile[];
+  onClearChatFiles: () => void;
+  onRenameChatFile: (id: string, newName: string) => void;
+  onDeleteChatFile: (id: string) => void;
   chatContext: ChatContext;
   activeFeatureForDiscussion: Feature | null;
   finalizationSummary: FinalizationSummary | null;
-  // Attachment props
+  featureDecisions: Record<string, FeatureDecisionRecord>;
   attachments: { file: File; content: string; mimeType: string }[];
   onAttachFileClick: () => void;
   onRemoveAttachment: (file: File) => void;
   onOpenProjectFilesModal: () => void;
   onSaveGeneratedFile: (filename: string, content: string) => void;
+  contextFileIds: Set<string>;
+  onContextFileSelectionChange: (fileId: string, isSelected: boolean) => void;
+  onNewReview: () => void;
 }
 
 export const CodeInput: React.FC<CodeInputProps> = (props) => {
   const { 
-    isLoading, loadingAction,
-    userCode, language, onSubmit,
-    setUserCode, setLanguage, reviewProfile, setReviewProfile, onNewReview,
-    customReviewProfile, setCustomReviewProfile,
-    onExplainSelection, onReviewSelection,
-    isChatMode, isActive, onStopGenerating, appMode,
-    errorMessage, setErrorMessage, chatContext, activeFeatureForDiscussion, finalizationSummary,
-    onSaveGeneratedFile
+    isLoading, loadingAction, onSubmit, onExplainSelection, onReviewSelection,
+    isChatMode, isActive, onStopGenerating, contextFileIds, onContextFileSelectionChange
   } = props;
   
+  const {
+    appMode, userOnlyCode, setUserOnlyCode, language, setLanguage, reviewProfile, setReviewProfile,
+    customReviewProfile, setCustomReviewProfile, errorMessage, setErrorMessage, resetAndSetMode
+  } = useAppContext();
+
   const [selectedText, setSelectedText] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -78,13 +75,13 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
   };
 
   const handleReviewSubmit = () => {
-    if (userCode.trim()) {
+    if (userOnlyCode.trim()) {
       let fullCode;
       if (appMode === 'debug') {
-        fullCode = generateDebuggerTemplate(language, userCode, errorMessage);
-      } else { // 'single' mode
+        fullCode = generateDebuggerTemplate(language, userOnlyCode, errorMessage);
+      } else {
         const template = generateReviewerTemplate(language);
-        fullCode = template.replace(PLACEHOLDER_MARKER, userCode);
+        fullCode = template.replace(PLACEHOLDER_MARKER, userOnlyCode);
       }
       onSubmit(fullCode);
     }
@@ -106,35 +103,12 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
           <div className="hud-corner corner-top-right"></div>
           <div className="hud-corner corner-bottom-left"></div>
           <div className="hud-corner corner-bottom-right"></div>
-          <ChatInterface 
-            onFinalizeFeatureDiscussion={props.onFinalizeFeatureDiscussion}
-            onReturnToOutputView={props.onReturnToOutputView}
-            chatHistory={props.chatHistory}
-            onFollowUpSubmit={props.onFollowUpSubmit}
-            isChatLoading={props.isChatLoading}
-            chatInputValue={props.chatInputValue}
-            setChatInputValue={props.setChatInputValue}
-            originalReviewedCode={props.originalReviewedCode}
-            revisedCode={props.revisedCode}
-            chatRevisions={props.chatRevisions}
-            appMode={props.appMode}
-            codeB={props.codeB}
+          <ChatInterface
+            {...props}
+            appMode={appMode}
+            onNewReview={() => resetAndSetMode(appMode)}
             language={language}
-            onCodeLineClick={props.onCodeLineClick}
-            onClearChatRevisions={props.onClearChatRevisions}
-            onRenameChatRevision={props.onRenameChatRevision}
-            onDeleteChatRevision={props.onDeleteChatRevision}
-            chatContext={chatContext}
-            activeFeatureForDiscussion={activeFeatureForDiscussion}
-            finalizationSummary={finalizationSummary}
-            onNewReview={onNewReview}
-            onOpenSaveModal={props.onOpenSaveModal}
-            onLoadRevisionIntoEditor={props.onLoadRevisionIntoEditor}
-            attachments={props.attachments}
-            onAttachFileClick={props.onAttachFileClick}
-            onRemoveAttachment={props.onRemoveAttachment}
-            onOpenProjectFilesModal={props.onOpenProjectFilesModal}
-            onSaveGeneratedFile={onSaveGeneratedFile}
+            codeB={null}
           />
       </div>
     );
@@ -198,6 +172,11 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
               />
             </div>
           )}
+          
+          <ContextFilesSelector 
+            selectedFileIds={contextFileIds}
+            onSelectionChange={onContextFileSelectionChange}
+          />
 
           {appMode === 'debug' && (
             <div className="mt-2 animate-fade-in">
@@ -221,8 +200,8 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
               ref={textareaRef}
               id="code-input"
               className={textareaClasses}
-              value={userCode}
-              onChange={(e) => setUserCode(e.target.value)}
+              value={userOnlyCode}
+              onChange={(e) => setUserOnlyCode(e.target.value)}
               onSelect={handleSelect}
               onMouseUp={handleSelect}
               onKeyUp={handleSelect}
@@ -231,15 +210,15 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
               placeholder=" "
               title="Paste code here."
             />
-            {!userCode && !isLoading && (
+            {!userOnlyCode && !isLoading && (
               <div className="absolute top-3 left-3 pointer-events-none font-mono text-sm text-[var(--hud-color)]" aria-hidden="true">
                 <span className="blinking-prompt">❯ </span>
                 <span className="text-[var(--hud-color-darker)]">Awaiting input...</span>
               </div>
             )}
-            {userCode && !isLoading && (
+            {userOnlyCode && !isLoading && (
               <button
-                onClick={(e) => { e.preventDefault(); onNewReview(); }}
+                onClick={(e) => { e.preventDefault(); resetAndSetMode(appMode); }}
                 className="absolute top-3 right-3 p-1 text-[var(--hud-color)] hover:text-white transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-transparent focus:ring-[var(--hud-color)] rounded-full"
                 aria-label="Clear and start new review"
               >
@@ -252,11 +231,9 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
         </div>
       </div>
       
-      {/* Action Footer underneath the text area */}
       <div className="flex-shrink-0 pt-4 mt-auto">
         <div className="min-h-[60px] flex flex-col justify-center">
-            {/* Requirement #4: Conditional "Review Code" button appears only when text is input */}
-            {!isLoading && userCode.trim() && (
+            {!isLoading && userOnlyCode.trim() && (
               <div className="w-full flex justify-center animate-fade-in">
                   <Button 
                       onClick={handleReviewSubmit} 
@@ -269,7 +246,6 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
               </div>
             )}
 
-            {/* Stop button appears during generation */}
             {isLoading && (loadingAction === 'review' || loadingAction === 'review-selection' || loadingAction === 'comparison') && (
               <div className="w-full flex justify-center animate-fade-in">
                   <Button 
@@ -286,8 +262,7 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
             )}
         </div>
         
-        {/* Selection-based actions appear when text is highlighted */}
-        {selectedText && !isLoading && (
+        {selectedText && !isLoading && onExplainSelection && onReviewSelection && (
           <div className="bg-black/50 border border-[var(--hud-color-darkest)] p-3 space-y-2 animate-fade-in mt-3">
             <p className="text-xs text-center text-[var(--hud-color-darker)] uppercase tracking-wider">Action for selection:</p>
             <div className="flex items-center justify-center space-x-3">

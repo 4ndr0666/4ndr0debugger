@@ -1,5 +1,6 @@
 
 
+
 import React from 'react';
 import { CodeBlock } from './CodeBlock.tsx';
 import ErrorBoundary from './ErrorBoundary.tsx';
@@ -37,7 +38,7 @@ const TextBlock: React.FC<{ text: string }> = ({ text }) => {
   if (!text.trim()) return null;
 
   const lines = text.split('\n');
-  const elements: JSX.Element[] = [];
+  const elements: React.ReactNode[] = [];
   let listItems: string[] = [];
 
   const flushList = (key: string) => {

@@ -1,7 +1,9 @@
+
 import React, { useMemo, useState, useEffect } from 'react';
+import { useAppContext } from '../AppContext.tsx';
 import { Button } from './Button.tsx';
 import { SparklesIcon } from './Icons.tsx';
-import { ReviewProfile, SupportedLanguage, LoadingAction } from '../types.ts';
+import { ReviewProfile, LoadingAction } from '../types.ts';
 
 interface SaveVersionModalProps {
   isOpen: boolean;
@@ -12,15 +14,14 @@ interface SaveVersionModalProps {
   onAutoGenerate: () => void;
   isGeneratingName: boolean;
   outputType: LoadingAction;
-  language: SupportedLanguage;
-  reviewProfile: ReviewProfile | 'none';
   isSavingChat: boolean;
 }
 
 export const SaveVersionModal = ({ 
     isOpen, onClose, onSave, versionName, setVersionName, onAutoGenerate, isGeneratingName,
-    outputType, language, reviewProfile, isSavingChat
+    outputType, isSavingChat
 }: SaveVersionModalProps) => {
+  const { language, reviewProfile } = useAppContext();
   const [suggestionsVisible, setSuggestionsVisible] = useState(true);
 
   useEffect(() => {

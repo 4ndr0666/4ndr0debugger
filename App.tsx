@@ -1,91 +1,101 @@
 
 
-
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { GoogleGenAI, Chat, Type } from "@google/genai";
+import { Chat, Part } from "@google/genai";
+import { AppContextProvider, useAppContext, useToast } from './AppContext.tsx';
+import { geminiService } from './services.ts';
 import { Header } from './Components/Header.tsx';
 import { CodeInput } from './Components/CodeInput.tsx';
 import { ReviewOutput } from './Components/ReviewOutput.tsx';
-import { SupportedLanguage, ChatMessage, Version, ReviewProfile, LoadingAction, Toast, AppMode, ChatRevision, Feature, FeatureDecision, ChatContext, FinalizationSummary, FeatureDecisionRecord, ProjectFile } from './types.ts';
-import { SUPPORTED_LANGUAGES, GEMINI_MODELS, SYSTEM_INSTRUCTION, DEBUG_SYSTEM_INSTRUCTION, DOCS_SYSTEM_INSTRUCTION, PROFILE_SYSTEM_INSTRUCTIONS, GENERATE_TESTS_INSTRUCTION, EXPLAIN_CODE_INSTRUCTION, REVIEW_SELECTION_INSTRUCTION, COMMIT_MESSAGE_SYSTEM_INSTRUCTION, DOCS_INSTRUCTION, COMPARISON_SYSTEM_INSTRUCTION, COMPARISON_REVISION_SYSTEM_INSTRUCTION, FEATURE_MATRIX_SCHEMA, generateComparisonTemplate, LANGUAGE_TAG_MAP, PLACEHOLDER_MARKER, AUDIT_SYSTEM_INSTRUCTION, generateAuditTemplate } from './constants.ts';
+import { SupportedLanguage, ChatMessage, Version, ReviewProfile, LoadingAction, AppMode, ChatRevision, Feature, FeatureDecision, ChatContext, FinalizationSummary, FeatureDecisionRecord, ProjectFile, ChatFile, ImportedSession } from './types.ts';
+// FIX: Import generateCommitMessageTemplate
+import { GEMINI_MODELS, SYSTEM_INSTRUCTION, DEBUG_SYSTEM_INSTRUCTION, DOCS_SYSTEM_INSTRUCTION, PROFILE_SYSTEM_INSTRUCTIONS, GENERATE_TESTS_INSTRUCTION, EXPLAIN_CODE_INSTRUCTION, REVIEW_SELECTION_INSTRUCTION, COMMIT_MESSAGE_SYSTEM_INSTRUCTION, DOCS_INSTRUCTION, COMPARISON_SYSTEM_INSTRUCTION, COMPARISON_REVISION_SYSTEM_INSTRUCTION, FEATURE_MATRIX_SCHEMA, generateComparisonTemplate, LANGUAGE_TAG_MAP, generateAuditTemplate, AUDIT_SYSTEM_INSTRUCTION, ROOT_CAUSE_SYSTEM_INSTRUCTION, generateRootCauseTemplate, COMMIT_MESSAGE_SCHEMA, generateFinalizationPrompt, generateVersionNamePrompt, generateCommitMessageTemplate } from './constants.ts';
 import { DiffViewer } from './Components/DiffViewer.tsx';
 import { ComparisonInput } from './Components/ComparisonInput.tsx';
 import { VersionHistoryModal } from './Components/VersionHistoryModal.tsx';
 import { SaveVersionModal } from './Components/SaveVersionModal.tsx';
-import { ToastContainer } from './Components/ToastContainer.tsx';
 import { ApiKeyBanner } from './Components/ApiKeyBanner.tsx';
 import { DocumentationCenterModal } from './Components/DocumentationCenterModal.tsx';
 import { ProjectFilesModal } from './Components/ProjectFilesModal.tsx';
 import { AuditInput } from './Components/AuditInput.tsx';
+import { SessionManagerModal } from './Components/SessionManagerModal.tsx';
 
-type OutputType = LoadingAction;
-type ActivePanel = 'input' | 'output';
+// Extracts markdown files with filenames from a response.
+const extractGeneratedMarkdownFiles = (responseText: string): { name: string, content: string }[] => {
+    const files: { name: string, content: string }[] = [];
+    const codeBlockRegex = /```([a-zA-Z0-9-:]*)\n([\sS]*?)\n```/g;
+    const matches = [...responseText.matchAll(codeBlockRegex)];
 
-// A custom hook to manage state with localStorage persistence.
-const usePersistentState = <T,>(storageKey: string, defaultValue: T): [T, React.Dispatch<React.SetStateAction<T>>] => {
-    const [state, setState] = useState<T>(() => {
-        try {
-            const item = window.localStorage.getItem(storageKey);
-            return item ? JSON.parse(item) : defaultValue;
-        } catch (error) {
-            console.error(`Error reading localStorage key "${storageKey}":`, error);
-            return defaultValue;
+    matches.forEach((match) => {
+        const langInfo = match[1] || '';
+        const code = match[2].trim();
+        const language = langInfo.split(':')[0].trim().toLowerCase();
+
+        if (language === 'markdown' || language === 'md') {
+            let filename = langInfo.split(':')[1]?.trim();
+            if (!filename) {
+                const firstLine = code.split('\n')[0];
+                if (firstLine.startsWith('# ')) {
+                    filename = firstLine.substring(2).trim().replace(/[<>:"/\\|?*]/g, '').replace(/\s/g, '_') + '.md';
+                } else {
+                    filename = `document_${Date.now()}.md`;
+                }
+            }
+            if (!filename.toLowerCase().endsWith('.md')) {
+                filename += '.md';
+            }
+            files.push({ name: filename, content: code });
         }
     });
-
-    useEffect(() => {
-        try {
-            window.localStorage.setItem(storageKey, JSON.stringify(state));
-        } catch (error) {
-            console.error(`Error setting localStorage key "${storageKey}":`, error);
-        }
-    }, [storageKey, state]);
-
-    return [state, setState];
+    return files;
 };
 
-
-// Extracts the last non-markdown code block to treat as a script revision.
-const extractLastScriptBlock = (responseText: string): string | null => {
-    const allCodeBlocksRegex = /`{3}(?:([a-zA-Z0-9-]*))?\n([\s\S]*?)\n`{3}/g;
-    const matches = [...responseText.matchAll(allCodeBlocksRegex)];
-
-    for (let i = matches.length - 1; i >= 0; i--) {
-        const lang = (matches[i][1] || '').toLowerCase();
-        const code = matches[i][2].trim();
-        if (lang !== 'markdown' && lang !== 'md') {
-            return code;
-        }
+const extractFinalCodeBlock = (response: string, isInitialReview: boolean) => {
+    const revisedCodeRegex = /###\s*(?:Revised|Updated|Full|Optimized)\s+Code\s*`{3}(?:[a-zA-Z0-9-]*)?\n([\sS]*?)\n`{3}/im;
+    const headingMatch = response.match(revisedCodeRegex);
+    if (headingMatch && headingMatch[1]) {
+      return headingMatch[1].trim();
     }
     
+    if (isInitialReview) {
+      const allCodeBlocksRegex = /`{3}(?:[a-zA-Z0-9-]*)?\n([\sS]*?)\n`{3}/g;
+      const matches = [...response.matchAll(allCodeBlocksRegex)];
+      
+      if (matches.length > 0) {
+        const lastMatch = matches[matches.length - 1];
+        if (lastMatch && lastMatch[1]) {
+          if (lastMatch[1].trim().split('\n').length >= 3) {
+            return lastMatch[1].trim();
+          }
+        }
+      }
+    }
+
     return null;
 };
 
-const App: React.FC = () => {
-  // --- Mode State ---
-  const [appMode, setAppMode] = useState<AppMode>('debug');
-  
-  // --- Working State (shared across modes) ---
-  const [language, setLanguage] = useState<SupportedLanguage>(SUPPORTED_LANGUAGES[0].value);
+const AppController: React.FC = () => {
+  const { 
+    appMode, language, reviewProfile, customReviewProfile, userOnlyCode, codeB, 
+    comparisonGoal, projectFiles, versions, errorMessage, importedSessions,
+    setVersions, setUserOnlyCode, setCodeB, setLanguage, setProjectFiles, 
+    setAppMode, setComparisonGoal, setCustomReviewProfile, setErrorMessage, 
+    setReviewProfile, setImportedSessions, resetAndSetMode
+  } = useAppContext();
+  const { addToast } = useToast();
+
+  // --- Session/Output State (managed by AppController) ---
   const [reviewFeedback, setReviewFeedback] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isChatLoading, setIsChatLoading] = useState<boolean>(false);
   const [loadingAction, setLoadingAction] = useState<LoadingAction>(null);
-  const [outputType, setOutputType] = useState<OutputType>(null);
+  const [outputType, setOutputType] = useState<LoadingAction>(null);
   const [error, setError] = useState<string | null>(null);
-  const [reviewedCode, setReviewedCode] = useState<string | null>(null); // The "before" code for a review
-  const [revisedCode, setRevisedCode] = useState<string | null>(null); // The "after" code from a review
+  const [reviewedCode, setReviewedCode] = useState<string | null>(null);
+  const [revisedCode, setRevisedCode] = useState<string | null>(null);
   const [fullCodeForReview, setFullCodeForReview] = useState<string>('');
   
-  // --- Single Review & Debug Mode State ---
-  const [userOnlyCode, setUserOnlyCode] = useState<string>('');
-  const [errorMessage, setErrorMessage] = useState<string>('');
-  const [reviewProfile, setReviewProfile] = useState<ReviewProfile | 'none'>('none');
-  const [customReviewProfile, setCustomReviewProfile] = useState<string>('');
-
   // --- Comparison Mode State ---
-  const [codeB, setCodeB] = useState<string>('');
-  const [comparisonGoal, setComparisonGoal] = useState<string>('');
   const [featureMatrix, setFeatureMatrix] = useState<Feature[] | null>(null);
   const [rawFeatureMatrixJson, setRawFeatureMatrixJson] = useState<string | null>(null);
   const [featureDecisions, setFeatureDecisions] = useState<Record<string, FeatureDecisionRecord>>({});
@@ -93,50 +103,41 @@ const App: React.FC = () => {
   const [finalizationSummary, setFinalizationSummary] = useState<FinalizationSummary | null>(null);
   const [finalizationBriefing, setFinalizationBriefing] = useState<string | null>(null);
 
-  // --- Audit Mode State (No longer needs selected standards) ---
-
   // --- View & Chat State ---
   const [isInputPanelVisible, setIsInputPanelVisible] = useState(true);
   const [isChatMode, setIsChatMode] = useState<boolean>(false);
   const [chatSession, setChatSession] = useState<Chat | null>(null);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
-  const [activePanel, setActivePanel] = useState<ActivePanel>('input');
+  const [activePanel, setActivePanel] = useState<'input' | 'output'>('input');
   const [chatInputValue, setChatInputValue] = useState('');
   const [chatRevisions, setChatRevisions] = useState<ChatRevision[]>([]);
+  const [chatFiles, setChatFiles] = useState<ChatFile[]>([]);
   const [chatContext, setChatContext] = useState<ChatContext>('general');
   const [activeFeatureForDiscussion, setActiveFeatureForDiscussion] = useState<Feature | null>(null);
   
   // --- Versioning & Modal State ---
-  const [versions, setVersions] = usePersistentState<Version[]>('codeReviewVersions', []);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [isDiffModalOpen, setIsDiffModalOpen] = useState(false);
   const [isVersionHistoryModalOpen, setIsVersionHistoryModalOpen] = useState(false);
   const [isDocsModalOpen, setIsDocsModalOpen] = useState(false);
   const [isProjectFilesModalOpen, setIsProjectFilesModalOpen] = useState(false);
+  const [isSessionManagerModalOpen, setIsSessionManagerModalOpen] = useState(false);
   const [versionName, setVersionName] = useState('');
   const [isSavingChat, setIsSavingChat] = useState(false);
   const [isGeneratingName, setIsGeneratingName] = useState<boolean>(false);
 
-
-  // --- Toast State ---
-  const [toasts, setToasts] = useState<Toast[]>([]);
-  
-  // --- File Attachment & Project Files State ---
+  // --- File Attachment & Context State ---
   const [attachments, setAttachments] = useState<{ file: File; content: string; mimeType: string }[]>([]);
-  const [projectFiles, setProjectFiles] = usePersistentState<ProjectFile[]>('projectFiles', []);
+  const [contextFileIds, setContextFileIds] = useState<Set<string>>(new Set());
 
-
-  const [ai] = useState(() => process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null);
-  const importFileInputRef = useRef<HTMLInputElement>(null);
   const attachFileInputRef = useRef<HTMLInputElement>(null);
-  const abortStreamRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const isReviewContextCurrent = reviewedCode !== null && (appMode === 'single' || appMode === 'debug' || appMode === 'audit' ? userOnlyCode === reviewedCode : true);
   const reviewAvailable = !!reviewFeedback && isReviewContextCurrent;
   const commitMessageAvailable = !!reviewedCode && !!revisedCode && reviewedCode !== revisedCode;
   const showOutputPanel = isLoading || !!reviewFeedback || !!error;
 
-  // Check if all features have decisions
   useEffect(() => {
     if (featureMatrix && featureMatrix.length > 0) {
         const allDecided = featureMatrix.every(feature => !!featureDecisions[feature.name]);
@@ -146,21 +147,17 @@ const App: React.FC = () => {
     }
   }, [featureDecisions, featureMatrix]);
 
-  // Effect to handle starting a feature discussion after state has updated
   useEffect(() => {
     if (chatContext === 'feature_discussion' && activeFeatureForDiscussion) {
       handleStartFollowUp();
     }
   }, [chatContext, activeFeatureForDiscussion]);
 
-    // Effect to load state from URL hash on initial mount
   useEffect(() => {
     const hash = window.location.hash.slice(1);
     if (hash) {
         try {
             const decodedState = JSON.parse(atob(hash));
-            
-            // Validate and set state
             if (decodedState.appMode) setAppMode(decodedState.appMode);
             if (decodedState.language) setLanguage(decodedState.language);
             if (decodedState.userOnlyCode) setUserOnlyCode(decodedState.userOnlyCode);
@@ -169,26 +166,14 @@ const App: React.FC = () => {
             if (decodedState.comparisonGoal) setComparisonGoal(decodedState.comparisonGoal);
             if (decodedState.reviewProfile) setReviewProfile(decodedState.reviewProfile);
             if (decodedState.customReviewProfile) setCustomReviewProfile(decodedState.customReviewProfile);
-            
-            addToast('Shared session loaded from URL!', 'info');
-            // Clear hash so a refresh doesn't reload it again if user makes changes
             window.history.replaceState(null, '', window.location.pathname + window.location.search);
+            addToast("Session loaded from URL", "info");
         } catch (e) {
             console.error("Failed to load state from URL hash:", e);
-            addToast('Could not load shared session from URL.', 'error');
+            addToast("Failed to load session from URL", "error");
         }
     }
   }, []); // Run only once on mount
-
-  const addToast = (message: string, type: Toast['type']) => {
-    const id = Date.now();
-    setToasts(prev => [...prev, { id, message, type }]);
-  };
-
-  const removeToast = (id: number) => {
-    setToasts(prev => prev.filter(t => t.id !== id));
-  };
-
 
   const getSystemInstructionForReview = useCallback(() => {
     let instruction = SYSTEM_INSTRUCTION;
@@ -200,63 +185,12 @@ const App: React.FC = () => {
     return instruction;
   }, [reviewProfile, customReviewProfile]);
 
-
-  const performStreamingRequest = async (fullCode: string, systemInstruction: string, model: string) => {
-    if (!ai) {
-      const msg = "Error: API Key not configured.";
-      setError(msg);
-      addToast(msg, 'error');
-      setIsLoading(false);
-      setLoadingAction(null);
-      return;
-    }
-    
-    abortStreamRef.current = false;
-    
-    try {
-      setReviewFeedback(''); // Start with an empty string for streaming
-      const responseStream = await ai.models.generateContentStream({
-        model: model,
-        contents: fullCode,
-        config: {
-          systemInstruction: systemInstruction,
-          temperature: 0.3,
-          maxOutputTokens: 8192,
-        },
-      });
-
-      let fullResponse = "";
-      for await (const chunk of responseStream) {
-        if (abortStreamRef.current) break;
-        const chunkText = chunk.text;
-        fullResponse += chunkText;
-        setReviewFeedback(fullResponse);
-      }
-      return fullResponse;
-    } catch (apiError) {
-      if (abortStreamRef.current) {
-        console.log("Stream aborted by user.");
-        return null;
-      }
-      console.error("API Error:", apiError);
-      const message = apiError instanceof Error ? apiError.message : "An unexpected error occurred.";
-      setError(`Failed to get review: ${message}`);
-      addToast(`API Error: ${message}`, 'error');
-      setReviewFeedback(null);
-      setReviewedCode(null);
-      setRevisedCode(null);
-      return null;
-    }
-  };
-
   const handleStopGenerating = () => {
-    abortStreamRef.current = true;
+    abortControllerRef.current?.abort();
     setIsLoading(false);
-    setIsChatLoading(false); // also stop chat loading if applicable
+    setIsChatLoading(false);
     setLoadingAction(null);
-    addToast("Generation stopped.", "info");
   };
-
 
   const resetForNewRequest = () => {
     setError(null);
@@ -268,6 +202,7 @@ const App: React.FC = () => {
     setReviewedCode(null);
     setRevisedCode(null);
     setChatRevisions([]);
+    setChatFiles([]);
     setFeatureMatrix(null);
     setFeatureDecisions({});
     setAllFeaturesDecided(false);
@@ -278,1272 +213,824 @@ const App: React.FC = () => {
     setFinalizationBriefing(null);
   }
 
-  const extractFinalCodeBlock = (response: string, isInitialReview: boolean) => {
-    // Priority 1: Look for the explicit "Revised Code" heading. This is the most reliable.
-    const revisedCodeRegex = /###\s*(?:Revised|Updated|Full|Optimized)\s+Code\s*`{3}(?:[a-zA-Z0-9-]*)?\n([\s\S]*?)\n`{3}/im;
-    const headingMatch = response.match(revisedCodeRegex);
-    if (headingMatch && headingMatch[1]) {
-      return headingMatch[1].trim();
+  const handleStreamingRequest = async (
+    action: LoadingAction,
+    contents: string | { parts: any[] },
+    systemInstruction: string,
+    model: string,
+    originalCode: string,
+    fullPromptForSaving: string
+  ) => {
+    if (!geminiService.isConfigured()) {
+        setError("API Key not configured.");
+        return;
     }
     
-    // Fallback for initial reviews: If no heading is found, find all code blocks and return the last significant one.
-    // This is less reliable but handles cases where the AI forgets the heading. It's disabled for chat
-    // follow-ups to prevent incorrectly capturing snippets as full revisions.
-    if (isInitialReview) {
-      const allCodeBlocksRegex = /`{3}(?:[a-zA-Z0-9-]*)?\n([\s\S]*?)\n`{3}/g;
-      const matches = [...response.matchAll(allCodeBlocksRegex)];
-      
-      if (matches.length > 0) {
-        const lastMatch = matches[matches.length - 1];
-        if (lastMatch && lastMatch[1]) {
-          // A simple heuristic: if the last code block is very short, it might be an example snippet.
-          // A full revision is usually longer. This helps avoid capturing small snippets.
-          if (lastMatch[1].trim().split('\n').length >= 3) {
-            return lastMatch[1].trim();
-          }
-        }
-      }
-    }
-
-    return null;
-  }
-
-  const handleReviewSubmit = useCallback(async (fullCodeToSubmit: string) => {
     setIsLoading(true);
-    setLoadingAction('review');
-    setOutputType('review');
-    setIsInputPanelVisible(false); // Requirement #5: Collapse input panel on submit
-    resetForNewRequest();
-    setFullCodeForReview(fullCodeToSubmit);
-    setReviewedCode(userOnlyCode);
-
-    const systemInstruction = appMode === 'debug'
-      ? `${SYSTEM_INSTRUCTION}\n\n${DEBUG_SYSTEM_INSTRUCTION}`
-      : getSystemInstructionForReview();
-    
-    const fullResponse = await performStreamingRequest(fullCodeToSubmit, systemInstruction, GEMINI_MODELS.CORE_ANALYSIS);
-
-    if (fullResponse) {
-        setRevisedCode(extractFinalCodeBlock(fullResponse, true));
-    }
-
-    setIsLoading(false);
-    setLoadingAction(null);
-  }, [ai, getSystemInstructionForReview, userOnlyCode, language, appMode]);
-
-  const handleAuditSubmit = useCallback(async () => {
-    setIsLoading(true);
-    setLoadingAction('audit');
-    setOutputType('audit');
+    setLoadingAction(action);
+    setOutputType(action);
     setIsInputPanelVisible(false);
     resetForNewRequest();
 
-    const fullCodeToSubmit = generateAuditTemplate(language, userOnlyCode);
+    setFullCodeForReview(fullPromptForSaving);
+    setReviewedCode(originalCode);
+    setReviewFeedback(''); // Start with an empty string for streaming
 
-    setFullCodeForReview(fullCodeToSubmit);
-    setReviewedCode(userOnlyCode);
-
-    const fullResponse = await performStreamingRequest(fullCodeToSubmit, `${SYSTEM_INSTRUCTION}\n\n${AUDIT_SYSTEM_INSTRUCTION}`, GEMINI_MODELS.CORE_ANALYSIS);
-
-    if (fullResponse) {
-        setRevisedCode(extractFinalCodeBlock(fullResponse, true));
-    }
-
-    setIsLoading(false);
-    setLoadingAction(null);
-  }, [ai, userOnlyCode, language]);
-
-  const handleCompareAndOptimize = useCallback(async () => {
-    setIsLoading(true);
-    setLoadingAction('comparison');
-    setOutputType('comparison');
-    setIsInputPanelVisible(false); // Requirement #5: Collapse input panel on submit
-    resetForNewRequest();
-
-    const prompt = generateComparisonTemplate(language, comparisonGoal, userOnlyCode, codeB);
-    setFullCodeForReview(prompt); // Save for versioning
-    setReviewedCode(userOnlyCode); // Set Code A as the "before" for diffing
-
-    const fullResponse = await performStreamingRequest(prompt, `${SYSTEM_INSTRUCTION}\n\n${COMPARISON_SYSTEM_INSTRUCTION}`, GEMINI_MODELS.CORE_ANALYSIS);
+    abortControllerRef.current = new AbortController();
     
-    if (fullResponse) {
-        setRevisedCode(extractFinalCodeBlock(fullResponse, true));
-    }
-    
-    setIsLoading(false);
-    setLoadingAction(null);
-  }, [ai, language, comparisonGoal, userOnlyCode, codeB]);
-
-  const handleCompareAndRevise = useCallback(async () => {
-    if (!ai) {
-      const msg = "Error: API Key not configured.";
-      setError(msg);
-      addToast(msg, 'error');
-      return;
-    }
-    setIsLoading(true);
-    setLoadingAction('revise');
-    setOutputType('revise');
-    setIsInputPanelVisible(false);
-    resetForNewRequest();
-
-    const prompt = generateComparisonTemplate(language, comparisonGoal, userOnlyCode, codeB);
-    setFullCodeForReview(prompt);
-    setReviewedCode(userOnlyCode);
-
     try {
-        const response = await ai.models.generateContent({
-            model: GEMINI_MODELS.CORE_ANALYSIS,
-            contents: prompt,
-            config: {
-                systemInstruction: `${SYSTEM_INSTRUCTION}\n\n${COMPARISON_REVISION_SYSTEM_INSTRUCTION}`,
-                responseMimeType: 'application/json',
-                responseSchema: FEATURE_MATRIX_SCHEMA,
-            }
+        let fullResponse = "";
+        await geminiService.streamRequest({
+            contents,
+            systemInstruction,
+            model,
+            abortSignal: abortControllerRef.current.signal,
+            onChunk: (chunkText) => {
+                fullResponse += chunkText;
+                setReviewFeedback(fullResponse);
+            },
         });
         
-        const rawJsonResponse = response.text;
-        const jsonResponse = JSON.parse(rawJsonResponse);
-        if (jsonResponse && jsonResponse.features) {
-            setFeatureMatrix(jsonResponse.features);
-            setRawFeatureMatrixJson(rawJsonResponse);
-            setReviewFeedback("Feature matrix generated. Please make a decision for each feature to proceed.");
-        } else {
-            throw new Error("Invalid feature matrix format received from API.");
-        }
+        setRevisedCode(extractFinalCodeBlock(fullResponse, true));
 
     } catch (apiError) {
-        console.error("Comparative Revision API Error:", apiError);
         const message = apiError instanceof Error ? apiError.message : "An unexpected error occurred.";
-        setError(`Failed to generate feature matrix: ${message}`);
-        addToast(`API Error: ${message}`, 'error');
-        setFeatureMatrix(null);
-        setReviewFeedback(null);
+        if (message !== "STREAM_ABORTED") {
+          setError(`Failed to get review: ${message}`);
+          setReviewFeedback(null);
+        }
     } finally {
         setIsLoading(false);
         setLoadingAction(null);
     }
-  }, [ai, language, comparisonGoal, userOnlyCode, codeB]);
-
-  const handleTriggerDocsGeneration = useCallback(async (codeToDocument: string) => {
-    if (!codeToDocument.trim()) {
-      addToast("Cannot generate documentation for empty code.", "error");
-      return;
-    }
-    setIsDocsModalOpen(false); // Close modal before starting
-    setIsLoading(true);
-    setLoadingAction('docs');
-    setOutputType('docs');
-    setIsInputPanelVisible(false);
-    resetForNewRequest();
-    
-    const prompt = `\`\`\`${LANGUAGE_TAG_MAP[language]}\n${codeToDocument}\n\`\`\``;
-
-    setFullCodeForReview(prompt);
-    setReviewedCode(codeToDocument); // Set the source code as "reviewed"
-    
-    const systemInstruction = `${SYSTEM_INSTRUCTION}\n\n${DOCS_SYSTEM_INSTRUCTION}\n\n${DOCS_INSTRUCTION}`;
-    await performStreamingRequest(prompt, systemInstruction, GEMINI_MODELS.CORE_ANALYSIS);
-
-    setIsLoading(false);
-    setLoadingAction(null);
-  }, [ai, language]);
-
-  const handleGenerateTests = useCallback(async () => {
-    if (appMode === 'comparison' || !userOnlyCode.trim() || isChatMode) return;
-    setIsLoading(true);
-    setLoadingAction('tests');
-    setOutputType('tests');
-    setIsInputPanelVisible(false);
-    resetForNewRequest();
-    setReviewedCode(userOnlyCode);
-
-    const prompt = `\`\`\`${language}\n${userOnlyCode}\n\`\`\``;
-    setFullCodeForReview(prompt);
-    await performStreamingRequest(prompt, `${SYSTEM_INSTRUCTION}\n\n${GENERATE_TESTS_INSTRUCTION}`, GEMINI_MODELS.CORE_ANALYSIS);
-
-    setIsLoading(false);
-    setLoadingAction(null);
-  }, [ai, userOnlyCode, language, appMode, isChatMode]);
-  
-  const handleStartFollowUp = useCallback(async (version?: Version, modeOverride?: AppMode) => {
-    // If a chat session already exists and we're not loading a new version, just resume it.
-    if (chatSession && !version) {
-        setIsChatMode(true);
-        setActivePanel('input');
-        setIsInputPanelVisible(true);
-        return;
-    }
-
-    if (chatContext === 'feature_discussion' && activeFeatureForDiscussion && ai) {
-        // Set up UI for loading state
-        setIsChatMode(true);
-        setActivePanel('input');
-        setIsInputPanelVisible(true);
-        setIsChatLoading(true);
-        setChatHistory([]); // Clear any previous history
-
-        const systemInstruction = `${SYSTEM_INSTRUCTION}\n\nYou are a senior software architect. Your task is to initiate a discussion about a specific software feature, keeping a shared project goal in mind. You will be given a "Shared Goal", the "Name" of the feature, and its "Description". Your response MUST begin by referencing the shared goal and explaining how it relates to the feature. You should then provide your initial thoughts, suggestions, or questions to kickstart a productive conversation. Example starters: "To align with our shared goal of ${comparisonGoal || '...'}, I think we should approach the '${activeFeatureForDiscussion.name}' feature by..." or "Considering the goal is to ${comparisonGoal || '...'}, my initial recommendation for '${activeFeatureForDiscussion.name}' is...".`;
-        
-        const primerPrompt = `Shared Goal: "${comparisonGoal || 'create the best possible unified code'}"\n\nFeature Name: "${activeFeatureForDiscussion.name}"\nFeature Description: "${activeFeatureForDiscussion.description}"\n\nPlease start the discussion.`;
-
-        try {
-            const newChat = ai.chats.create({ 
-                model: GEMINI_MODELS.CORE_ANALYSIS, 
-                history: [], // Start fresh for this feature
-                config: { systemInstruction }
-            });
-            setChatSession(newChat);
-
-            const response = await newChat.sendMessage({ message: primerPrompt });
-            const aiPrimerMessage = response.text;
-
-            setChatHistory([{ id: `chat_initial_${Date.now()}`, role: 'model', content: aiPrimerMessage }]);
-        } catch (apiError) {
-            console.error("Feature discussion primer error:", apiError);
-            const message = apiError instanceof Error ? apiError.message : "Failed to start discussion.";
-            setChatHistory([{ id: `chat_error_${Date.now()}`, role: 'model', content: `Error: Could not start discussion. ${message}` }]);
-        } finally {
-            setIsChatLoading(false);
-        }
-        return;
-    }
-
-    const contextFeedback = version ? version.feedback : reviewFeedback;
-    const contextCode = version ? version.fullPrompt : fullCodeForReview;
-    const contextUserCode = version ? version.userCode : (appMode === 'comparison' ? userOnlyCode : reviewedCode);
-    
-    if (!contextFeedback || !contextCode || !ai) return;
-
-    if (modeOverride) {
-      setAppMode(modeOverride);
-    }
-
-    // Set the state needed for the chat context panel
-    setReviewedCode(contextUserCode);
-    setReviewFeedback(contextFeedback);
-    
-    // If starting from a saved version, load its revisions.
-    if (version) {
-        setRevisedCode(extractFinalCodeBlock(version.feedback, true));
-        setChatRevisions(version.chatRevisions || []);
-    } else {
-        // For a new chat, clear any previous chat revisions
-        setChatRevisions([]);
-    }
-    
-    let selectionText = '';
-    if (!version && chatInputValue.trim() === '') {
-      const selection = window.getSelection();
-      if (selection && selection.toString().trim() !== '') {
-        const selectedNode = selection.anchorNode;
-        if (selectedNode?.parentElement?.closest('#review-output-content')) {
-          selectionText = selection.toString().trim();
-        }
-      }
-    }
-
-    // The history for the API's memory starts with the original prompt and its full response.
-    const historyForAPI: {role: 'user' | 'model', parts: {text: string}[]}[] = [
-      { role: 'user', parts: [{ text: contextCode }] },
-      { role: 'model', parts: [{ text: contextFeedback }] }
-    ];
-
-    // The history for the UI starts with the model's initial analysis.
-    const historyForUI: ChatMessage[] = [
-      { id: `chat_initial_${Date.now()}`, role: 'model', content: contextFeedback }
-    ];
-    
-    if (version) {
-        historyForUI.push({ id: `chat_prompt_${Date.now()}`, role: 'model', content: `Context for **"${version.name}"** loaded. What is your question?` });
-    }
-    
-    if (!version && selectionText) {
-      setChatInputValue(`Regarding this section:\n\n> ${selectionText.split('\n').join('\n> ')}\n\n`);
-    } else if (chatInputValue.trim() === '' && chatContext !== 'feature_discussion') {
-      setChatInputValue('');
-    }
-    
-    const systemInstructionForChat = (modeOverride || appMode) === 'debug'
-        ? `${SYSTEM_INSTRUCTION}\n\n${DEBUG_SYSTEM_INSTRUCTION}`
-        : getSystemInstructionForReview();
-
-    const newChat = ai.chats.create({ 
-      model: GEMINI_MODELS.CORE_ANALYSIS, 
-      history: historyForAPI,
-      config: {
-        systemInstruction: systemInstructionForChat,
-      }
-    });
-
-    setChatSession(newChat);
-    setChatHistory(historyForUI);
-    setIsChatMode(true);
-    setActivePanel('input');
-    setIsInputPanelVisible(true);
-  }, [reviewFeedback, fullCodeForReview, ai, getSystemInstructionForReview, userOnlyCode, appMode, chatInputValue, reviewedCode, chatContext, activeFeatureForDiscussion, comparisonGoal, chatSession]);
-
-  const handleExplainSelection = useCallback(async (selection: string) => {
-    setIsLoading(true);
-    setLoadingAction('explain-selection');
-    setOutputType('explain-selection');
-    setIsInputPanelVisible(false);
-    resetForNewRequest();
-
-    const prompt = `\`\`\`${language}\n${selection}\n\`\`\``;
-    setFullCodeForReview(prompt);
-    setReviewedCode(selection);
-
-    const fullResponse = await performStreamingRequest(prompt, `${SYSTEM_INSTRUCTION}\n\n${EXPLAIN_CODE_INSTRUCTION}`, GEMINI_MODELS.FAST_TASKS);
-
-    if (fullResponse && !abortStreamRef.current) {
-        handleStartFollowUp();
-    }
-
-    setIsLoading(false);
-    setLoadingAction(null);
-  }, [ai, language, handleStartFollowUp]);
-  
-  const handleReviewSelection = useCallback(async (selection: string) => {
-    setIsLoading(true);
-    setLoadingAction('review-selection');
-    setOutputType('review-selection');
-    setIsInputPanelVisible(false);
-    resetForNewRequest();
-
-    const prompt = `\`\`\`${language}\n${selection}\n\`\`\``;
-    setFullCodeForReview(prompt);
-    setReviewedCode(selection);
-    
-    const systemInstruction = `${getSystemInstructionForReview()}\n\n${REVIEW_SELECTION_INSTRUCTION}`;
-    const fullResponse = await performStreamingRequest(prompt, systemInstruction, GEMINI_MODELS.CORE_ANALYSIS);
-
-    if (fullResponse && !abortStreamRef.current) {
-        handleStartFollowUp();
-    }
-
-    setIsLoading(false);
-    setLoadingAction(null);
-  }, [ai, language, getSystemInstructionForReview, handleStartFollowUp]);
-
-  const handleGenerateCommitMessage = useCallback(async () => {
-      if (!ai || !reviewedCode || !revisedCode) {
-          const msg = "Cannot generate commit message. Original or revised code is missing.";
-          setError(msg);
-          addToast(msg, 'error');
-          return;
-      }
-      
-      setIsLoading(true);
-      setLoadingAction('commit');
-      setOutputType('commit');
-      setIsInputPanelVisible(false);
-      resetForNewRequest();
-
-      const schema = {
-          type: Type.OBJECT,
-          properties: {
-              type: { type: Type.STRING, description: "The conventional commit type (e.g., feat, fix, chore, refactor)." },
-              scope: { type: Type.STRING, description: "Optional scope of the change (e.g., api, db, ui)."},
-              subject: { type: Type.STRING, description: "A short, imperative-mood summary of the change, under 50 chars." },
-              body: { type: Type.STRING, description: "A longer, detailed description of the changes and motivation. Use markdown newlines." }
-          },
-          required: ['type', 'subject', 'body']
-      };
-
-      const prompt = `Based on the following code changes, generate a conventional commit message.\n\n### Original Code:\n\`\`\`${language}\n${reviewedCode}\n\`\`\`\n\n### Revised Code:\n\`\`\`${language}\n${revisedCode}\n\`\`\``;
-
-      try {
-          const response = await ai.models.generateContent({
-              model: GEMINI_MODELS.FAST_TASKS,
-              contents: prompt,
-              config: {
-                  systemInstruction: `${SYSTEM_INSTRUCTION}\n\n${COMMIT_MESSAGE_SYSTEM_INSTRUCTION}`,
-                  responseMimeType: 'application/json',
-                  responseSchema: schema,
-              }
-          });
-          
-          const jsonResponse = JSON.parse(response.text);
-          const { type, scope, subject, body } = jsonResponse;
-          const scopeText = scope ? `(${scope})` : '';
-          
-          const header = `${type}${scopeText}: ${subject}`;
-          const gitCommand = `git commit -m "${header}"`;
-
-          const formattedMarkdown = `### Suggested Commit Message\n\n**${header}**\n\n${body.replace(/\n/g, '\n\n')}\n\n---\n\n#### As a git command:\n\`\`\`bash\n${gitCommand}\n\`\`\``;
-          setReviewFeedback(formattedMarkdown);
-
-      } catch (apiError) {
-          console.error("Commit Message API Error:", apiError);
-          const message = apiError instanceof Error ? apiError.message : "An unexpected error occurred.";
-          setError(`Failed to generate commit message: ${message}`);
-          addToast(`Error: ${message}`, 'error');
-          setReviewFeedback(null);
-      } finally {
-          setIsLoading(false);
-          setLoadingAction(null);
-      }
-  }, [ai, reviewedCode, revisedCode, language]);
-
-
-  const handleRemoveAttachment = (fileToRemove: File) => {
-    setAttachments(prev => prev.filter(att => att.file !== fileToRemove));
   };
 
-  const handleFollowUpSubmit = useCallback(async (message: string, session?: Chat | null) => {
-    const currentSession = session || chatSession;
-    if (!currentSession) return;
+  const handleChatSubmit = async (message: string) => {
+    if (isChatLoading || !chatSession) {
+        if (!chatSession) addToast("Chat session not initialized.", "error");
+        return;
+    }
 
     setIsChatLoading(true);
-    setError(null);
-    
-    const userMessageForUi: ChatMessage = {
-        id: `chat_user_${Date.now()}`,
+
+    const userMessage: ChatMessage = {
+        id: `msg_${Date.now()}`,
         role: 'user',
         content: message,
-    };
-
-    if (attachments.length > 0) {
-        userMessageForUi.attachments = attachments.map(att => ({
+        attachments: attachments.map(att => ({
             name: att.file.name,
             mimeType: att.mimeType,
-            content: att.mimeType.startsWith('image/') ? `data:${att.mimeType};base64,${att.content}` : att.content,
-        }));
-    }
+            content: att.content // base64 for images, raw text for others
+        })),
+    };
 
-    setChatHistory(prev => [...prev, userMessageForUi]);
-    setActivePanel('input');
-    abortStreamRef.current = false;
+    setChatHistory(prev => [...prev, userMessage]);
+    setAttachments([]); // Clear attachments after sending
 
-    let messageToSend = message;
+    try {
+        const modelResponseContent: ChatMessage = {
+            id: `msg_${Date.now() + 1}`,
+            role: 'model',
+            content: '',
+        };
+        setChatHistory(prev => [...prev, modelResponseContent]);
 
-    // Special handling for the first message in the finalization context.
-    if (chatContext === 'finalization' && chatHistory.length === 1) {
-        if (!featureMatrix || !finalizationSummary) {
-            const err = "Finalization context is missing. Cannot proceed.";
-            setError(err);
-            addToast(err, 'error');
-            setIsChatLoading(false);
-            return;
-        }
-
-        const { included, removed, revised } = finalizationSummary;
-        
-        let briefing = `## Canonical Action Map\n\n`;
-        briefing += `You are a senior software architect tasked with unifying two codebases (Codebase A and Codebase B) into a single, production-ready file. You will be provided with a detailed 'Canonical Action Map' that you must follow precisely.\n\n`;
-        briefing += `**Original Codebases:**\n${fullCodeForReview}\n\n---\n\n`;
-        briefing += `**ACTION PLAN:**\n\n`;
-
-        if (included.length > 0) {
-            briefing += `### 1. Features to INTEGRATE AS-IS:\nThese features should be included in the final output, preferring the best implementation if common.\n${included.map(f => `- **${f.name}** (${f.source}): ${f.description}`).join('\n')}\n\n`;
-        }
-        if (removed.length > 0) {
-            briefing += `### 2. Features to EXCLUDE:\nThese features must be omitted from the final codebase.\n${removed.map(f => `- **${f.name}** (${f.source}): ${f.description}`).join('\n')}\n\n`;
-        }
-        if (revised.length > 0) {
-            briefing += `### 3. Features to REVISE AND INTEGRATE:\nFor each feature below, use the provided context and revised code snippets to inform the final implementation.\n\n`;
-            revised.forEach(feature => {
-                const decisionRecord = featureDecisions[feature.name];
-                briefing += `#### Feature: "${feature.name}"\n`;
-                briefing += `*Description:* ${feature.description}\n\n`;
-                if (decisionRecord?.history && decisionRecord.history.length > 0) {
-                    const transcript = decisionRecord.history.slice(1).map(msg => `[${msg.role.toUpperCase()}]: ${msg.content}`).join('\n\n');
-                    briefing += `**Discussion Transcript for Context:**\n\`\`\`text\n${transcript}\n\`\`\`\n\n`;
-                }
-                if (decisionRecord?.revisedSnippet) {
-                    briefing += `**CRITICAL INSTRUCTION:** For this feature, you MUST use the following revised code snippet exactly as provided in the final unified codebase:\n`;
-                    briefing += `\`\`\`${LANGUAGE_TAG_MAP[language]}\n${decisionRecord.revisedSnippet}\n\`\`\`\n\n`;
+        const parts: Part[] = [{ text: message }];
+        userMessage.attachments?.forEach(att => {
+            parts.push({
+                inlineData: {
+                    mimeType: att.mimeType,
+                    data: att.content
                 }
             });
-        }
-        briefing += `---\n\n### 4. Final User Instructions:\n${message}\n\n`;
-        briefing += `Based on this complete Canonical Action Map, please provide the final, complete, and runnable unified codebase in a single markdown block under the heading '### Revised Code'. Ensure all integrated and revised features work together seamlessly.`;
-        messageToSend = briefing;
-        setFinalizationBriefing(messageToSend); // Save for versioning
-    }
-
-    type ApiPart = { text: string } | { inlineData: { mimeType: string; data: string } };
-    const apiParts: ApiPart[] = [{ text: messageToSend }];
-
-    if (attachments.length > 0) {
-        attachments.forEach(att => {
-            if (att.mimeType.startsWith('image/')) {
-                apiParts.push({ inlineData: { mimeType: att.mimeType, data: att.content } });
-            } else {
-                const firstPart = apiParts[0] as { text: string };
-                firstPart.text += `\n\n--- Attached File: ${att.file.name} ---\n\n${att.content}`;
-            }
         });
-    }
-    
-    setAttachments([]); // Clear attachments after preparing the payload
-    
-    const modelMessageId = `chat_model_${Date.now()}`;
-    
-    try {
-      setChatHistory(prev => [...prev, { id: modelMessageId, role: 'model', content: '' }]); // Add empty placeholder
-      
-      const responseStream = await currentSession.sendMessageStream({ message: apiParts });
-      
-      let currentResponse = "";
-      for await (const chunk of responseStream) {
-        if (abortStreamRef.current) break;
-        const chunkText = chunk.text;
-        currentResponse += chunkText;
-        setChatHistory(prev => {
-          const newHistory = [...prev];
-          const lastMessageIndex = newHistory.findIndex(m => m.id === modelMessageId);
-          if (lastMessageIndex !== -1) {
-            newHistory[lastMessageIndex] = { ...newHistory[lastMessageIndex], content: currentResponse };
-          }
-          return newHistory;
-        });
-      }
-      
-      if (!abortStreamRef.current) {
-        const newRevisionCode = extractLastScriptBlock(currentResponse);
-        if (newRevisionCode) {
-           setRevisedCode(newRevisionCode); // Update the main revised code for diffing in finalize context
-           setReviewFeedback(currentResponse); // Update feedback to include the final generated code
-          setChatRevisions(prev => {
-            const lastRevisionCode = prev.length > 0 ? prev[prev.length - 1].code : revisedCode;
-            if (lastRevisionCode !== newRevisionCode) {
-              const newVersionName = `Chat Revision ${prev.length + 1}`;
-              const newId = `rev_${Date.now()}`;
-              return [...prev, { id: newId, name: newVersionName, code: newRevisionCode }];
-            }
-            return prev;
-          });
+
+        const responseStream = await chatSession.sendMessageStream({ message: parts });
+
+        let fullResponseText = '';
+        for await (const chunk of responseStream) {
+            const chunkText = chunk.text;
+            fullResponseText += chunkText;
+            setChatHistory(prev => prev.map(msg =>
+                msg.id === modelResponseContent.id ? { ...msg, content: fullResponseText } : msg
+            ));
         }
-      }
-      
+
+        const newRevisedCode = extractFinalCodeBlock(fullResponseText, false);
+        if (newRevisedCode) {
+            const newRevision: ChatRevision = {
+                id: `rev_${Date.now()}`,
+                name: `Revision ${chatRevisions.length + 1}`,
+                code: newRevisedCode,
+            };
+            setChatRevisions(prev => [...prev, newRevision]);
+        }
+
+        const newFiles = extractGeneratedMarkdownFiles(fullResponseText);
+        if (newFiles.length > 0) {
+            const newChatFiles: ChatFile[] = newFiles.map(f => ({
+                id: `file_chat_${Date.now()}_${f.name}`,
+                name: f.name,
+                content: f.content,
+            }));
+            setChatFiles(prev => [...prev, ...newChatFiles]);
+        }
+
     } catch (apiError) {
-      if (abortStreamRef.current) {
-        console.log("Chat stream aborted.");
-      } else {
-        console.error("Chat API Error:", apiError);
-        const errorMsg = apiError instanceof Error ? apiError.message : "An unexpected error occurred.";
-        setError(`Failed to get response: ${errorMsg}`);
-        addToast(`Chat Error: ${errorMsg}`, 'error');
-        setChatHistory(prev => prev.filter(msg => msg.id !== modelMessageId && msg.role !== 'user' || msg.content !== message));
-      }
+        const message = apiError instanceof Error ? apiError.message : "An unexpected error occurred.";
+        setChatHistory(prev => [...prev, {
+            id: `err_${Date.now()}`,
+            role: 'model',
+            content: `**Error:** ${message}`
+        }]);
     } finally {
-      setIsChatLoading(false);
+        setIsChatLoading(false);
     }
-  }, [chatSession, revisedCode, chatContext, chatHistory, finalizationSummary, featureMatrix, fullCodeForReview, featureDecisions, language, attachments]);
+  };
 
-  const handleCodeLineClick = (line: string) => {
-    setChatInputValue(`Can you explain this line for me?\n\`\`\`\n${line}\n\`\`\``);
-    setActivePanel('input');
+
+  const handleReviewSubmit = (fullCodeToSubmit: string) => {
+    const systemInstruction = appMode === 'debug'
+      ? `${SYSTEM_INSTRUCTION}\n\n${DEBUG_SYSTEM_INSTRUCTION}`
+      : getSystemInstructionForReview();
+    const selectedContextFiles = projectFiles.filter(pf => contextFileIds.has(pf.id));
+    const contents = geminiService.buildPromptWithProjectFiles(fullCodeToSubmit, selectedContextFiles);
+    handleStreamingRequest('review', contents, systemInstruction, GEMINI_MODELS.CORE_ANALYSIS, userOnlyCode, fullCodeToSubmit);
+  };
+
+  const handleAuditSubmit = () => {
+    const fullCodeToSubmit = generateAuditTemplate(language, userOnlyCode);
+    const selectedContextFiles = projectFiles.filter(pf => contextFileIds.has(pf.id));
+    const contents = geminiService.buildPromptWithProjectFiles(fullCodeToSubmit, selectedContextFiles);
+    handleStreamingRequest('audit', contents, `${SYSTEM_INSTRUCTION}\n\n${AUDIT_SYSTEM_INSTRUCTION}`, GEMINI_MODELS.CORE_ANALYSIS, userOnlyCode, fullCodeToSubmit);
+  };
+
+  const handleCompareAndOptimize = () => {
+    const prompt = generateComparisonTemplate(language, comparisonGoal, userOnlyCode, codeB);
+    const selectedContextFiles = projectFiles.filter(pf => contextFileIds.has(pf.id));
+    const contents = geminiService.buildPromptWithProjectFiles(prompt, selectedContextFiles);
+    handleStreamingRequest('comparison', contents, `${SYSTEM_INSTRUCTION}\n\n${COMPARISON_SYSTEM_INSTRUCTION}`, GEMINI_MODELS.CORE_ANALYSIS, userOnlyCode, prompt);
+  };
+
+  const handleAnalyzeRootCause = () => {
+    if (!reviewedCode || !reviewFeedback || !revisedCode) {
+        addToast("Not enough context for root cause analysis.", "error");
+        return;
+    }
+    const prompt = generateRootCauseTemplate(reviewedCode, errorMessage, reviewFeedback, revisedCode);
+    const selectedContextFiles = projectFiles.filter(pf => contextFileIds.has(pf.id));
+    const contents = geminiService.buildPromptWithProjectFiles(prompt, selectedContextFiles);
+    handleStreamingRequest('root-cause', contents, ROOT_CAUSE_SYSTEM_INSTRUCTION, GEMINI_MODELS.CORE_ANALYSIS, reviewedCode, prompt);
   };
   
-  const handleFeatureDecision = (feature: Feature, decision: FeatureDecision) => {
-    if (decision === 'discussed') {
-        setActiveFeatureForDiscussion(feature);
-        setChatContext('feature_discussion');
-    } else {
-        setFeatureDecisions(prev => ({ ...prev, [feature.name]: { decision } }));
-        addToast(`Feature "${feature.name}" marked to '${decision}'.`, 'info');
-    }
+  const handleFinalizeFeatureDiscussion = () => {
+    addToast("Feature discussion finalized.", "info");
+    setChatContext('general');
+    setActiveFeatureForDiscussion(null);
   };
-
-  const handleFinalizeRevision = useCallback(() => {
-    if (!featureMatrix || !ai) return;
-
-    setLoadingAction('finalization');
-    setOutputType('finalization');
-
-    const included = featureMatrix.filter(f => featureDecisions[f.name]?.decision === 'include');
-    const removed = featureMatrix.filter(f => featureDecisions[f.name]?.decision === 'remove');
-    const revised = featureMatrix.filter(f => featureDecisions[f.name]?.decision === 'discussed');
-    const summary = { included, removed, revised };
-    setFinalizationSummary(summary);
-
-    // Set up UI for finalization, but wait for user input.
-    setChatContext('finalization');
-    setIsChatMode(true);
-    setActivePanel('input');
-    setIsInputPanelVisible(true);
-    setChatHistory([
-        { 
-            id: `chat_initial_${Date.now()}`, 
-            role: 'model', 
-            content: "Finalization plan constructed. Provide your final instructions for generating the unified codebase, then press send." 
-        }
-    ]);
-    
-    // Create a new, empty chat session. The context will be built and sent with the first user message.
-    const newChat = ai.chats.create({
-      model: GEMINI_MODELS.CORE_ANALYSIS,
-      history: [], 
-      config: {
-        systemInstruction: `${SYSTEM_INSTRUCTION}\n\n${COMPARISON_SYSTEM_INSTRUCTION}`,
-      }
-    });
-    setChatSession(newChat);
-
-  }, [featureMatrix, featureDecisions, ai]);
-
-  const handleClearChatRevisions = () => {
-    setChatRevisions([]);
-    addToast("Revision history cleared.", "info");
-  };
-
-  const handleRenameChatRevision = (revisionId: string, newName: string) => {
-    setChatRevisions(prev => prev.map(rev => 
-        rev.id === revisionId ? { ...rev, name: newName } : rev
-    ));
-    addToast("Revision renamed.", "info");
-  };
-
-  const handleDeleteChatRevision = (revisionId: string) => {
-    setChatRevisions(prev => prev.filter(rev => rev.id !== revisionId));
-    addToast("Revision removed.", "info");
-  };
-
-  const resetAndSetMode = (mode: AppMode) => {
-    setAppMode(mode);
-    setIsChatMode(false);
-    setReviewFeedback(null);
-    setError(null);
-    setOutputType(null);
-    setChatSession(null);
-    setChatHistory([]);
-    setUserOnlyCode('');
-    setReviewedCode(null);
-    setRevisedCode(null);
-    setChatRevisions([]);
-    setActivePanel('input');
-    setCodeB('');
-    setComparisonGoal('');
-    setIsInputPanelVisible(true);
-    setReviewProfile('none');
-    setCustomReviewProfile('');
-    setErrorMessage('');
-  };
-
-  const handleFinalizeFeatureDiscussion = useCallback(() => {
-    if (chatContext === 'feature_discussion' && activeFeatureForDiscussion) {
-        const discussionHistory = chatHistory;
-        
-        // A more lenient code block extractor for snippets
-        const extractSnippetCodeBlock = (responseText: string): string | null => {
-            const allCodeBlocksRegex = /`{3}(?:[a-zA-Z0-9-]*)?\n([\s\S]*?)\n`{3}/g;
-            const matches = [...responseText.matchAll(allCodeBlocksRegex)];
-            if (matches.length > 0) {
-                return matches[matches.length - 1][1].trim();
-            }
-            return null;
-        };
-
-        const lastAiResponse = discussionHistory.slice().reverse().find(m => m.role === 'model')?.content || '';
-        const revisedSnippet = extractSnippetCodeBlock(lastAiResponse);
-
-        setFeatureDecisions(prev => ({ 
-            ...prev, 
-            [activeFeatureForDiscussion.name as string]: {
-                decision: 'discussed',
-                history: discussionHistory,
-                revisedSnippet: revisedSnippet || undefined
-            } 
-        }));
-        addToast(`Discussion for "${activeFeatureForDiscussion.name}" complete.${revisedSnippet ? ' Snippet captured.' : ''}`, 'info');
-        
-        // Reset UI state to return to the feature matrix view.
-        setIsChatMode(false);
-        setChatContext('general');
-        setActiveFeatureForDiscussion(null);
-        setChatHistory([]);
-        setChatSession(null);
-        setChatInputValue('');
-        setIsInputPanelVisible(false); // Return focus to the output panel
-    }
-  }, [chatContext, activeFeatureForDiscussion, chatHistory]);
-
-  const handleEndGeneralChat = useCallback(() => {
-    if (chatHistory.length > 1) {
-      // Use the existing save modal for a consistent UX
-      setIsSavingChat(true);
-      setVersionName(`Chat Session - ${new Date().toLocaleString()}`);
-      setIsSaveModalOpen(true);
-    } else {
-      // If there's no real chat history, just go back to the start.
-      resetAndSetMode('debug');
-    }
-  }, [chatHistory]);
-
 
   const handleReturnToOutputView = () => {
     setIsChatMode(false);
-    setIsInputPanelVisible(false);
-    setActivePanel('output');
-  };
-
-  const handleOpenSaveModal = () => {
-    const canSaveReview = !!reviewFeedback && !isChatMode && !isLoading && !error;
-    const canSaveFinalization = chatContext === 'finalization' && !!revisedCode;
-    if (!canSaveReview && !canSaveFinalization) return;
-    setVersionName(`SYS_SAVE // ${new Date().toLocaleString()}`);
-    setIsSaveModalOpen(true);
-  };
-
-  const handleCloseSaveModal = () => {
-    // When a user cancels saving a chat, they should return to the chat, not have the app reset.
-    // The reset to debug screen only happens on successful save.
-    setIsSaveModalOpen(false);
-    setIsSavingChat(false); // Always reset the flag
-  };
-
-
-  const handleConfirmSaveVersion = () => {
-    if (!versionName.trim()) return;
-
-    // Determine the feedback content based on whether we are saving a chat session
-    let feedbackToSave = reviewFeedback!;
-    if (isSavingChat) {
-      const chatLog = chatHistory.slice(1) // Exclude initial review from log
-        .map(msg => `**[${msg.role.toUpperCase()}]**\n\n${msg.content}`)
-        .join('\n\n---\n\n');
-      feedbackToSave = (reviewFeedback || '') + '\n\n---\n\n## Follow-up Chat History\n\n' + chatLog;
+    if (showOutputPanel) {
+      setIsInputPanelVisible(false);
+      setActivePanel('output');
     }
-    
-    if (chatContext !== 'finalization' && (!feedbackToSave || !fullCodeForReview)) return;
-    
-    const isFinalizing = chatContext === 'finalization' || outputType === 'finalization';
-    let versionType: Version['type'] = 'review';
-    
-    if (isFinalizing) {
-        versionType = 'finalization';
-    } else if (outputType === 'audit' || outputType === 'docs' || outputType === 'tests' || outputType === 'commit') {
-        versionType = outputType;
-    }
-
-    const newVersion: Version = {
-      id: `v_${Date.now()}`,
-      name: versionName.trim(),
-      userCode: reviewedCode || userOnlyCode, // The original code A before revision
-      fullPrompt: isFinalizing && finalizationBriefing ? finalizationBriefing : fullCodeForReview,
-      feedback: isFinalizing && revisedCode ? revisedCode : feedbackToSave,
-      language,
-      timestamp: Date.now(),
-      type: versionType,
-      chatRevisions: isFinalizing ? [] : chatRevisions,
-      rawFeatureMatrixJson: isFinalizing ? rawFeatureMatrixJson : null,
-    };
-
-    setVersions(prevVersions => [newVersion, ...prevVersions]);
-    setIsSaveModalOpen(false);
-    setVersionName('');
-    addToast('Version saved successfully!', 'success');
-    
-    if (isSavingChat) {
-      resetAndSetMode('debug');
-      setIsSavingChat(false);
-    }
-  };
-  
-  const handleGenerateVersionName = useCallback(async () => {
-    if (!ai || !reviewedCode) {
-        addToast("Cannot generate name without code context.", "error");
-        return;
-    }
-
-    setIsGeneratingName(true);
-    setLoadingAction('generate-name');
-
-    const prompt = `Based on the following code and its review feedback (if available), generate a short, descriptive version name (under 50 characters). Respond with ONLY the name itself, with no extra formatting, quotes, or explanation.\n\n### Code:\n\`\`\`${language}\n${reviewedCode}\n\`\`\`\n\n### Review Feedback:\n${reviewFeedback || "No feedback provided."}`;
-    
-    try {
-        const response = await ai.models.generateContent({
-            model: GEMINI_MODELS.FAST_TASKS,
-            contents: prompt,
-            config: {
-                systemInstruction: SYSTEM_INSTRUCTION
-            }
-        });
-
-        const generatedName = response.text.trim().replace(/["']/g, ''); // Clean up quotes
-        setVersionName(generatedName);
-        addToast("Version name generated.", "success");
-    } catch (apiError) {
-        console.error("Version Name Generation Error:", apiError);
-        const message = apiError instanceof Error ? apiError.message : "An unexpected error occurred.";
-        addToast(`Failed to generate name: ${message}`, 'error');
-    } finally {
-        setIsGeneratingName(false);
-        setLoadingAction(null);
-    }
-  }, [ai, reviewedCode, reviewFeedback, language]);
-
-  const handleLoadVersion = (version: Version) => {
-    resetAndSetMode('single'); // Reset with a temporary mode
-
-    setUserOnlyCode(version.userCode);
-    setLanguage(version.language);
-    setFullCodeForReview(version.fullPrompt);
-    setReviewFeedback(version.feedback);
-    setReviewedCode(version.userCode);
-    setChatRevisions(version.chatRevisions || []);
-    setRawFeatureMatrixJson(version.rawFeatureMatrixJson || null);
-    
-    const finalCodeInLoaded = extractFinalCodeBlock(version.feedback, true);
-    setRevisedCode(finalCodeInLoaded);
-
-    setActivePanel('output');
-    setIsInputPanelVisible(false);
-    
-    if (version.type === 'audit') {
-        setAppMode('audit');
-    } else if (version.fullPrompt.includes('### Codebase B')) {
-      setAppMode('comparison');
-    } else if (version.fullPrompt.includes('### Error Message / Context')) {
-      setAppMode('debug');
-    } else {
-      setAppMode('single');
-    }
-
-    if (version.type === 'docs' || version.fullPrompt.includes(DOCS_INSTRUCTION)) {
-      setOutputType('docs');
-    } else if (version.type === 'tests' || version.fullPrompt.includes(GENERATE_TESTS_INSTRUCTION)) {
-      setOutputType('tests');
-    } else if (version.type === 'commit') {
-      setOutputType('commit');
-    } else if (version.type === 'audit') {
-      setOutputType('audit');
-    } else if (version.type === 'finalization' || version.rawFeatureMatrixJson) {
-      setOutputType('revise');
-    } else if (version.fullPrompt.includes(EXPLAIN_CODE_INSTRUCTION)) {
-      setOutputType('explain-selection');
-    } else if (version.fullPrompt.includes(REVIEW_SELECTION_INSTRUCTION)) {
-      setOutputType('review-selection');
-    } else {
-      setOutputType('review');
-    }
-    addToast(`Version "${version.name}" loaded.`, 'info');
-  };
-
-  const handleDeleteVersion = (versionId: string) => {
-    setVersions(prevVersions => prevVersions.filter(v => v.id !== versionId));
-    addToast('Version deleted.', 'info');
   };
 
   const handleExportSession = () => {
-    const sessionData = {
-      versions,
-      projectFiles,
-      userOnlyCode,
-      language,
-      reviewProfile,
-      customReviewProfile,
-      fullCodeForReview,
-      reviewFeedback,
-      chatHistory,
-      reviewedCode,
-      revisedCode,
-      appMode,
-      codeB,
-      comparisonGoal,
-      chatRevisions,
-      errorMessage,
-      rawFeatureMatrixJson,
-    };
-    const blob = new Blob([JSON.stringify(sessionData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `4ndroDebugger_session_${Date.now()}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    try {
+        const sessionState = {
+            version: "1.8.0",
+            appMode, language, reviewProfile, customReviewProfile,
+            userOnlyCode, codeB, errorMessage, comparisonGoal,
+            versions, projectFiles, reviewFeedback, revisedCode,
+            reviewedCode, chatHistory, chatRevisions, chatFiles,
+            featureMatrix, rawFeatureMatrixJson, featureDecisions,
+            finalizationSummary, finalizationBriefing,
+            contextFileIds: Array.from(contextFileIds),
+        };
+        const blob = new Blob([JSON.stringify(sessionState, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `4ndr0debug_session_${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        addToast("Session exported successfully!", "success");
+    } catch (err) {
+        console.error("Failed to export session:", err);
+        addToast("Failed to export session.", "error");
+    }
   };
 
-  const handleImportSession = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+  const processImportedSessionFile = (fileContent: string, fileName: string) => {
+    try {
+        const importedState = JSON.parse(fileContent);
+        
+        if (typeof importedState.appMode !== 'string' || typeof importedState.language !== 'string') {
+            throw new Error("Invalid session file format.");
+        }
+
+        const newSession: ImportedSession = {
+            id: `session_${Date.now()}`,
+            filename: fileName,
+            importedAt: Date.now(),
+            appMode: importedState.appMode,
+            language: importedState.language,
+            versionCount: Array.isArray(importedState.versions) ? importedState.versions.length : 0,
+            projectFileCount: Array.isArray(importedState.projectFiles) ? importedState.projectFiles.length : 0,
+            hasChatHistory: Array.isArray(importedState.chatHistory) && importedState.chatHistory.length > 0,
+            sessionState: importedState,
+        };
+        
+        setImportedSessions(prev => [newSession, ...prev.filter(s => s.filename !== newSession.filename)]);
+        addToast(`Session "${fileName}" ready to load.`, "success");
+    } catch (err) {
+        const message = err instanceof Error ? err.message : "An unexpected error occurred.";
+        console.error("Failed to import session file:", err);
+        addToast(`Failed to import session: ${message}`, "error");
+    }
+  };
+
+  const handleImportFile = (file: File) => {
     if (!file) return;
 
     const reader = new FileReader();
     reader.onload = (e) => {
-      try {
-        const text = e.target?.result;
-        if (typeof text !== 'string') throw new Error("File is not a text file.");
-        const data = JSON.parse(text);
-
-        if (!Array.isArray(data.versions)) throw new Error("Invalid session file: 'versions' is missing or not an array.");
-        
-        // Perform a direct state load from the imported file.
-        // This is more robust than chaining a reset function with setters.
-        setVersions(data.versions ?? []);
-        setProjectFiles(data.projectFiles ?? []);
-        setAppMode(data.appMode ?? 'debug');
-        setUserOnlyCode(data.userOnlyCode ?? '');
-        setLanguage(data.language ?? SUPPORTED_LANGUAGES[0].value);
-        setReviewProfile(data.reviewProfile ?? 'none');
-        setCustomReviewProfile(data.customReviewProfile ?? '');
-        setFullCodeForReview(data.fullCodeForReview ?? '');
-        setReviewFeedback(data.reviewFeedback ?? null);
-        setReviewedCode(data.reviewedCode ?? null);
-        setRevisedCode(data.revisedCode ?? null);
-        setChatRevisions(data.chatRevisions ?? []);
-        setErrorMessage(data.errorMessage ?? '');
-        setRawFeatureMatrixJson(data.rawFeatureMatrixJson ?? null);
-        setCodeB(data.codeB ?? '');
-        setComparisonGoal(data.comparisonGoal ?? '');
-        
-        const chatHistoryWithIds = (data.chatHistory ?? []).map((msg: Omit<ChatMessage, 'id'>, index: number) => ({
-          ...msg,
-          id: `imported_${Date.now()}_${index}`
-        }));
-        setChatHistory(chatHistoryWithIds);
-        
-        const wasInChat = chatHistoryWithIds.length > 0;
-        setIsInputPanelVisible(!wasInChat);
-        setIsChatMode(wasInChat);
-        setActivePanel(wasInChat ? 'input' : 'output');
-
-        setError(null);
-        setOutputType(null);
-        setChatSession(null);
-
-        // Restore chat session with full history if applicable
-        if (ai && wasInChat && data.fullCodeForReview && data.reviewFeedback) {
-            const historyForAPI: {role: 'user' | 'model', parts: {text: string}[]}[] = [
-                { role: 'user', parts: [{ text: data.fullCodeForReview }] },
-                { role: 'model', parts: [{ text: data.reviewFeedback }] }
-            ];
-
-            const subsequentChatMessages = chatHistoryWithIds.slice(1);
-            subsequentChatMessages.forEach((msg: ChatMessage) => {
-                historyForAPI.push({ role: msg.role, parts: [{ text: msg.content }] });
-            });
-
-            const newChat = ai.chats.create({
-                model: GEMINI_MODELS.CORE_ANALYSIS,
-                history: historyForAPI,
-                config: { systemInstruction: getSystemInstructionForReview() }
-            });
-            setChatSession(newChat);
+        const result = e.target?.result as string;
+        if (result) {
+            processImportedSessionFile(result, file.name);
         }
-        
-        addToast('Session imported successfully!', 'success');
-
-      } catch (err) {
-        const msg = err instanceof Error ? `Import failed: ${err.message}` : "Import failed: Invalid file.";
-        console.error("Failed to import session:", err);
-        setError(msg);
-        addToast(msg, 'error');
-      } finally {
-        if(event.target) {
-            event.target.value = '';
-        }
-      }
     };
-    reader.onerror = () => {
-        const msg = "Failed to read the selected file.";
-        setError(msg);
-        addToast(msg, 'error');
-    }
     reader.readAsText(file);
   };
-  
-  const handleDownloadAsFile = (content: string, filename: string, mimeType: string = 'text/markdown;charset=utf-8') => {
-    const isBase64 = !mimeType.startsWith('text/');
-    const byteString = isBase64 ? atob(content) : content;
-    const buffer = new ArrayBuffer(byteString.length);
-    const intArray = new Uint8Array(buffer);
-    for (let i = 0; i < byteString.length; i++) {
-        intArray[i] = byteString.charCodeAt(i);
+
+  const handleLoadSession = (sessionState: any) => {
+    try {
+        // Step 1: Reset all current session-specific state to avoid bleed-over.
+        resetForNewRequest();
+
+        // Step 2: Load core application settings and inputs.
+        if (sessionState.appMode) setAppMode(sessionState.appMode);
+        if (sessionState.language) setLanguage(sessionState.language);
+        if (sessionState.reviewProfile) setReviewProfile(sessionState.reviewProfile);
+        if (sessionState.customReviewProfile) setCustomReviewProfile(sessionState.customReviewProfile);
+        if (typeof sessionState.userOnlyCode === 'string') setUserOnlyCode(sessionState.userOnlyCode);
+        if (typeof sessionState.codeB === 'string') setCodeB(sessionState.codeB);
+        if (typeof sessionState.errorMessage === 'string') setErrorMessage(sessionState.errorMessage);
+        if (typeof sessionState.comparisonGoal === 'string') setComparisonGoal(sessionState.comparisonGoal);
+        
+        // Step 3: Load persistent project data.
+        if (Array.isArray(sessionState.versions)) setVersions(sessionState.versions);
+        if (Array.isArray(sessionState.projectFiles)) setProjectFiles(sessionState.projectFiles);
+        if (Array.isArray(sessionState.contextFileIds)) setContextFileIds(new Set(sessionState.contextFileIds));
+        
+        // Step 4: Load the state of the last review/output.
+        if (typeof sessionState.reviewFeedback === 'string') setReviewFeedback(sessionState.reviewFeedback);
+        if (typeof sessionState.revisedCode === 'string') setRevisedCode(sessionState.revisedCode);
+        if (typeof sessionState.reviewedCode === 'string') setReviewedCode(sessionState.reviewedCode);
+
+        // Step 5: Load chat-specific history and generated assets.
+        if (Array.isArray(sessionState.chatHistory)) setChatHistory(sessionState.chatHistory);
+        if (Array.isArray(sessionState.chatRevisions)) setChatRevisions(sessionState.chatRevisions);
+        if (Array.isArray(sessionState.chatFiles)) setChatFiles(sessionState.chatFiles);
+
+        // Step 6: Load state specific to the comparative revision mode.
+        if (sessionState.featureMatrix) setFeatureMatrix(sessionState.featureMatrix);
+        if (sessionState.rawFeatureMatrixJson) setRawFeatureMatrixJson(sessionState.rawFeatureMatrixJson);
+        if (sessionState.featureDecisions) setFeatureDecisions(sessionState.featureDecisions);
+        if (sessionState.finalizationSummary) setFinalizationSummary(sessionState.finalizationSummary);
+        if (sessionState.finalizationBriefing) setFinalizationBriefing(sessionState.finalizationBriefing);
+        
+        // Step 7: Determine and set the correct UI state based on the loaded data.
+        const hasChat = Array.isArray(sessionState.chatHistory) && sessionState.chatHistory.length > 0;
+        const hasFeedback = typeof sessionState.reviewFeedback === 'string' && sessionState.reviewFeedback.length > 0;
+
+        if (hasChat) {
+            setIsChatMode(true);
+            setActivePanel('input');
+            setIsInputPanelVisible(true); // Ensure input is visible for chat
+        } else {
+            setIsChatMode(false);
+            if (hasFeedback) {
+                setIsInputPanelVisible(false);
+                setActivePanel('output');
+            } else {
+                setIsInputPanelVisible(true);
+                setActivePanel('input');
+            }
+        }
+
+        // Step 8: Finalize the loading process.
+        setIsSessionManagerModalOpen(false);
+        addToast("Session loaded successfully!", "success");
+
+    } catch (err) {
+        const message = err instanceof Error ? err.message : "An unexpected error occurred.";
+        console.error("Failed to load session state:", err);
+        addToast(`Failed to load session: ${message}`, "error");
     }
-    const blob = new Blob([buffer], { type: mimeType });
-    
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    addToast(`${filename} downloaded.`, 'success');
   };
 
-  const handleShare = () => {
-    try {
-        const stateToShare = {
-            appMode,
-            language,
-            userOnlyCode,
-            codeB,
-            errorMessage,
-            comparisonGoal,
-            reviewProfile,
-            customReviewProfile,
-        };
+  const handleDeleteImportedSession = (sessionId: string) => {
+    setImportedSessions(prev => prev.filter(s => s.id !== sessionId));
+    addToast("Imported session removed from list.", "info");
+  };
 
-        const jsonState = JSON.stringify(stateToShare);
-        const base64State = btoa(jsonState);
-        
+  const handleShareSession = () => {
+    try {
+        const shareableState = { appMode, language, userOnlyCode, codeB, errorMessage, comparisonGoal, reviewProfile, customReviewProfile };
+        const base64State = btoa(JSON.stringify(shareableState));
         const url = new URL(window.location.href);
         url.hash = base64State;
         
-        navigator.clipboard.writeText(url.href).then(() => {
-            addToast('Shareable link copied to clipboard!', 'success');
-        }, (err) => {
-            console.error('Could not copy text: ', err);
-            addToast('Failed to copy share link.', 'error');
-        });
-
+        navigator.clipboard.writeText(url.toString())
+            .then(() => addToast("Shareable URL copied to clipboard!", "success"))
+            .catch(err => {
+                console.error("Failed to copy URL:", err);
+                addToast("Failed to copy URL to clipboard.", "error");
+            });
     } catch (e) {
-        console.error("Failed to create share link:", e);
-        addToast('Could not create share link.', 'error');
+        console.error("Failed to create shareable URL:", e);
+        addToast("Failed to create shareable URL.", "error");
     }
   };
 
-  const handleImportClick = () => {
-    importFileInputRef.current?.click();
+  const handleExplainSelection = (selection: string) => {
+    const prompt = `${EXPLAIN_CODE_INSTRUCTION}\n\n\`\`\`${LANGUAGE_TAG_MAP[language]}\n${selection}\n\`\`\``;
+    handleStreamingRequest('explain-selection', prompt, SYSTEM_INSTRUCTION, GEMINI_MODELS.FAST_TASKS, selection, prompt);
   };
 
-  const handleAttachFileClick = () => {
-    attachFileInputRef.current?.click();
+  const handleReviewSelection = (selection: string) => {
+    const prompt = `${REVIEW_SELECTION_INSTRUCTION}\n\n\`\`\`${LANGUAGE_TAG_MAP[language]}\n${selection}\n\`\`\``;
+    handleStreamingRequest('review-selection', prompt, getSystemInstructionForReview(), GEMINI_MODELS.CORE_ANALYSIS, selection, prompt);
   };
 
-  const handleFileAttach = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (!files || files.length === 0) return;
+  const handleStartFollowUp = useCallback(async (version?: Version) => {
+    if (version) {
+        // Load context from a specific version
+        addToast(`Starting follow-up from "${version.name}"...`, "info");
+        
+        setChatHistory(version.chatHistory || []);
+        setChatRevisions(version.chatRevisions || []);
+        setChatFiles(version.chatFiles || []);
 
-    const MAX_SIZE_MB = 10;
-    const newAttachmentsPromises = Array.from(files).map(file => {
-        return new Promise<{ file: File; content: string; mimeType: string }>((resolve, reject) => {
-            if (file.size > MAX_SIZE_MB * 1024 * 1024) {
-                return reject(new Error(`File "${file.name}" exceeds ${MAX_SIZE_MB}MB limit.`));
-            }
-            const isImage = file.type.startsWith('image/');
-            const isText = file.type.startsWith('text/') || file.type.includes('json') || /\.(log|md|txt)$/i.test(file.name);
-            if (!isImage && !isText) {
-                return reject(new Error(`Unsupported file type for "${file.name}": ${file.type || 'unknown'}.`));
-            }
+        setLanguage(version.language);
+        setUserOnlyCode(version.userCode);
+        setFullCodeForReview(version.fullPrompt);
+        setReviewFeedback(version.feedback);
+        setReviewedCode(version.userCode);
+        setRevisedCode(null);
+        if (version.reviewProfile) setReviewProfile(version.reviewProfile);
+        if (version.customReviewProfile) setCustomReviewProfile(version.customReviewProfile);
+        if (version.comparisonGoal) setComparisonGoal(version.comparisonGoal);
+        if (version.contextFileIds) setContextFileIds(new Set(version.contextFileIds));
 
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const result = e.target?.result as string;
-                if (!result) return reject(new Error(`Failed to read file: ${file.name}`));
-                
-                const content = isImage ? result.split(',')[1] : result;
-                resolve({ file, content, mimeType: file.type });
-            };
-            reader.onerror = () => reject(new Error(`Error reading file: ${file.name}`));
-
-            if (isImage) {
-                reader.readAsDataURL(file);
-            } else {
-                reader.readAsText(file);
-            }
-        });
-    });
-
-    Promise.all(newAttachmentsPromises)
-        .then(newAttachments => {
-            setAttachments(prev => [...prev, ...newAttachments]);
-        })
-        .catch(error => {
-            addToast(error.message, 'error');
-        });
-
-    if (event.target) {
-        event.target.value = ''; // Allow re-selecting the same file(s)
+    } else {
+        addToast("Follow-up chat started!", "info");
+        setChatHistory([]);
+        setChatRevisions([]);
+        setChatFiles([]);
     }
-  };
-
-  const handleLoadRevisionIntoEditor = () => {
-    if (!revisedCode) {
-        addToast('No revised code available to load.', 'error');
-        return;
-    }
-    const targetMode = appMode === 'comparison' ? 'single' : appMode;
-    resetAndSetMode(targetMode);
-    setUserOnlyCode(revisedCode);
-    setReviewedCode(revisedCode); // Set it as reviewed to allow for another cycle
-    setIsInputPanelVisible(true);
+    
+    setIsChatMode(true);
     setActivePanel('input');
-    addToast('Revision loaded into editor.', 'success');
-  };
+    setIsInputPanelVisible(true);
+
+    const ai = geminiService.getAiClient();
+    if (!ai) {
+        addToast("Gemini AI not configured. Cannot start chat.", "error");
+        return;
+    }
+
+    const getChatSystemInstruction = () => {
+        if (chatContext === 'feature_discussion' && activeFeatureForDiscussion) {
+            return `${COMPARISON_SYSTEM_INSTRUCTION}\n\nThe user wants to discuss the following feature: "${activeFeatureForDiscussion.name}". Description: "${activeFeatureForDiscussion.description}". Source: ${activeFeatureForDiscussion.source}.`;
+        }
+        switch(appMode) {
+            case 'debug': return `${SYSTEM_INSTRUCTION}\n\n${DEBUG_SYSTEM_INSTRUCTION}`;
+            case 'comparison': return `${SYSTEM_INSTRUCTION}\n\n${COMPARISON_SYSTEM_INSTRUCTION}`;
+            case 'audit': return `${SYSTEM_INSTRUCTION}\n\n${AUDIT_SYSTEM_INSTRUCTION}`;
+            default: return getSystemInstructionForReview();
+        }
+    };
+
+    const initialHistoryForGemini: { role: 'user' | 'model', parts: { text: string }[] }[] = [];
+    const sourceFeedback = version ? version.feedback : reviewFeedback;
+    const sourcePrompt = version ? version.fullPrompt : fullCodeForReview;
+    if (sourcePrompt && sourceFeedback) {
+        initialHistoryForGemini.push({ role: 'user', parts: [{ text: sourcePrompt }] });
+        initialHistoryForGemini.push({ role: 'model', parts: [{ text: sourceFeedback }] });
+    }
+
+    const newChat = ai.chats.create({
+        model: GEMINI_MODELS.CORE_ANALYSIS,
+        history: initialHistoryForGemini,
+        config: {
+          systemInstruction: getChatSystemInstruction(),
+        }
+    });
+    setChatSession(newChat);
+
+  }, [addToast, setLanguage, setUserOnlyCode, setFullCodeForReview, setReviewFeedback, setReviewedCode, setRevisedCode, setReviewProfile, customReviewProfile, comparisonGoal, contextFileIds, appMode, chatContext, activeFeatureForDiscussion, getSystemInstructionForReview, reviewFeedback, fullCodeForReview]);
   
-  const handleSaveFileToProject = (file: File) => {
-    const MAX_SIZE_MB = 10;
-    if (file.size > MAX_SIZE_MB * 1024 * 1024) {
-      addToast(`File size exceeds ${MAX_SIZE_MB}MB limit.`, 'error');
-      return;
+  const handleSaveChatSession = () => {
+    setIsSavingChat(true);
+    setIsSaveModalOpen(true);
+  };
+
+  const handleSaveVersion = useCallback(() => {
+    if (!versionName.trim()) {
+        addToast("Version name cannot be empty.", "error");
+        return;
+    }
+
+    const newVersion: Version = {
+        id: `version_${Date.now()}`,
+        name: versionName.trim(),
+        userCode: reviewedCode || userOnlyCode,
+        fullPrompt: fullCodeForReview,
+        feedback: reviewFeedback || '',
+        language: language,
+        timestamp: Date.now(),
+        type: 'review',
+        rawFeatureMatrixJson: rawFeatureMatrixJson,
+        reviewProfile: reviewProfile,
+        customReviewProfile: customReviewProfile,
+        comparisonGoal: comparisonGoal,
+        contextFileIds: Array.from(contextFileIds),
+    };
+
+    if (isSavingChat) {
+        newVersion.chatHistory = chatHistory;
+        newVersion.feedback = chatHistory.map(msg => `**${msg.role}**: ${msg.content}`).join('\n\n---\n\n');
+        newVersion.chatRevisions = chatRevisions;
+        newVersion.chatFiles = chatFiles;
+    } else if (outputType) {
+        const typeMap = { 'docs': 'docs', 'tests': 'tests', 'commit': 'commit', 'finalization': 'finalization', 'audit': 'audit', 'root-cause': 'root-cause' };
+        if (typeMap[outputType]) newVersion.type = typeMap[outputType] as Version['type'];
     }
     
-    const isImage = file.type.startsWith('image/');
+    setVersions(prev => [newVersion, ...prev]);
+    addToast(`Version "${versionName.trim()}" saved!`, "success");
+    setIsSaveModalOpen(false);
+    setVersionName('');
     
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const result = e.target?.result as string;
-      if (!result) {
-        addToast('Failed to read file content.', 'error');
-        return;
-      }
+    if (isSavingChat) {
+        setIsSavingChat(false);
+        setIsChatMode(false);
+        setReviewFeedback(null);
+        setChatHistory([]);
+        setChatSession(null);
+        setChatRevisions([]);
+        setChatFiles([]);
+    }
+  }, [
+    versionName, isSavingChat, chatHistory, chatRevisions, chatFiles, reviewedCode, userOnlyCode,
+    fullCodeForReview, reviewFeedback, language, outputType, rawFeatureMatrixJson,
+    reviewProfile, customReviewProfile, comparisonGoal, contextFileIds,
+    setVersions, addToast
+  ]);
+
+  const handleLoadVersion = (version: Version) => {
+    addToast(`Loading version "${version.name}"...`, "info");
+    
+    resetForNewRequest();
+
+    // Restore common properties
+    setLanguage(version.language);
+    setUserOnlyCode(version.userCode);
+    setFullCodeForReview(version.fullPrompt);
+    setReviewFeedback(version.feedback);
+    setReviewedCode(version.userCode);
+    if (version.reviewProfile) setReviewProfile(version.reviewProfile);
+    if (version.customReviewProfile) setCustomReviewProfile(version.customReviewProfile);
+    if (version.comparisonGoal) setComparisonGoal(version.comparisonGoal);
+    if (version.contextFileIds) setContextFileIds(new Set(version.contextFileIds));
+
+    // Restore chat-specific properties
+    if (version.chatHistory && version.chatHistory.length > 0) {
+        setChatHistory(version.chatHistory);
+        setChatRevisions(version.chatRevisions || []);
+        setChatFiles(version.chatFiles || []);
+        setIsChatMode(true);
+        setIsInputPanelVisible(true);
+        setActivePanel('input');
+    } else {
+        // Not a chat, just a regular review/output
+        setIsInputPanelVisible(false);
+        setActivePanel('output');
+    }
+
+    setIsVersionHistoryModalOpen(false); // Close the modal after loading
+  };
+
+  const handleDeleteVersion = (versionId: string) => {
+      setVersions(prev => prev.filter(v => v.id !== versionId));
+      addToast("Version deleted.", "info");
+  };
+
+  const handleRenameVersion = (versionId: string, newName:string) => {
+      setVersions(prev => prev.map(v => v.id === versionId ? { ...v, name: newName } : v));
+      addToast("Version renamed.", "success");
+  };
+
+  const handleContextFileSelectionChange = (fileId: string, isSelected: boolean) => {
+    setContextFileIds(prev => {
+        const newSet = new Set(prev);
+        if (isSelected) {
+            newSet.add(fileId);
+        } else {
+            newSet.delete(fileId);
+        }
+        return newSet;
+    });
+  };
+
+  const onSaveGeneratedFile = (filename: string, content: string) => {
       const newFile: ProjectFile = {
-        id: `file_${Date.now()}`,
-        name: file.name,
-        mimeType: file.type,
-        timestamp: Date.now(),
-        content: isImage ? result.split(',')[1] : result,
+        id: `file_${Date.now()}`, name: filename, mimeType: 'text/markdown',
+        timestamp: Date.now(), content: content,
       };
       setProjectFiles(prev => [...prev, newFile]);
-      addToast(`File "${file.name}" saved to project.`, 'success');
-    };
-    reader.onerror = () => addToast('Error reading file.', 'error');
+      addToast(`Saved "${filename}" to project files.`, "success");
+  };
 
-    if (isImage) {
-      reader.readAsDataURL(file);
-    } else {
-      reader.readAsText(file);
+  const handleGenerateTests = () => {
+    const codeToTest = revisedCode || userOnlyCode;
+    if (!codeToTest.trim()) {
+      addToast("No code available to generate tests for.", "info");
+      return;
+    }
+    const prompt = `${GENERATE_TESTS_INSTRUCTION}\n\n\`\`\`${LANGUAGE_TAG_MAP[language]}\n${codeToTest}\n\`\`\``;
+    handleStreamingRequest('tests', prompt, SYSTEM_INSTRUCTION, GEMINI_MODELS.CORE_ANALYSIS, codeToTest, prompt);
+  };
+  
+  const handleGenerateCommitMessage = async () => {
+    if (!reviewedCode || !revisedCode) return;
+    setLoadingAction('commit');
+    setIsLoading(true);
+    setOutputType('commit');
+    setReviewFeedback('');
+    try {
+        const prompt = generateCommitMessageTemplate(reviewedCode, revisedCode);
+        const result = await geminiService.generateJson({
+            contents: prompt,
+            systemInstruction: COMMIT_MESSAGE_SYSTEM_INSTRUCTION,
+            model: GEMINI_MODELS.FAST_TASKS,
+            schema: COMMIT_MESSAGE_SCHEMA,
+        });
+        const scope = result.scope ? `(${result.scope})` : '';
+        const formattedMessage = `${result.type}${scope}: ${result.subject}\n\n${result.body}`;
+        setReviewFeedback(`### Suggested Commit Message\n\n\`\`\`\n${formattedMessage}\n\`\`\``);
+    } catch (apiError) {
+        const message = apiError instanceof Error ? apiError.message : "An unexpected error occurred.";
+        setError(`Failed to generate commit message: ${message}`);
+    } finally {
+        setIsLoading(false);
+        setLoadingAction(null);
     }
   };
 
-  const handleSaveGeneratedFileToProject = (filename: string, content: string) => {
-    const newFile: ProjectFile = {
-      id: `file_${Date.now()}`,
-      name: filename,
-      mimeType: 'text/markdown',
-      timestamp: Date.now(),
-      content: content,
-    };
-    setProjectFiles(prev => [...prev, newFile]);
-    addToast(`File "${filename}" saved to project.`, 'success');
+  const handleFinalizeComparison = () => {
+    const summary: FinalizationSummary = { included: [], removed: [], revised: [] };
+    featureMatrix?.forEach(feature => {
+        const decision = featureDecisions[feature.name]?.decision;
+        if (decision === 'include') summary.included.push(feature);
+        else if (decision === 'remove') summary.removed.push(feature);
+        else if (decision === 'discussed') summary.revised.push(feature);
+    });
+    setFinalizationSummary(summary);
+    
+    const prompt = generateFinalizationPrompt(userOnlyCode, codeB, summary, featureDecisions);
+    handleStreamingRequest('finalization', prompt, COMPARISON_SYSTEM_INSTRUCTION, GEMINI_MODELS.CORE_ANALYSIS, `${userOnlyCode}\n\n${codeB}`, prompt);
+  };
+
+  const handleDownloadOutput = () => {
+      if (!reviewFeedback) return;
+      const blob = new Blob([reviewFeedback], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'documentation.md';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      addToast("Documentation downloaded.", "success");
+  };
+
+  const handleAutoGenerateVersionName = async () => {
+    setIsGeneratingName(true);
+    try {
+        const contentToSummarize = isSavingChat 
+            ? chatHistory.map(msg => `${msg.role}: ${msg.content}`).join('\n')
+            : reviewFeedback || reviewedCode || '';
+        
+        if (!contentToSummarize.trim()) {
+            addToast("Not enough content to generate a name.", "info");
+            return;
+        }
+
+        const prompt = generateVersionNamePrompt(contentToSummarize);
+        const name = await geminiService.generateText({
+            contents: prompt,
+            systemInstruction: "You are a helpful assistant that creates concise titles.",
+            model: GEMINI_MODELS.FAST_TASKS,
+        });
+        setVersionName(name.replace(/["']/g, '')); // Remove quotes from response
+    } catch (apiError) {
+        const message = apiError instanceof Error ? apiError.message : "An unexpected error occurred.";
+        addToast(`Failed to generate name: ${message}`, "error");
+    } finally {
+        setIsGeneratingName(false);
+    }
+  };
+    // --- Project File Handlers ---
+
+  const fileToContent = (file: File): Promise<{ content: string; mimeType: string }> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const result = reader.result as string;
+            if (file.type.startsWith('image/')) {
+                // Return base64 string without the data URI prefix
+                resolve({ content: result.split(',')[1], mimeType: file.type });
+            } else {
+                resolve({ content: result, mimeType: file.type || 'text/plain' });
+            }
+        };
+        reader.onerror = (error) => reject(error);
+        
+        if (file.type.startsWith('image/')) {
+            reader.readAsDataURL(file);
+        } else {
+            reader.readAsText(file);
+        }
+    });
+  };
+
+  const handleAttachmentsChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files) return;
+
+    try {
+        const newAttachments = await Promise.all(
+            Array.from(files).map(async (file: File) => {
+                const { content, mimeType } = await fileToContent(file);
+                return { file, content, mimeType };
+            })
+        );
+        setAttachments(prev => [...prev, ...newAttachments]);
+        addToast(`${newAttachments.length} file(s) attached to chat.`, "info");
+    } catch (error) {
+        console.error("Failed to read attachments:", error);
+        addToast("Failed to read one or more files.", "error");
+    }
+  };
+
+  const handleUploadProjectFile = async (file: File) => {
+    try {
+        const { content, mimeType } = await fileToContent(file);
+        const newProjectFile: ProjectFile = {
+            id: `proj_${Date.now()}_${file.name}`,
+            name: file.name,
+            content: content,
+            mimeType: mimeType,
+            timestamp: Date.now(),
+        };
+        setProjectFiles(prev => [newProjectFile, ...prev]);
+        addToast(`File "${file.name}" uploaded to project.`, "success");
+    } catch (error) {
+        console.error("Failed to upload project file:", error);
+        addToast("Failed to upload file.", "error");
+    }
   };
 
   const handleDeleteProjectFile = (fileId: string) => {
-    setProjectFiles(prev => prev.filter(f => f.id !== fileId));
-    addToast('Project file deleted.', 'info');
+    setProjectFiles(prev => prev.filter(pf => pf.id !== fileId));
+    addToast("Project file deleted.", "info");
   };
 
-  const handleAttachProjectFile = (file: ProjectFile) => {
-    const mockFile = new File([file.content], file.name, { type: file.mimeType });
-    setAttachments(prev => [...prev, {
-        file: mockFile,
-        content: file.content,
-        mimeType: file.mimeType,
-    }]);
-    setIsProjectFilesModalOpen(false);
-    addToast(`Attached "${file.name}" to message.`, 'info');
+  const handleDownloadProjectFile = async (content: string, filename: string, mimeType: string) => {
+    try {
+        let blob: Blob;
+        if (mimeType.startsWith('image/')) {
+            const response = await fetch(`data:${mimeType};base64,${content}`);
+            blob = await response.blob();
+        } else {
+            blob = new Blob([content], { type: mimeType });
+        }
+
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    } catch (error) {
+        console.error("Failed to download file:", error);
+        addToast("Failed to download file.", "error");
+    }
+  };
+
+  const handleAttachProjectFileToChat = async (projectFile: ProjectFile) => {
+    try {
+        let blob: Blob;
+        if (projectFile.mimeType.startsWith('image/')) {
+            const response = await fetch(`data:${projectFile.mimeType};base64,${projectFile.content}`);
+            blob = await response.blob();
+        } else {
+            blob = new Blob([projectFile.content], { type: projectFile.mimeType });
+        }
+        const file = new File([blob], projectFile.name, { type: projectFile.mimeType });
+        
+        setAttachments(prev => [...prev, {
+            file: file,
+            content: projectFile.content,
+            mimeType: projectFile.mimeType,
+        }]);
+        addToast(`Attached "${projectFile.name}" to chat.`, "success");
+        setIsProjectFilesModalOpen(false); // Close modal after attaching
+    } catch (error) {
+        console.error("Failed to attach project file:", error);
+        addToast("Failed to attach project file.", "error");
+    }
   };
 
   const renderInputComponent = () => {
+    const commonProps = {
+      isLoading,
+      isActive: activePanel === 'input',
+      onStopGenerating: handleStopGenerating,
+      contextFileIds,
+      onContextFileSelectionChange: handleContextFileSelectionChange,
+    };
+    
+    const chatAndTocProps = {
+        isChatMode,
+        isChatLoading,
+        onFollowUpSubmit: handleChatSubmit,
+        chatHistory,
+        chatInputValue,
+        setChatInputValue,
+        onNewReview: () => resetAndSetMode(appMode),
+        onSaveChatSession: handleSaveChatSession,
+        originalReviewedCode: reviewedCode,
+        revisedCode,
+        chatRevisions,
+        language,
+        codeB,
+        onCodeLineClick: (line: string) => setChatInputValue(prev => `${prev}\n> ${line}\n`),
+        onClearChatRevisions: () => { setChatRevisions([]); addToast("Revisions cleared from chat.", "info"); },
+        onRenameChatRevision: (id: string, newName: string) => setChatRevisions(revs => revs.map(r => r.id === id ? {...r, name: newName} : r)),
+        onDeleteChatRevision: (id: string) => setChatRevisions(revs => revs.filter(r => r.id !== id)),
+        chatFiles,
+        onClearChatFiles: () => { setChatFiles([]); addToast("Files cleared from chat.", "info"); },
+        onRenameChatFile: (id: string, newName: string) => setChatFiles(files => files.map(f => f.id === id ? {...f, name: newName} : f)),
+        onDeleteChatFile: (id: string) => setChatFiles(files => files.filter(f => f.id !== id)),
+        chatContext,
+        activeFeatureForDiscussion,
+        finalizationSummary,
+        featureDecisions,
+        attachments,
+        onAttachFileClick: () => attachFileInputRef.current?.click(),
+        onRemoveAttachment: (fileToRemove: File) => setAttachments(atts => atts.filter(att => att.file !== fileToRemove)),
+        onOpenProjectFilesModal: () => setIsProjectFilesModalOpen(true),
+        onSaveGeneratedFile,
+        onFinalizeFeatureDiscussion: handleFinalizeFeatureDiscussion,
+        onReturnToOutputView: handleReturnToOutputView,
+    };
+
     switch(appMode) {
       case 'single':
       case 'debug':
-        return (
-          <CodeInput
-            userCode={userOnlyCode}
-            setUserCode={setUserOnlyCode}
-            errorMessage={errorMessage}
-            setErrorMessage={setErrorMessage}
-            language={language}
-            setLanguage={setLanguage}
-            reviewProfile={reviewProfile}
-            setReviewProfile={setReviewProfile}
-            customReviewProfile={customReviewProfile}
-            setCustomReviewProfile={setCustomReviewProfile}
-            onSubmit={handleReviewSubmit}
-            onExplainSelection={handleExplainSelection}
-            onReviewSelection={handleReviewSelection}
-            isLoading={isLoading}
-            isChatLoading={isChatLoading}
-            loadingAction={loadingAction}
-            isChatMode={isChatMode}
-            onNewReview={() => resetAndSetMode(appMode)}
-            onFinalizeFeatureDiscussion={handleFinalizeFeatureDiscussion}
-            onReturnToOutputView={handleReturnToOutputView}
-            onFollowUpSubmit={handleFollowUpSubmit}
-            chatHistory={chatHistory}
-            chatInputValue={chatInputValue}
-            setChatInputValue={setChatInputValue}
-            isActive={activePanel === 'input'}
-            onStopGenerating={handleStopGenerating}
-            originalReviewedCode={reviewedCode}
-            appMode={appMode}
-            codeB={codeB}
-            onCodeLineClick={handleCodeLineClick}
-            revisedCode={revisedCode}
-            chatRevisions={chatRevisions}
-            onClearChatRevisions={handleClearChatRevisions}
-            onRenameChatRevision={handleRenameChatRevision}
-            onDeleteChatRevision={handleDeleteChatRevision}
-            chatContext={chatContext}
-            activeFeatureForDiscussion={activeFeatureForDiscussion}
-            finalizationSummary={finalizationSummary}
-            onOpenSaveModal={handleOpenSaveModal}
-            onLoadRevisionIntoEditor={handleLoadRevisionIntoEditor}
-            attachments={attachments}
-            onAttachFileClick={handleAttachFileClick}
-            onRemoveAttachment={handleRemoveAttachment}
-            onOpenProjectFilesModal={() => setIsProjectFilesModalOpen(true)}
-            onSaveGeneratedFile={handleSaveGeneratedFileToProject}
-          />
-        );
+        return <CodeInput 
+          {...commonProps}
+          {...chatAndTocProps}
+          onSubmit={handleReviewSubmit} 
+          loadingAction={loadingAction}
+          onExplainSelection={handleExplainSelection}
+          onReviewSelection={handleReviewSelection}
+          onOpenSaveModal={() => setIsSaveModalOpen(true)}
+        />;
       case 'comparison':
-        return (
-          <ComparisonInput 
-            codeA={userOnlyCode}
-            setCodeA={setUserOnlyCode}
-            codeB={codeB}
-            setCodeB={setCodeB}
-            language={language}
-            setLanguage={setLanguage}
-            goal={comparisonGoal}
-            setGoal={setComparisonGoal}
-            onSubmit={handleCompareAndOptimize}
-            onCompareAndRevise={handleCompareAndRevise}
-            isLoading={isLoading}
-            isChatLoading={isChatLoading}
-            loadingAction={loadingAction}
-            isActive={activePanel === 'input'}
-            onNewReview={() => resetAndSetMode('comparison')}
-            onFinalizeFeatureDiscussion={handleFinalizeFeatureDiscussion}
-            onReturnToOutputView={handleReturnToOutputView}
-            isChatMode={isChatMode}
-            onFollowUpSubmit={handleFollowUpSubmit}
-            chatHistory={chatHistory}
-            chatInputValue={chatInputValue}
-            setChatInputValue={setChatInputValue}
-            onStopGenerating={handleStopGenerating}
-            originalReviewedCode={reviewedCode}
-            appMode={appMode}
-            onCodeLineClick={handleCodeLineClick}
-            revisedCode={revisedCode}
-            chatRevisions={chatRevisions}
-            onClearChatRevisions={handleClearChatRevisions}
-            onRenameChatRevision={handleRenameChatRevision}
-            onDeleteChatRevision={handleDeleteChatRevision}
-            chatContext={chatContext}
-            activeFeatureForDiscussion={activeFeatureForDiscussion}
-            finalizationSummary={finalizationSummary}
-            onOpenSaveModal={handleOpenSaveModal}
-            onLoadRevisionIntoEditor={handleLoadRevisionIntoEditor}
-            attachments={attachments}
-            onAttachFileClick={handleAttachFileClick}
-            onRemoveAttachment={handleRemoveAttachment}
-            onOpenProjectFilesModal={() => setIsProjectFilesModalOpen(true)}
-            onSaveGeneratedFile={handleSaveGeneratedFileToProject}
-          />
-        );
+        return <ComparisonInput 
+          {...commonProps}
+          {...chatAndTocProps}
+          onSubmit={handleCompareAndOptimize} 
+          onCompareAndRevise={() => { addToast('Compare & Revise not implemented yet.', 'info') }} 
+          loadingAction={loadingAction}
+        />;
       case 'audit':
-        return (
-          <AuditInput
-            userCode={userOnlyCode}
-            setUserCode={setUserOnlyCode}
-            language={language}
-            setLanguage={setLanguage}
-            onSubmit={handleAuditSubmit}
-            isLoading={isLoading}
-            onStopGenerating={handleStopGenerating}
-            isActive={activePanel === 'input'}
-          />
-        );
+        return <AuditInput 
+          {...commonProps}
+          onSubmit={handleAuditSubmit} 
+        />;
       default:
         return null;
     }
@@ -1557,27 +1044,21 @@ const App: React.FC = () => {
       <div className="fixed bottom-1/3 left-12 w-px h-1/4 bg-[var(--hud-color-darker)] opacity-50"></div>
 
       <Header 
-        onImportClick={handleImportClick}
-        onExportSession={handleExportSession}
-        onShare={handleShare}
+        isToolsEnabled={userOnlyCode.trim() !== '' && !isChatMode && (appMode === 'single' || appMode === 'debug')}
+        isLoading={isLoading || isChatLoading}
+        isInputPanelVisible={isInputPanelVisible}
+        onToggleInputPanel={() => setIsInputPanelVisible(p => !p)}
+        isFollowUpAvailable={reviewAvailable}
+        onStartFollowUp={handleStartFollowUp}
+        isChatMode={isChatMode}
+        onEndChatSession={handleSaveChatSession}
         onGenerateTests={handleGenerateTests}
         onOpenDocsModal={() => setIsDocsModalOpen(true)}
         onOpenProjectFilesModal={() => setIsProjectFilesModalOpen(true)}
         onToggleVersionHistory={() => setIsVersionHistoryModalOpen(true)}
-        isToolsEnabled={userOnlyCode.trim() !== '' && !isChatMode && (appMode === 'single' || appMode === 'debug')}
-        isLoading={isLoading || isChatLoading}
-        addToast={addToast}
-        onStartDebug={() => resetAndSetMode('debug')}
-        onStartSingleReview={() => resetAndSetMode('single')}
-        onStartComparison={() => resetAndSetMode('comparison')}
-        onStartAudit={() => resetAndSetMode('audit')}
-        isInputPanelVisible={isInputPanelVisible}
-        onToggleInputPanel={() => setIsInputPanelVisible(p => !p)}
-        onNewReview={() => resetAndSetMode('debug')}
-        isFollowUpAvailable={reviewAvailable}
-        onStartFollowUp={handleStartFollowUp}
-        isChatMode={isChatMode}
-        onEndChatSession={handleEndGeneralChat}
+        onExportSession={handleExportSession}
+        onImportClick={() => setIsSessionManagerModalOpen(true)}
+        onShare={handleShareSession}
       />
       <ApiKeyBanner />
       <main className={`flex-grow container mx-auto p-4 sm:p-6 lg:p-8 grid grid-cols-1 ${isInputPanelVisible && showOutputPanel && !isChatMode ? 'md:grid-cols-2' : ''} gap-6 lg:gap-8 animate-fade-in overflow-hidden`}>
@@ -1592,28 +1073,27 @@ const App: React.FC = () => {
                 <ReviewOutput
                   feedback={reviewFeedback}
                   revisedCode={revisedCode}
-                  language={language}
                   isLoading={isLoading}
                   isChatLoading={isChatLoading}
                   loadingAction={loadingAction}
                   outputType={outputType}
                   error={error}
-                  onSaveVersion={handleOpenSaveModal}
+                  onSaveVersion={() => setIsSaveModalOpen(true)}
                   onShowDiff={() => setIsDiffModalOpen(true)}
                   canCompare={commitMessageAvailable}
                   isActive={activePanel === 'output'}
-                  addToast={addToast}
                   onStartFollowUp={handleStartFollowUp}
                   onGenerateCommitMessage={handleGenerateCommitMessage}
                   reviewAvailable={reviewAvailable}
-                  appMode={appMode}
                   featureMatrix={featureMatrix}
                   featureDecisions={featureDecisions}
-                  onFeatureDecision={handleFeatureDecision}
+                  onFeatureDecision={(feature, decision) => setFeatureDecisions(prev => ({ ...prev, [feature.name]: { decision } }))}
                   allFeaturesDecided={allFeaturesDecided}
-                  onFinalize={handleFinalizeRevision}
-                  onDownloadOutput={() => handleDownloadAsFile(reviewFeedback!, 'documentation.md')}
-                  onSaveGeneratedFile={handleSaveGeneratedFileToProject}
+                  onFinalize={handleFinalizeComparison}
+                  onDownloadOutput={handleDownloadOutput}
+                  onSaveGeneratedFile={onSaveGeneratedFile}
+                  onAnalyzeRootCause={handleAnalyzeRootCause}
+                  errorMessage={errorMessage}
                 />
             </div>
           )}
@@ -1622,36 +1102,8 @@ const App: React.FC = () => {
           <div className="flex justify-center items-center space-x-6 text-xs text-[var(--hud-color-darker)]">
             <span>4ndr0⫌ebugger &copy; 2025</span>
           </div>
-          <input 
-            type="file" 
-            ref={importFileInputRef} 
-            onChange={handleImportSession}
-            style={{ display: 'none' }} 
-            accept=".json,application/json" 
-          />
-          <input
-            type="file"
-            ref={attachFileInputRef}
-            onChange={handleFileAttach}
-            style={{ display: 'none' }}
-            accept="image/png, image/jpeg, image/gif, image/webp, text/plain, .md, .log, .json, .txt, .js, .ts, .py, .java, .cs, .cpp, .go, .rb, .php, .html, .css, .sql, .sh"
-            multiple
-          />
-          <ToastContainer toasts={toasts} onDismiss={removeToast} />
+          <input type="file" ref={attachFileInputRef} style={{ display: 'none' }} multiple onChange={handleAttachmentsChange} />
       </footer>
-       <SaveVersionModal
-          isOpen={isSaveModalOpen}
-          onClose={handleCloseSaveModal}
-          onSave={handleConfirmSaveVersion}
-          versionName={versionName}
-          setVersionName={setVersionName}
-          onAutoGenerate={handleGenerateVersionName}
-          isGeneratingName={isGeneratingName}
-          outputType={outputType}
-          language={language}
-          reviewProfile={reviewProfile}
-          isSavingChat={isSavingChat}
-      />
       {isDiffModalOpen && reviewedCode && revisedCode && (
           <DiffViewer 
               oldCode={reviewedCode}
@@ -1660,34 +1112,59 @@ const App: React.FC = () => {
               onClose={() => setIsDiffModalOpen(false)}
           />
       )}
-      <VersionHistoryModal
+      {isSaveModalOpen && (
+          <SaveVersionModal
+              isOpen={isSaveModalOpen}
+              onClose={() => setIsSaveModalOpen(false)}
+              onSave={handleSaveVersion}
+              versionName={versionName}
+              setVersionName={setVersionName}
+              onAutoGenerate={handleAutoGenerateVersionName}
+              isGeneratingName={isGeneratingName}
+              outputType={outputType}
+              isSavingChat={isSavingChat}
+          />
+      )}
+      <VersionHistoryModal 
         isOpen={isVersionHistoryModalOpen}
         onClose={() => setIsVersionHistoryModalOpen(false)}
-        versions={versions}
         onLoadVersion={handleLoadVersion}
         onDeleteVersion={handleDeleteVersion}
+        onRenameVersion={handleRenameVersion}
         onStartFollowUp={handleStartFollowUp}
-      />
-      <DocumentationCenterModal
-        isOpen={isDocsModalOpen}
-        onClose={() => setIsDocsModalOpen(false)}
-        versions={versions}
-        currentUserCode={userOnlyCode}
-        onGenerate={handleTriggerDocsGeneration}
-        onLoadVersion={handleLoadVersion}
-        onDeleteVersion={handleDeleteVersion}
-        onDownload={(c, f) => handleDownloadAsFile(c, f)}
       />
       <ProjectFilesModal
         isOpen={isProjectFilesModalOpen}
         onClose={() => setIsProjectFilesModalOpen(false)}
-        projectFiles={projectFiles}
-        onUploadFile={handleSaveFileToProject}
+        onUploadFile={handleUploadProjectFile}
         onDeleteFile={handleDeleteProjectFile}
-        onAttachFile={handleAttachProjectFile}
-        onDownloadFile={handleDownloadAsFile}
+        onAttachFile={handleAttachProjectFileToChat}
+        onDownloadFile={handleDownloadProjectFile}
+      />
+      <SessionManagerModal
+        isOpen={isSessionManagerModalOpen}
+        onClose={() => setIsSessionManagerModalOpen(false)}
+        onImportFile={handleImportFile}
+        onLoadSession={handleLoadSession}
+        onDeleteSession={handleDeleteImportedSession}
       />
     </div>
+  );
+};
+
+// The main App component now simply provides the context and renders the controller.
+const App: React.FC = () => {
+  const handleReset = () => {
+    // This function is called by the context provider to reset AppController's state
+    // For a full implementation, this would involve passing setters to the context or using a reducer.
+    // This is called from resetAndSetMode in the context.
+    console.log("Context requested a session reset.");
+  };
+
+  return (
+    <AppContextProvider onReset={handleReset}>
+      <AppController />
+    </AppContextProvider>
   );
 };
 

@@ -25,3 +25,4 @@ dist-ssr
 *.zip
 .env*
 0-tests/*
+CHANGELOG.md

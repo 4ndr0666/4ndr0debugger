@@ -1,6 +1,8 @@
+
+
 import React, { useState, useRef, useEffect } from 'react';
-import { SaveIcon, ImportIcon, ExportIcon, AnimatedMenuIcon, BoltIcon, LogoIcon, ChatIcon, HistoryIcon, EyeIcon, EyeOffIcon, CodeIcon, CompareIconSvg, BugIcon, DocsIcon, FolderIcon, ShareIcon, ShieldIcon } from './Icons.tsx';
-import { Toast } from '../types.ts';
+import { useAppContext } from '../AppContext.tsx';
+import { SaveIcon, ImportIcon, ExportIcon, AnimatedMenuIcon, BoltIcon, LogoIcon, ChatIcon, HistoryIcon, EyeIcon, EyeOffIcon, CodeIcon, CompareIconSvg, BugIcon, DocsIcon, FolderIcon, ShareIcon, ShieldIcon, EngineIcon } from './Icons.tsx';
 
 interface HeaderProps {
     onImportClick: () => void;
@@ -12,14 +14,8 @@ interface HeaderProps {
     onToggleVersionHistory: () => void;
     isToolsEnabled: boolean;
     isLoading: boolean;
-    addToast: (message: string, type: Toast['type']) => void;
-    onStartDebug: () => void;
-    onStartSingleReview: () => void;
-    onStartComparison: () => void;
-    onStartAudit: () => void;
     isInputPanelVisible: boolean;
     onToggleInputPanel: () => void;
-    onNewReview: () => void; // Kept for the clear button functionality
     isFollowUpAvailable: boolean;
     onStartFollowUp: () => void;
     isChatMode: boolean;
@@ -54,11 +50,6 @@ export const Header: React.FC<HeaderProps> = ({
     onToggleVersionHistory,
     isToolsEnabled,
     isLoading,
-    addToast,
-    onStartDebug,
-    onStartSingleReview,
-    onStartComparison,
-    onStartAudit,
     isInputPanelVisible,
     onToggleInputPanel,
     isFollowUpAvailable,
@@ -66,6 +57,7 @@ export const Header: React.FC<HeaderProps> = ({
     isChatMode,
     onEndChatSession
 }) => {
+  const { resetAndSetMode } = useAppContext();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -86,11 +78,6 @@ export const Header: React.FC<HeaderProps> = ({
     setIsMenuOpen(false);
   }
   
-  const handleExport = () => {
-      onExportSession();
-      addToast('Session exported successfully!', 'success');
-  }
-
   return (
     <header className="py-4 px-4 sm:px-6 lg:px-8 bg-transparent border-b border-[var(--hud-color-darker)]">
       <div className="max-w-7xl mx-auto flex items-center justify-between">
@@ -111,16 +98,16 @@ export const Header: React.FC<HeaderProps> = ({
                     <div className="absolute left-0 z-20 mt-2 w-64 origin-top-left bg-black/50 backdrop-blur-md border border-[var(--hud-color-darker)] focus:outline-none">
                         <div className="p-1" role="menu" aria-orientation="vertical">
                             <MenuDivider label="Modes" />
-                             <MenuItem onClick={() => handleMenuClick(onStartDebug)} disabled={isLoading}>
+                             <MenuItem onClick={() => handleMenuClick(() => resetAndSetMode('debug'))} disabled={isLoading}>
                                 <BugIcon className="w-4 h-4" /> Debug
                             </MenuItem>
-                            <MenuItem onClick={() => handleMenuClick(onStartSingleReview)} disabled={isLoading}>
+                            <MenuItem onClick={() => handleMenuClick(() => resetAndSetMode('single'))} disabled={isLoading}>
                                 <CodeIcon className="w-4 h-4" /> Single Review
                             </MenuItem>
-                            <MenuItem onClick={() => handleMenuClick(onStartComparison)} disabled={isLoading}>
+                            <MenuItem onClick={() => handleMenuClick(() => resetAndSetMode('comparison'))} disabled={isLoading}>
                                 <CompareIconSvg className="w-4 h-4" /> Comparative Analysis
                             </MenuItem>
-                            <MenuItem onClick={() => handleMenuClick(onStartAudit)} disabled={isLoading}>
+                            <MenuItem onClick={() => handleMenuClick(() => resetAndSetMode('audit'))} disabled={isLoading}>
                                 <ShieldIcon className="w-4 h-4" /> Code Audit
                             </MenuItem>
 
@@ -137,19 +124,26 @@ export const Header: React.FC<HeaderProps> = ({
                             <MenuItem onClick={() => handleMenuClick(onOpenDocsModal)} disabled={!isToolsEnabled || isLoading}>
                                 <DocsIcon className="w-4 h-4" /> Generate Documentation
                             </MenuItem>
-                             <MenuItem onClick={() => handleMenuClick(onStartFollowUp)} disabled={!isFollowUpAvailable || isLoading}>
-                                <ChatIcon className="w-4 h-4" /> Follow-up Chat
-                            </MenuItem>
+                             {!isChatMode && (
+                                <MenuItem onClick={() => handleMenuClick(onStartFollowUp)} disabled={!isFollowUpAvailable || isLoading}>
+                                    <ChatIcon className="w-4 h-4" /> Follow-up Chat
+                                </MenuItem>
+                             )}
 
                             <MenuDivider label="Session" />
-                             <MenuItem onClick={() => handleMenuClick(onEndChatSession)} disabled={!isChatMode || isLoading}>
-                                <SaveIcon className="w-4 h-4" /> End & Save Chat
-                            </MenuItem>
+                             {isChatMode && (
+                                <MenuItem onClick={() => handleMenuClick(onEndChatSession)} disabled={isLoading}>
+                                    <SaveIcon className="w-4 h-4" /> End & Save Chat
+                                </MenuItem>
+                             )}
                             <MenuItem onClick={() => handleMenuClick(onToggleVersionHistory)} disabled={isLoading}>
                                 <HistoryIcon className="w-4 h-4" /> Version History
                             </MenuItem>
                              <MenuItem onClick={() => handleMenuClick(onOpenProjectFilesModal)} disabled={isLoading}>
                                 <FolderIcon className="w-4 h-4" /> Project Files
+                            </MenuItem>
+                            <MenuItem onClick={() => handleMenuClick(onImportClick)} disabled={isLoading}>
+                                <ImportIcon className="w-4 h-4" /> Session Manager
                             </MenuItem>
                         </div>
                     </div>
@@ -174,15 +168,7 @@ export const Header: React.FC<HeaderProps> = ({
               <ShareIcon className="w-6 h-6" />
             </button>
             <button 
-              onClick={onImportClick} 
-              title="Import Session" 
-              className="p-2 text-[var(--hud-color)] rounded-full transition-all duration-200 hover:bg-[var(--hud-color)]/30 hover:text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-black focus:ring-[var(--hud-color)]"
-              aria-label="Import Session"
-            >
-              <ImportIcon className="w-6 h-6" />
-            </button>
-            <button 
-              onClick={handleExport} 
+              onClick={onExportSession} 
               title="Export Session" 
               className="p-2 text-[var(--hud-color)] rounded-full transition-all duration-200 hover:bg-[var(--hud-color)]/30 hover:text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-black focus:ring-[var(--hud-color)]"
               aria-label="Export Session"

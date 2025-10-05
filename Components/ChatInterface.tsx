@@ -1,5 +1,6 @@
+
 import React, { useEffect, useRef } from 'react';
-import { ChatMessage, SupportedLanguage, ChatRevision, Feature, ChatContext as ChatContextType, FinalizationSummary } from '../types.ts';
+import { ChatMessage, SupportedLanguage, ChatRevision, Feature, ChatContext as ChatContextType, FinalizationSummary, ChatFile, AppMode, FeatureDecisionRecord } from '../types.ts';
 import { Button } from './Button.tsx';
 import { LoadingSpinner } from './LoadingSpinner.tsx';
 import { MarkdownRenderer } from './MarkdownRenderer.tsx';
@@ -15,22 +16,27 @@ interface ChatInterfaceProps {
   chatInputValue: string;
   setChatInputValue: (value: string) => void;
   onNewReview: () => void;
-  onOpenSaveModal: () => void;
-  onLoadRevisionIntoEditor: () => void;
+  onSaveChatSession: () => void;
+  onLoadRevisionIntoEditor?: () => void;
   // Context props
   originalReviewedCode: string | null;
   revisedCode: string | null;
   chatRevisions: ChatRevision[];
-  appMode: 'single' | 'comparison' | 'debug';
+  appMode: AppMode;
   codeB: string | null;
   language: SupportedLanguage;
   onCodeLineClick: (line: string) => void;
   onClearChatRevisions: () => void;
   onRenameChatRevision: (id: string, newName: string) => void;
   onDeleteChatRevision: (id: string) => void;
+  chatFiles: ChatFile[];
+  onClearChatFiles: () => void;
+  onRenameChatFile: (id: string, newName: string) => void;
+  onDeleteChatFile: (id: string) => void;
   chatContext: ChatContextType;
   activeFeatureForDiscussion: Feature | null;
   finalizationSummary: FinalizationSummary | null;
+  featureDecisions: Record<string, FeatureDecisionRecord>;
   // Attachment props
   attachments: { file: File; content: string; mimeType: string }[];
   onAttachFileClick: () => void;
@@ -71,12 +77,13 @@ const AttachmentPreview: React.FC<{ file: File; onRemove: () => void; }> = ({ fi
 export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
   const { 
     onFinalizeFeatureDiscussion, onReturnToOutputView, chatHistory, onFollowUpSubmit, isChatLoading,
-    chatInputValue, setChatInputValue, onNewReview, onOpenSaveModal,
+    chatInputValue, setChatInputValue, onNewReview, onSaveChatSession,
     onLoadRevisionIntoEditor,
     originalReviewedCode, appMode, codeB,
     language, onCodeLineClick, revisedCode,
     chatRevisions, onClearChatRevisions, onRenameChatRevision, onDeleteChatRevision,
-    chatContext, activeFeatureForDiscussion, finalizationSummary,
+    chatFiles, onClearChatFiles, onRenameChatFile, onDeleteChatFile,
+    chatContext, activeFeatureForDiscussion, finalizationSummary, featureDecisions,
     attachments, onAttachFileClick, onRemoveAttachment, onOpenProjectFilesModal,
     onSaveGeneratedFile,
   } = props;
@@ -99,8 +106,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
   }, [chatContext, revisedCode]);
 
   const handleSend = () => {
-    if ((chatInputValue.trim() || attachments.length > 0) && !isChatLoading) {
-      onFollowUpSubmit(chatInputValue);
+    if ((chatInputValue?.trim() || (attachments && attachments.length > 0)) && !isChatLoading) {
+      onFollowUpSubmit(chatInputValue || '');
       setChatInputValue('');
     }
   };
@@ -133,7 +140,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
           return (
             <div key={index} className="border border-[var(--hud-color-darkest)] bg-black/30 p-2">
               {isImage ? (
-                <img src={att.content} alt={att.name} className="max-w-xs max-h-48 object-contain" />
+                <img src={`data:${att.mimeType};base64,${att.content}`} alt={att.name} className="max-w-xs max-h-48 object-contain" />
               ) : (
                 <div className="text-xs text-[var(--hud-color-darker)]">
                   <p className="font-mono font-bold text-[var(--hud-color)]">{att.name}</p>
@@ -151,7 +158,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
     <div className="flex flex-col h-full">
         <div className="flex justify-between items-center flex-shrink-0">
             <h3 className="text-xl font-heading truncate pr-4" title={chatTitle}>{chatTitle}</h3>
-            {chatContext !== 'finalization' && (
+            {chatContext !== 'finalization' && endButtonAction && (
               <Button onClick={endButtonAction} variant="secondary" className="py-1 px-3 text-xs">
                   {endButtonText}
               </Button>
@@ -167,7 +174,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
                 {/* Left Part: Chat History */}
                 <div ref={chatContainerRef} className="w-full md:w-3/5 flex-grow min-h-0 overflow-y-auto overflow-x-hidden border border-[var(--hud-color-darkest)]">
                     <div className="p-3 space-y-4 flex flex-col">
-                        {chatHistory.map((msg) => (
+                        {chatHistory?.map((msg) => (
                             <div 
                             key={msg.id} 
                             className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -199,10 +206,15 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
                         onClearChatRevisions={onClearChatRevisions}
                         onRenameRevision={onRenameChatRevision}
                         onDeleteRevision={onDeleteChatRevision}
+                        chatFiles={chatFiles}
+                        onClearChatFiles={onClearChatFiles}
+                        onRenameFile={onRenameChatFile}
+                        onDeleteFile={onDeleteChatFile}
                         appMode={appMode}
                         chatContext={chatContext}
                         activeFeatureForDiscussion={activeFeatureForDiscussion}
                         finalizationSummary={finalizationSummary}
+                        featureDecisions={featureDecisions}
                     />
                 </div>
             </div>
@@ -212,13 +224,13 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
                {generationComplete ? (
                     <div className="w-full flex flex-wrap justify-center gap-3 animate-fade-in">
                         <Button onClick={onNewReview} variant="secondary" className="post-review-button">Start New</Button>
-                        <Button onClick={onOpenSaveModal} variant="primary" className="post-review-button">Save Final Revision</Button>
-                        <Button onClick={onLoadRevisionIntoEditor} variant="primary" className="post-review-button">Load in Editor</Button>
+                        <Button onClick={onSaveChatSession} variant="primary" className="post-review-button">Save Final Revision</Button>
+                        {onLoadRevisionIntoEditor && <Button onClick={onLoadRevisionIntoEditor} variant="primary" className="post-review-button">Load in Editor</Button>}
                     </div>
                 ) : (
                     <>
                     <div className="relative w-full">
-                        {attachments.length > 0 && (
+                        {attachments && attachments.length > 0 && (
                            <div className="absolute bottom-full left-0 right-0 max-h-48 overflow-y-auto bg-black/80 border border-b-0 border-[var(--hud-color-darkest)] p-2 space-y-2 animate-fade-in">
                                 {attachments.map(att => (
                                     <AttachmentPreview key={att.file.name + att.file.lastModified} file={att.file} onRemove={() => onRemoveAttachment(att.file)} />
@@ -227,7 +239,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
                         )}
                         <textarea
                             ref={inputRef}
-                            value={chatInputValue}
+                            value={chatInputValue || ''}
                             onChange={(e) => setChatInputValue(e.target.value)}
                             onKeyDown={handleKeyDown}
                             rows={2}
@@ -246,7 +258,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
                                 : <span className="text-[var(--hud-color-darker)]">Your message...</span> }
                             </span>
                         )}
-                        {appMode === 'debug' && (chatInputValue.trim() || attachments.length > 0) && !isChatLoading && (
+                        {appMode === 'debug' && ((chatInputValue && chatInputValue.trim()) || (attachments && attachments.length > 0)) && !isChatLoading && (
                             <button
                             onClick={handleSend}
                             className="absolute right-3 bottom-2 font-mono text-xs uppercase tracking-widest transition-all duration-200 hover:text-white focus:outline-none animate-fade-in text-[var(--hud-color)] border border-[var(--hud-color)] px-3 py-1.5 hover:bg-[var(--hud-color)]/20"
@@ -280,7 +292,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
                       </div>
                     )}
                     {appMode !== 'debug' && chatContext !== 'finalization' && (
-                        <Button onClick={handleSend} isLoading={isChatLoading} disabled={isChatLoading || (!chatInputValue.trim() && attachments.length === 0)}>
+                        <Button onClick={handleSend} isLoading={isChatLoading} disabled={isChatLoading || (!chatInputValue?.trim() && (!attachments || attachments.length === 0))}>
                             Send
                         </Button>
                     )}

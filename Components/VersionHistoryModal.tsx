@@ -1,20 +1,23 @@
+
 import React from 'react';
+import { useAppContext } from '../AppContext.tsx';
 import { Version } from '../types.ts';
 import { VersionHistory } from './VersionHistory.tsx';
 
 interface VersionHistoryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  versions: Version[];
   onLoadVersion: (version: Version) => void;
   onDeleteVersion: (versionId: string) => void;
   onStartFollowUp: (version: Version) => void;
+  onRenameVersion: (versionId: string, newName: string) => void;
 }
 
 export const VersionHistoryModal = ({ isOpen, onClose, ...versionHistoryProps }: VersionHistoryModalProps) => {
+  const { versions } = useAppContext();
+  
   if (!isOpen) return null;
 
-  // Wrap onLoadVersion to close the modal
   const handleLoadVersion = (version: Version) => {
     versionHistoryProps.onLoadVersion(version);
     onClose();
@@ -56,7 +59,8 @@ export const VersionHistoryModal = ({ isOpen, onClose, ...versionHistoryProps }:
         
         <div className="flex-grow overflow-hidden mt-2">
             <VersionHistory 
-                {...versionHistoryProps} 
+                {...versionHistoryProps}
+                versions={versions}
                 onLoadVersion={handleLoadVersion} 
                 onStartFollowUp={handleStartFollowUp}
             />

@@ -1,13 +1,13 @@
+
 import React, { useState } from 'react';
+import { useAppContext } from '../AppContext.tsx';
 import { Version } from '../types.ts';
 import { Button } from './Button.tsx';
-import { BoltIcon, DeleteIcon, ImportIcon, LoadIcon } from './Icons.tsx';
+import { BoltIcon, DeleteIcon, ImportIcon, SaveIcon as LoadIcon } from './Icons.tsx';
 
 interface DocumentationCenterModalProps {
   isOpen: boolean;
   onClose: () => void;
-  versions: Version[];
-  currentUserCode: string;
   onGenerate: (code: string) => void;
   onLoadVersion: (version: Version) => void;
   onDeleteVersion: (versionId: string) => void;
@@ -42,9 +42,10 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; children: Reac
 );
 
 export const DocumentationCenterModal = ({ 
-    isOpen, onClose, versions, currentUserCode, onGenerate, 
+    isOpen, onClose, onGenerate, 
     onLoadVersion, onDeleteVersion, onDownload 
 }: DocumentationCenterModalProps) => {
+  const { versions, userOnlyCode: currentUserCode } = useAppContext();
   const [activeTab, setActiveTab] = useState<ActiveTab>('generate');
 
   if (!isOpen) return null;

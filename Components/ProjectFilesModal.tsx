@@ -1,4 +1,7 @@
-import React, { useRef } from 'react';
+
+
+import React, { useRef, useState } from 'react';
+import { useAppContext } from '../AppContext.tsx';
 import { ProjectFile } from '../types.ts';
 import { Button } from './Button.tsx';
 import { BoltIcon, DeleteIcon, ImportIcon, LoadIcon, PaperclipIcon } from './Icons.tsx';
@@ -6,7 +9,6 @@ import { BoltIcon, DeleteIcon, ImportIcon, LoadIcon, PaperclipIcon } from './Ico
 interface ProjectFilesModalProps {
   isOpen: boolean;
   onClose: () => void;
-  projectFiles: ProjectFile[];
   onUploadFile: (file: File) => void;
   onDeleteFile: (fileId: string) => void;
   onAttachFile: (file: ProjectFile) => void;
@@ -25,10 +27,12 @@ const timeAgo = (timestamp: number): string => {
 }
 
 export const ProjectFilesModal = ({ 
-    isOpen, onClose, projectFiles, onUploadFile, 
+    isOpen, onClose, onUploadFile, 
     onDeleteFile, onAttachFile, onDownloadFile
 }: ProjectFilesModalProps) => {
+  const { projectFiles } = useAppContext();
   const uploadInputRef = useRef<HTMLInputElement>(null);
+  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   
   if (!isOpen) return null;
   
@@ -39,7 +43,7 @@ export const ProjectFilesModal = ({
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files) {
-      Array.from(files).forEach(file => onUploadFile(file));
+      Array.from(files).forEach((file: File) => onUploadFile(file));
     }
     // Reset file input to allow uploading the same file again
     if (event.target) {
@@ -52,6 +56,28 @@ export const ProjectFilesModal = ({
         onDeleteFile(fileId);
     }
   };
+
+  const handleFileSelect = (fileId: string) => {
+    setSelectedFiles(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(fileId)) {
+            newSet.delete(fileId);
+        } else {
+            newSet.add(fileId);
+        }
+        return newSet;
+    });
+  };
+
+  const handleAttachSelected = () => {
+    const filesToAttach = projectFiles.filter(pf => selectedFiles.has(pf.id));
+    if (filesToAttach.length > 0) {
+        filesToAttach.forEach(onAttachFile);
+        setSelectedFiles(new Set());
+        onClose();
+    }
+  };
+
 
   return (
     <div
@@ -99,9 +125,18 @@ export const ProjectFilesModal = ({
                 <div className="space-y-2">
                     {projectFiles.slice().sort((a,b) => b.timestamp - a.timestamp).map(file => (
                         <div key={file.id} className="p-3 bg-black/50 border border-[var(--hud-color-darkest)] flex justify-between items-center gap-4">
-                            <div>
-                                <p className="font-semibold text-[var(--hud-color)] uppercase tracking-wider text-sm truncate" title={file.name}>{file.name}</p>
-                                <p className="text-xs text-[var(--hud-color-darker)]">{timeAgo(file.timestamp)}</p>
+                            <div className="flex items-center gap-3 flex-grow overflow-hidden">
+                                <input
+                                    type="checkbox"
+                                    id={`file-checkbox-${file.id}`}
+                                    checked={selectedFiles.has(file.id)}
+                                    onChange={() => handleFileSelect(file.id)}
+                                    className="form-checkbox h-4 w-4 bg-black/50 border-[var(--hud-color-darkest)] text-[var(--hud-color)] focus:ring-[var(--hud-color)] flex-shrink-0"
+                                />
+                                <label htmlFor={`file-checkbox-${file.id}`} className="cursor-pointer overflow-hidden">
+                                    <p className="font-semibold text-[var(--hud-color)] uppercase tracking-wider text-sm truncate" title={file.name}>{file.name}</p>
+                                    <p className="text-xs text-[var(--hud-color-darker)]">{timeAgo(file.timestamp)}</p>
+                                </label>
                             </div>
                             <div className="flex items-center space-x-1 flex-shrink-0">
                                 <button onClick={() => onAttachFile(file)} title="Attach to Chat" className="p-1.5 text-[var(--hud-color)] rounded-full hover:bg-[var(--hud-color)]/20 focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)]">
@@ -122,6 +157,13 @@ export const ProjectFilesModal = ({
                     <h3 className="text-lg mb-2">No Project Files</h3>
                     <p>Upload files like logs or images to use them in your chat sessions.</p>
                 </div>
+            )}
+        </div>
+        <div className="flex-shrink-0 mt-4">
+            {selectedFiles.size > 0 && (
+                <Button onClick={handleAttachSelected} className="w-full animate-fade-in">
+                    Attach {selectedFiles.size} Selected File(s)
+                </Button>
             )}
         </div>
       </div>
