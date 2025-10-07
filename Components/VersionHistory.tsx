@@ -9,6 +9,7 @@ interface VersionHistoryProps {
   onDeleteVersion: (versionId: string) => void;
   onStartFollowUp: (version: Version) => void;
   onRenameVersion: (versionId: string, newName: string) => void;
+  isLoading?: boolean;
 }
 
 const timeAgo = (timestamp: number): string => {
@@ -26,7 +27,7 @@ const timeAgo = (timestamp: number): string => {
     return "just now";
 }
 
-export const VersionHistory = ({ versions, onLoadVersion, onDeleteVersion, onStartFollowUp, onRenameVersion }: VersionHistoryProps) => {
+export const VersionHistory = ({ versions, onLoadVersion, onDeleteVersion, onStartFollowUp, onRenameVersion, isLoading = false }: VersionHistoryProps) => {
   if (versions.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center text-[var(--hud-color-darker)]">
@@ -56,6 +57,7 @@ export const VersionHistory = ({ versions, onLoadVersion, onDeleteVersion, onSta
                     onSave={(newName) => onRenameVersion(version.id, newName)}
                     className="cursor-pointer hover:text-white"
                     inputClassName="bg-transparent font-semibold text-[var(--hud-color)] uppercase tracking-wider w-full outline-none border-b border-b-[var(--hud-color-darker)]"
+                    disabled={isLoading}
                   />
                 </div>
                 <p className="text-xs text-[var(--hud-color-darker)]">
@@ -63,13 +65,13 @@ export const VersionHistory = ({ versions, onLoadVersion, onDeleteVersion, onSta
                 </p>
               </div>
               <div className="flex items-center space-x-1 flex-shrink-0">
-                 <button onClick={() => onLoadVersion(version)} title="Load Version" className="p-1.5 text-[var(--hud-color)] rounded-full hover:bg-[var(--hud-color)]/20 focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)]">
+                 <button onClick={() => onLoadVersion(version)} title="Load Version" className="p-1.5 text-[var(--hud-color)] rounded-full hover:bg-[var(--hud-color)]/20 focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)] disabled:opacity-50 disabled:cursor-not-allowed" disabled={isLoading}>
                    <LoadIcon className="w-4 h-4" />
                  </button>
-                 <button onClick={() => onStartFollowUp(version)} title="Follow-up on this Version" className="p-1.5 text-[var(--hud-color)] rounded-full hover:bg-[var(--hud-color)]/20 focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)]">
+                 <button onClick={() => onStartFollowUp(version)} title="Follow-up on this Version" className="p-1.5 text-[var(--hud-color)] rounded-full hover:bg-[var(--hud-color)]/20 focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)] disabled:opacity-50 disabled:cursor-not-allowed" disabled={isLoading}>
                    <ChatIcon className="w-4 h-4" />
                  </button>
-                 <button onClick={() => handleDeleteClick(version.id, version.name)} title="Delete Version" className="p-1.5 text-[var(--red-color)]/70 rounded-full hover:bg-red-500/30 hover:text-[var(--red-color)] focus:outline-none focus:ring-1 focus:ring-[var(--red-color)]">
+                 <button onClick={() => handleDeleteClick(version.id, version.name)} title="Delete Version" className="p-1.5 text-[var(--red-color)]/70 rounded-full hover:bg-red-500/30 hover:text-[var(--red-color)] focus:outline-none focus:ring-1 focus:ring-[var(--red-color)] disabled:opacity-50 disabled:cursor-not-allowed" disabled={isLoading}>
                     <DeleteIcon className="w-4 h-4"/>
                  </button>
               </div>

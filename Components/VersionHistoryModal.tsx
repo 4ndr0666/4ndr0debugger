@@ -1,4 +1,5 @@
 
+
 import React from 'react';
 import { useAppContext } from '../AppContext.tsx';
 import { Version } from '../types.ts';
@@ -11,9 +12,10 @@ interface VersionHistoryModalProps {
   onDeleteVersion: (versionId: string) => void;
   onStartFollowUp: (version: Version) => void;
   onRenameVersion: (versionId: string, newName: string) => void;
+  isLoading?: boolean;
 }
 
-export const VersionHistoryModal = ({ isOpen, onClose, ...versionHistoryProps }: VersionHistoryModalProps) => {
+export const VersionHistoryModal = ({ isOpen, onClose, isLoading = false, ...versionHistoryProps }: VersionHistoryModalProps) => {
   const { versions } = useAppContext();
   
   if (!isOpen) return null;
@@ -30,7 +32,7 @@ export const VersionHistoryModal = ({ isOpen, onClose, ...versionHistoryProps }:
 
   return (
     <div
-      className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4 transition-opacity duration-300 animate-fade-in"
+      className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4 transition-opacity duration-300 animate-fade-in"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -50,6 +52,7 @@ export const VersionHistoryModal = ({ isOpen, onClose, ...versionHistoryProps }:
             onClick={onClose}
             className="absolute -top-4 -right-4 p-1.5 rounded-full hover:bg-white/10 focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)]"
             aria-label="Close version history"
+            disabled={isLoading}
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -63,6 +66,7 @@ export const VersionHistoryModal = ({ isOpen, onClose, ...versionHistoryProps }:
                 versions={versions}
                 onLoadVersion={handleLoadVersion} 
                 onStartFollowUp={handleStartFollowUp}
+                isLoading={isLoading}
             />
         </div>
       </div>

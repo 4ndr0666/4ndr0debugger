@@ -129,7 +129,14 @@ export const Select = ({
       <button
         type="button"
         id={id}
-        className={`relative w-full pl-3 pr-10 py-2.5 text-left border border-[var(--hud-color-darker)] bg-black text-[var(--hud-color)] focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)] focus:border-[var(--hud-color)] sm:text-sm cursor-pointer transition-all duration-150 hover:border-[var(--hud-color)] hover:text-white ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        className={`
+          relative w-full pl-3 pr-10 py-2.5 text-left border border-[var(--hud-color-darker)] bg-black text-[var(--hud-color)] sm:text-sm 
+          cursor-pointer transition-all duration-150
+          shadow-[0_0_8px_var(--shadow-cyan-light)] 
+          hover:border-[var(--bright-cyan)] hover:shadow-[0_0_15px_var(--shadow-cyan-heavy)]
+          focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-black focus:ring-[var(--bright-cyan)]
+          ${disabled ? 'opacity-50 cursor-not-allowed shadow-none' : ''}
+        `}
         onClick={toggleOpen}
         disabled={disabled}
         aria-haspopup="listbox"
@@ -148,7 +155,7 @@ export const Select = ({
       {isOpen && (
         <ul
           ref={listRef}
-          className="absolute z-10 w-full mt-1 bg-black/50 backdrop-blur-md border border-[var(--hud-color)] max-h-60 overflow-auto focus:outline-none text-base sm:text-sm p-1"
+          className="absolute z-10 w-full mt-1 bg-black/80 backdrop-blur-md border border-[var(--hud-color)] max-h-60 overflow-auto focus:outline-none text-base sm:text-sm p-1"
           role="listbox"
           aria-activedescendant={id && highlightedIndex >= 0 ? `${id}-option-${highlightedIndex}` : undefined}
           tabIndex={-1}
@@ -167,7 +174,7 @@ export const Select = ({
                 onClick={() => handleSelectOption(option)}
                 onMouseEnter={() => setHighlightedIndex(index)}
               >
-                <span className={`block truncate ${value === option.value ? 'font-semibold text-[var(--hud-color)]' : 'font-normal text-[var(--hud-color-darker)]'}`}>
+                <span className={`block truncate ${value === option.value ? 'font-semibold text-[var(--primary-text)]' : 'font-normal text-[var(--secondary-text)]'}`}>
                   {option.label}
                 </span>
                 {value === option.value && (

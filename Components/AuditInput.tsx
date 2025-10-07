@@ -1,8 +1,6 @@
-
-
-
 import React from 'react';
 import { useAppContext } from '../AppContext.tsx';
+import { useSessionContext } from '../contexts/SessionContext.tsx';
 import { SupportedLanguage } from '../types.ts';
 import { Button } from './Button.tsx';
 import { Select } from './Select.tsx';
@@ -11,26 +9,24 @@ import { StopIcon } from './Icons.tsx';
 import { ContextFilesSelector } from './ContextFilesSelector.tsx';
 
 interface AuditInputProps {
-  onSubmit: () => void;
-  isLoading: boolean;
-  onStopGenerating: () => void;
   isActive: boolean;
-  contextFileIds: Set<string>;
-  onContextFileSelectionChange: (fileId: string, isSelected: boolean) => void;
 }
 
-export const AuditInput: React.FC<AuditInputProps> = ({
-  onSubmit, isLoading, onStopGenerating, isActive, contextFileIds, onContextFileSelectionChange
-}) => {
+export const AuditInput: React.FC<AuditInputProps> = ({ isActive }) => {
+  const { 
+    isLoading, handleAuditSubmit, handleStopGenerating, 
+    contextFileIds, handleContextFileSelectionChange 
+  } = useSessionContext();
   const { userOnlyCode, setUserOnlyCode, language, setLanguage } = useAppContext();
+  
   const activeClass = isActive ? 'active' : '';
   const canSubmit = userOnlyCode.trim() !== '';
 
   const textareaClasses = `
     block w-full h-full p-3 pr-10 font-mono text-sm text-[var(--hud-color)]
-    focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)] focus:border-[var(--hud-color)]
+    focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-black focus:ring-[var(--bright-cyan)]
     resize-y placeholder:text-transparent bg-black/70 border border-[var(--hud-color-darker)]
-    transition-colors duration-300
+    transition-all duration-150
   `.trim().replace(/\s+/g, ' ');
 
   return (
@@ -61,10 +57,10 @@ export const AuditInput: React.FC<AuditInputProps> = ({
             
             <ContextFilesSelector 
                 selectedFileIds={contextFileIds}
-                onSelectionChange={onContextFileSelectionChange}
+                onSelectionChange={handleContextFileSelectionChange}
             />
 
-            <div className="relative flex-grow min-h-[250px]">
+            <div className="relative flex-grow min-h-[250px] mt-4">
                 <textarea
                 id="code-input-audit"
                 className={textareaClasses}
@@ -89,7 +85,7 @@ export const AuditInput: React.FC<AuditInputProps> = ({
             {isLoading ? (
               <div className="w-full flex justify-center animate-fade-in">
                   <Button 
-                      onClick={onStopGenerating} 
+                      onClick={handleStopGenerating} 
                       variant="danger"
                       className="w-full sm:w-auto flex-grow"
                       aria-label="Stop generating audit"
@@ -102,7 +98,7 @@ export const AuditInput: React.FC<AuditInputProps> = ({
             ) : (
               <div className="w-full flex justify-center">
                   <Button 
-                      onClick={onSubmit}
+                      onClick={handleAuditSubmit}
                       disabled={!canSubmit} 
                       className="w-full sm:w-auto flex-grow"
                       aria-label="Submit code for audit"

@@ -1,24 +1,20 @@
-
-
 import React, { useState, useRef, useEffect } from 'react';
 import { useAppContext } from '../AppContext.tsx';
-import { SaveIcon, ImportIcon, ExportIcon, AnimatedMenuIcon, BoltIcon, LogoIcon, ChatIcon, HistoryIcon, EyeIcon, EyeOffIcon, CodeIcon, CompareIconSvg, BugIcon, DocsIcon, FolderIcon, ShareIcon, ShieldIcon, EngineIcon } from './Icons.tsx';
+import { useSessionContext } from '../contexts/SessionContext.tsx';
+import { SaveIcon, ImportIcon, ExportIcon, AnimatedMenuIcon, BoltIcon, LogoIcon, ChatIcon, HistoryIcon, EyeIcon, EyeOffIcon, CodeIcon, CompareIconSvg, BugIcon, DocsIcon, FolderIcon, ShareIcon, ShieldIcon, ReportIcon, TargetIcon, SkullIcon, CrosshairsIcon } from './Icons.tsx';
 
 interface HeaderProps {
     onImportClick: () => void;
     onExportSession: () => void;
     onShare: () => void;
-    onGenerateTests: () => void;
     onOpenDocsModal: () => void;
     onOpenProjectFilesModal: () => void;
     onToggleVersionHistory: () => void;
+    onOpenReportGenerator: () => void;
+    onOpenReconModal: () => void;
+    onOpenExploitStagerModal: () => void;
+    onOpenThreatVectorModal: () => void;
     isToolsEnabled: boolean;
-    isLoading: boolean;
-    isInputPanelVisible: boolean;
-    onToggleInputPanel: () => void;
-    isFollowUpAvailable: boolean;
-    onStartFollowUp: () => void;
-    isChatMode: boolean;
     onEndChatSession: () => void;
 }
 
@@ -44,22 +40,25 @@ export const Header: React.FC<HeaderProps> = ({
     onImportClick, 
     onExportSession, 
     onShare,
-    onGenerateTests,
     onOpenDocsModal,
     onOpenProjectFilesModal,
     onToggleVersionHistory,
+    onOpenReportGenerator,
+    onOpenReconModal,
+    onOpenExploitStagerModal,
+    onOpenThreatVectorModal,
     isToolsEnabled,
-    isLoading,
-    isInputPanelVisible,
-    onToggleInputPanel,
-    isFollowUpAvailable,
-    onStartFollowUp,
-    isChatMode,
     onEndChatSession
 }) => {
   const { resetAndSetMode } = useAppContext();
+  const { 
+      isLoading, isChatLoading, isInputPanelVisible, setIsInputPanelVisible,
+      reviewAvailable, handleStartFollowUp, isChatMode, handleGenerateTests
+  } = useSessionContext();
+  
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const anyLoading = isLoading || isChatLoading;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -95,54 +94,52 @@ export const Header: React.FC<HeaderProps> = ({
                     <AnimatedMenuIcon isOpen={isMenuOpen} />
                 </button>
                 {isMenuOpen && (
-                    <div className="absolute left-0 z-20 mt-2 w-64 origin-top-left bg-black/50 backdrop-blur-md border border-[var(--hud-color-darker)] focus:outline-none">
+                    <div className="absolute left-0 z-20 mt-2 w-64 origin-top-left border border-[var(--hud-color)] bg-black/80 backdrop-blur-md focus:outline-none">
                         <div className="p-1" role="menu" aria-orientation="vertical">
-                            <MenuDivider label="Modes" />
-                             <MenuItem onClick={() => handleMenuClick(() => resetAndSetMode('debug'))} disabled={isLoading}>
-                                <BugIcon className="w-4 h-4" /> Debug
-                            </MenuItem>
-                            <MenuItem onClick={() => handleMenuClick(() => resetAndSetMode('single'))} disabled={isLoading}>
-                                <CodeIcon className="w-4 h-4" /> Single Review
-                            </MenuItem>
-                            <MenuItem onClick={() => handleMenuClick(() => resetAndSetMode('comparison'))} disabled={isLoading}>
-                                <CompareIconSvg className="w-4 h-4" /> Comparative Analysis
-                            </MenuItem>
-                            <MenuItem onClick={() => handleMenuClick(() => resetAndSetMode('audit'))} disabled={isLoading}>
-                                <ShieldIcon className="w-4 h-4" /> Code Audit
-                            </MenuItem>
-
                             <MenuDivider label="View" />
-                            <MenuItem onClick={() => handleMenuClick(onToggleInputPanel)}>
+                            <MenuItem onClick={() => handleMenuClick(() => setIsInputPanelVisible(p => !p))}>
                                 {isInputPanelVisible ? <EyeOffIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
                                 {isInputPanelVisible ? 'Hide' : 'Show'} Input Panel
                             </MenuItem>
 
                             <MenuDivider label="Tools" />
-                            <MenuItem onClick={() => handleMenuClick(onGenerateTests)} disabled={!isToolsEnabled || isLoading}>
+                            <MenuItem onClick={() => handleMenuClick(onOpenThreatVectorModal)} disabled={anyLoading}>
+                                <CrosshairsIcon className="w-4 h-4" /> Threat Vector Analysis
+                            </MenuItem>
+                            <MenuItem onClick={() => handleMenuClick(onOpenReconModal)} disabled={anyLoading}>
+                                <TargetIcon className="w-4 h-4" /> Live Recon
+                            </MenuItem>
+                             <MenuItem onClick={() => handleMenuClick(onOpenExploitStagerModal)} disabled={anyLoading}>
+                                <SkullIcon className="w-4 h-4" /> Exploit Stager
+                            </MenuItem>
+                            <MenuItem onClick={() => handleMenuClick(onOpenReportGenerator)} disabled={anyLoading}>
+                                <ReportIcon className="w-4 h-4" /> Adversarial Report
+                            </MenuItem>
+                            <MenuItem onClick={() => handleMenuClick(handleGenerateTests)} disabled={!isToolsEnabled || anyLoading}>
                                 <BoltIcon className="w-4 h-4" /> Generate Unit Tests
                             </MenuItem>
-                            <MenuItem onClick={() => handleMenuClick(onOpenDocsModal)} disabled={!isToolsEnabled || isLoading}>
+                            <MenuItem onClick={() => handleMenuClick(onOpenDocsModal)} disabled={!isToolsEnabled || anyLoading}>
                                 <DocsIcon className="w-4 h-4" /> Generate Documentation
                             </MenuItem>
                              {!isChatMode && (
-                                <MenuItem onClick={() => handleMenuClick(onStartFollowUp)} disabled={!isFollowUpAvailable || isLoading}>
+                                <MenuItem onClick={() => handleMenuClick(() => handleStartFollowUp())} disabled={!reviewAvailable || anyLoading}>
                                     <ChatIcon className="w-4 h-4" /> Follow-up Chat
                                 </MenuItem>
                              )}
 
                             <MenuDivider label="Session" />
                              {isChatMode && (
-                                <MenuItem onClick={() => handleMenuClick(onEndChatSession)} disabled={isLoading}>
+                                <MenuItem onClick={() => handleMenuClick(onEndChatSession)} disabled={anyLoading}>
                                     <SaveIcon className="w-4 h-4" /> End & Save Chat
                                 </MenuItem>
                              )}
-                            <MenuItem onClick={() => handleMenuClick(onToggleVersionHistory)} disabled={isLoading}>
+                            <MenuItem onClick={() => handleMenuClick(onToggleVersionHistory)} disabled={anyLoading}>
                                 <HistoryIcon className="w-4 h-4" /> Version History
                             </MenuItem>
-                             <MenuItem onClick={() => handleMenuClick(onOpenProjectFilesModal)} disabled={isLoading}>
+                             <MenuItem onClick={() => handleMenuClick(onOpenProjectFilesModal)} disabled={anyLoading}>
                                 <FolderIcon className="w-4 h-4" /> Project Files
                             </MenuItem>
-                            <MenuItem onClick={() => handleMenuClick(onImportClick)} disabled={isLoading}>
+                            <MenuItem onClick={() => handleMenuClick(onImportClick)} disabled={anyLoading}>
                                 <ImportIcon className="w-4 h-4" /> Session Manager
                             </MenuItem>
                         </div>
@@ -153,7 +150,7 @@ export const Header: React.FC<HeaderProps> = ({
         
         <div className="flex-shrink-0 px-4 flex items-center space-x-2 sm:space-x-3">
           <LogoIcon className="w-8 h-8 sm:w-10 sm:h-10 text-[var(--hud-color)] animate-flicker" />
-          <h1 className="text-2xl sm:text-3xl">
+          <h1 className="text-2xl sm:text-3xl text-gradient-cyan">
               4ndr0⫌ebugger
           </h1>
         </div>

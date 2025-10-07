@@ -16,10 +16,25 @@
       --hud-color-darker: #0aa;
       --hud-color-darkest: #044;
       --hud-bg-color: #000;
-      --hud-bg-transparent: rgba(0, 30, 30, 0.15);
+      --hud-bg-transparent: rgba(0, 40, 40, 0.25);
       --glow-color: rgba(0, 254, 254, 0.5);
       --red-color: #ff003c;
       --red-glow-color: rgba(255, 0, 60, 0.5);
+
+      /* Cherry-picked Electric-Glass variables */
+      --bright-cyan: #15fafa;
+      --shadow-cyan-light: rgba(21, 250, 250, 0.3);
+      --shadow-cyan-heavy: rgba(21, 250, 250, 0.5);
+      --primary-text: #e0ffff;
+      --secondary-text: #a0f0f0;
+    }
+    
+    .text-gradient-cyan {
+      background: linear-gradient(to right, var(--bright-cyan), var(--hud-color-darker));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      text-shadow: 0 0 10px var(--glow-color);
     }
 
     /* Base Body Style */
@@ -29,6 +44,10 @@
       font-family: 'Share Tech Mono', monospace;
       text-shadow: 0 0 2px var(--hud-color-darker), 0 0 5px var(--hud-bg-color);
       overflow-x: hidden; /* Prevent horizontal scroll from decorative elements */
+      background-image:
+        linear-gradient(rgba(0,10,10,0.3) 1px, transparent 1px),
+        linear-gradient(to right, rgba(0,10,10,0.3) 1px, transparent 1px);
+      background-size: 2rem 2rem;
     }
 
     h1, h2, h3, h4, h5, h6, .font-heading {
@@ -120,6 +139,15 @@
         animation: cyan-text-pulse 1.5s infinite ease-in-out;
     }
 
+    @keyframes border-pulse {
+      0% { border-color: var(--hud-color-darker); box-shadow: inset 0 0 15px rgba(0, 30, 30, 0.5); }
+      50% { border-color: var(--hud-color); box-shadow: inset 0 0 20px var(--glow-color), 0 0 10px var(--glow-color); }
+      100% { border-color: var(--hud-color-darker); box-shadow: inset 0 0 15px rgba(0, 30, 30, 0.5); }
+    }
+    .is-loading-streaming {
+        animation: border-pulse 2s infinite ease-in-out;
+    }
+
     /* Main Container Style */
     .hud-container {
       position: relative;
@@ -128,11 +156,14 @@
       padding: 1.5rem;
       box-shadow: inset 0 0 15px rgba(0, 30, 30, 0.5);
       transition: all 0.3s ease;
+      /* Frosted Glass Effect */
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
     }
     
     .hud-container.active {
       border-color: var(--hud-color);
-      box-shadow: inset 0 0 20px var(--glow-color), 0 0 10px var(--hud-color-darker);
+      box-shadow: inset 0 0 25px var(--glow-color), 0 0 15px var(--glow-color), 0 0 25px var(--hud-color-darker);
     }
     
     .hud-corner {
@@ -327,6 +358,7 @@
 <body class="antialiased">
   <div class="scanline"></div>
   <div id="root"></div>
+  <script src="https://elder-plinius.github.io/P4RS3LT0NGV3/parseltongue.min.js"></script>
   <script type="module" src="/index.tsx"></script>
 </body>
 </html>

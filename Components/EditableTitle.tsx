@@ -5,9 +5,10 @@ interface EditableTitleProps {
     onSave: (newTitle: string) => void;
     className?: string;
     inputClassName?: string;
+    disabled?: boolean;
 }
 
-export const EditableTitle: React.FC<EditableTitleProps> = ({ initialTitle, onSave, className, inputClassName }) => {
+export const EditableTitle: React.FC<EditableTitleProps> = ({ initialTitle, onSave, className, inputClassName, disabled = false }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [title, setTitle] = useState(initialTitle);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -54,15 +55,16 @@ export const EditableTitle: React.FC<EditableTitleProps> = ({ initialTitle, onSa
                 onBlur={handleSave}
                 onKeyDown={handleKeyDown}
                 className={inputClassName || "bg-transparent text-[var(--hud-color)] w-full outline-none border-b border-b-[var(--hud-color-darker)]"}
+                disabled={disabled}
             />
         );
     }
 
     return (
         <span
-            onClick={() => setIsEditing(true)}
+            onClick={() => !disabled && setIsEditing(true)}
             className={className || "cursor-pointer"}
-            title="Click to rename"
+            title={disabled ? undefined : "Click to rename"}
         >
             {title}
         </span>

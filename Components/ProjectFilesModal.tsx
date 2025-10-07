@@ -13,6 +13,7 @@ interface ProjectFilesModalProps {
   onDeleteFile: (fileId: string) => void;
   onAttachFile: (file: ProjectFile) => void;
   onDownloadFile: (content: string, filename: string, mimeType: string) => void;
+  isLoading?: boolean;
 }
 
 const timeAgo = (timestamp: number): string => {
@@ -28,7 +29,8 @@ const timeAgo = (timestamp: number): string => {
 
 export const ProjectFilesModal = ({ 
     isOpen, onClose, onUploadFile, 
-    onDeleteFile, onAttachFile, onDownloadFile
+    onDeleteFile, onAttachFile, onDownloadFile,
+    isLoading = false
 }: ProjectFilesModalProps) => {
   const { projectFiles } = useAppContext();
   const uploadInputRef = useRef<HTMLInputElement>(null);
@@ -81,7 +83,7 @@ export const ProjectFilesModal = ({
 
   return (
     <div
-      className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4 transition-opacity duration-300 animate-fade-in"
+      className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4 transition-opacity duration-300 animate-fade-in"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -102,6 +104,7 @@ export const ProjectFilesModal = ({
                 onClick={onClose}
                 className="absolute -top-4 -right-4 p-1.5 rounded-full hover:bg-white/10 focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)]"
                 aria-label="Close project files"
+                disabled={isLoading}
             >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -110,13 +113,14 @@ export const ProjectFilesModal = ({
         </div>
 
         <div className="flex-shrink-0 my-4">
-            <Button onClick={handleUploadClick} className="w-full">Upload New File(s)</Button>
+            <Button onClick={handleUploadClick} className="w-full" disabled={isLoading}>Upload New File(s)</Button>
             <input 
               type="file"
               ref={uploadInputRef}
               onChange={handleFileChange}
               className="hidden"
               multiple
+              disabled={isLoading}
             />
         </div>
 
@@ -132,20 +136,21 @@ export const ProjectFilesModal = ({
                                     checked={selectedFiles.has(file.id)}
                                     onChange={() => handleFileSelect(file.id)}
                                     className="form-checkbox h-4 w-4 bg-black/50 border-[var(--hud-color-darkest)] text-[var(--hud-color)] focus:ring-[var(--hud-color)] flex-shrink-0"
+                                    disabled={isLoading}
                                 />
-                                <label htmlFor={`file-checkbox-${file.id}`} className="cursor-pointer overflow-hidden">
+                                <label htmlFor={`file-checkbox-${file.id}`} className={`cursor-pointer overflow-hidden ${isLoading ? 'cursor-not-allowed' : ''}`}>
                                     <p className="font-semibold text-[var(--hud-color)] uppercase tracking-wider text-sm truncate" title={file.name}>{file.name}</p>
                                     <p className="text-xs text-[var(--hud-color-darker)]">{timeAgo(file.timestamp)}</p>
                                 </label>
                             </div>
                             <div className="flex items-center space-x-1 flex-shrink-0">
-                                <button onClick={() => onAttachFile(file)} title="Attach to Chat" className="p-1.5 text-[var(--hud-color)] rounded-full hover:bg-[var(--hud-color)]/20 focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)]">
+                                <button onClick={() => onAttachFile(file)} title="Attach to Chat" className="p-1.5 text-[var(--hud-color)] rounded-full hover:bg-[var(--hud-color)]/20 focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)] disabled:opacity-50 disabled:cursor-not-allowed" disabled={isLoading}>
                                     <PaperclipIcon className="w-4 h-4" />
                                 </button>
-                                <button onClick={() => onDownloadFile(file.content, file.name, file.mimeType)} title="Download File" className="p-1.5 text-[var(--hud-color)] rounded-full hover:bg-[var(--hud-color)]/20 focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)]">
+                                <button onClick={() => onDownloadFile(file.content, file.name, file.mimeType)} title="Download File" className="p-1.5 text-[var(--hud-color)] rounded-full hover:bg-[var(--hud-color)]/20 focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)] disabled:opacity-50 disabled:cursor-not-allowed" disabled={isLoading}>
                                     <ImportIcon className="w-4 h-4" />
                                 </button>
-                                <button onClick={() => handleDeleteClick(file.id, file.name)} title="Delete File" className="p-1.5 text-[var(--red-color)]/70 rounded-full hover:bg-red-500/30 hover:text-[var(--red-color)] focus:outline-none focus:ring-1 focus:ring-[var(--red-color)]">
+                                <button onClick={() => handleDeleteClick(file.id, file.name)} title="Delete File" className="p-1.5 text-[var(--red-color)]/70 rounded-full hover:bg-red-500/30 hover:text-[var(--red-color)] focus:outline-none focus:ring-1 focus:ring-[var(--red-color)] disabled:opacity-50 disabled:cursor-not-allowed" disabled={isLoading}>
                                     <DeleteIcon className="w-4 h-4" />
                                 </button>
                             </div>
@@ -161,7 +166,7 @@ export const ProjectFilesModal = ({
         </div>
         <div className="flex-shrink-0 mt-4">
             {selectedFiles.size > 0 && (
-                <Button onClick={handleAttachSelected} className="w-full animate-fade-in">
+                <Button onClick={handleAttachSelected} className="w-full animate-fade-in" disabled={isLoading}>
                     Attach {selectedFiles.size} Selected File(s)
                 </Button>
             )}

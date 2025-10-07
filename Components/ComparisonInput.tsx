@@ -1,7 +1,7 @@
-
 import React from 'react';
 import { useAppContext } from '../AppContext.tsx';
-import { SupportedLanguage, ChatMessage, ChatRevision, LoadingAction, Feature, ChatContext, FinalizationSummary, ChatFile, FeatureDecisionRecord } from '../types.ts';
+import { useSessionContext } from '../contexts/SessionContext.tsx';
+import { SupportedLanguage } from '../types.ts';
 import { Button } from './Button.tsx';
 import { Select } from './Select.tsx';
 import { SUPPORTED_LANGUAGES } from '../constants.ts';
@@ -10,45 +10,9 @@ import { StopIcon } from './Icons.tsx';
 import { ContextFilesSelector } from './ContextFilesSelector.tsx';
 
 interface ComparisonInputProps {
-  onSubmit: () => void;
-  onCompareAndRevise: () => void;
-  isLoading: boolean;
-  isChatLoading: boolean;
-  loadingAction: LoadingAction;
   isActive: boolean;
-  onFinalizeFeatureDiscussion: () => void;
-  onReturnToOutputView: () => void;
-  isChatMode?: boolean;
-  onFollowUpSubmit: (message: string) => void;
-  chatHistory: ChatMessage[];
-  chatInputValue: string;
-  setChatInputValue: (value: string) => void;
-  onStopGenerating: () => void;
-  onSaveChatSession: () => void;
-  onLoadRevisionIntoEditor?: () => void;
-  originalReviewedCode: string | null;
-  revisedCode: string | null;
-  chatRevisions: ChatRevision[];
-  onCodeLineClick: (line: string) => void;
-  onClearChatRevisions: () => void;
-  onRenameChatRevision: (id: string, newName: string) => void;
-  onDeleteChatRevision: (id: string) => void;
-  chatFiles: ChatFile[];
-  onClearChatFiles: () => void;
-  onRenameChatFile: (id: string, newName: string) => void;
-  onDeleteChatFile: (id: string) => void;
-  chatContext: ChatContext;
-  activeFeatureForDiscussion: Feature | null;
-  finalizationSummary: FinalizationSummary | null;
-  featureDecisions: Record<string, FeatureDecisionRecord>;
-  attachments: { file: File; content: string; mimeType: string }[];
   onAttachFileClick: () => void;
-  onRemoveAttachment: (file: File) => void;
   onOpenProjectFilesModal: () => void;
-  onSaveGeneratedFile: (filename: string, content: string) => void;
-  contextFileIds: Set<string>;
-  onContextFileSelectionChange: (fileId: string, isSelected: boolean) => void;
-  onNewReview: () => void;
 }
 
 const CodeEditor: React.FC<{
@@ -59,8 +23,8 @@ const CodeEditor: React.FC<{
 }> = ({ title, code, setCode, isLoading }) => {
     const textareaClasses = `
         block w-full h-full p-3 font-mono text-sm text-[var(--hud-color)] bg-black/70
-        focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)]
-        resize-y placeholder:text-transparent transition-colors duration-300
+        focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-black focus:ring-[var(--bright-cyan)]
+        resize-y placeholder:text-transparent transition-all duration-150
         border border-[var(--hud-color-darker)]
     `.trim().replace(/\s+/g, ' ');
 
@@ -89,11 +53,12 @@ const CodeEditor: React.FC<{
 };
 
 
-export const ComparisonInput: React.FC<ComparisonInputProps> = (props) => {
-    const {
-        onSubmit, onCompareAndRevise, isLoading, isActive, isChatMode,
-        onStopGenerating, loadingAction, contextFileIds, onContextFileSelectionChange
-    } = props;
+export const ComparisonInput: React.FC<ComparisonInputProps> = ({ isActive, onAttachFileClick, onOpenProjectFilesModal }) => {
+    const { 
+        isLoading, isChatMode, handleStopGenerating,
+        handleCompareAndOptimize, handleCompareAndRevise, 
+        contextFileIds, handleContextFileSelectionChange,
+    } = useSessionContext();
     
     const { 
       userOnlyCode, setUserOnlyCode, codeB, setCodeB, language, setLanguage, 
@@ -110,13 +75,7 @@ export const ComparisonInput: React.FC<ComparisonInputProps> = (props) => {
                 <div className="hud-corner corner-top-right"></div>
                 <div className="hud-corner corner-bottom-left"></div>
                 <div className="hud-corner corner-bottom-right"></div>
-                <ChatInterface
-                  {...props}
-                  appMode={appMode}
-                  onNewReview={props.onNewReview}
-                  codeB={codeB}
-                  language={language}
-                />
+                <ChatInterface onAttachFileClick={onAttachFileClick} onOpenProjectFilesModal={onOpenProjectFilesModal} />
             </div>
         );
     }
@@ -152,7 +111,7 @@ export const ComparisonInput: React.FC<ComparisonInputProps> = (props) => {
                 
                 <ContextFilesSelector 
                   selectedFileIds={contextFileIds}
-                  onSelectionChange={onContextFileSelectionChange}
+                  onSelectionChange={handleContextFileSelectionChange}
                 />
 
                 <div>
@@ -164,7 +123,7 @@ export const ComparisonInput: React.FC<ComparisonInputProps> = (props) => {
                         type="text"
                         value={comparisonGoal}
                         onChange={(e) => setComparisonGoal(e.target.value)}
-                        className="block w-full p-2.5 font-mono text-sm text-[var(--hud-color)] bg-black border border-[var(--hud-color-darker)] focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)] focus:border-[var(--hud-color)] placeholder:text-[var(--hud-color-darker)]"
+                        className="block w-full p-2.5 font-mono text-sm text-[var(--hud-color)] bg-black border border-[var(--hud-color-darkest)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-black focus:ring-[var(--bright-cyan)] placeholder:text-[var(--hud-color-darker)] transition-all duration-150"
                         placeholder="e.g., 'A function to sort an array of numbers'"
                         disabled={isLoading}
                     />
@@ -175,7 +134,7 @@ export const ComparisonInput: React.FC<ComparisonInputProps> = (props) => {
                 <div className="w-full flex flex-wrap items-center justify-center gap-3">
                      {isLoading ? (
                         <Button 
-                          onClick={onStopGenerating} 
+                          onClick={handleStopGenerating} 
                           variant="danger"
                           className="w-full"
                           aria-label="Stop generating comparison"
@@ -186,14 +145,14 @@ export const ComparisonInput: React.FC<ComparisonInputProps> = (props) => {
                       ) : (
                         <div className="w-full flex gap-3">
                             <Button
-                                onClick={onSubmit}
+                                onClick={handleCompareAndOptimize}
                                 disabled={!canSubmit}
                                 className="flex-1"
                             >
                                 Compare & Optimize
                             </Button>
                             <Button
-                                onClick={onCompareAndRevise}
+                                onClick={handleCompareAndRevise}
                                 disabled={!canSubmit}
                                 className="flex-1"
                                 variant="secondary"

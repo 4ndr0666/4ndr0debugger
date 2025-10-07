@@ -1,17 +1,25 @@
 
+
+
+
+
+
 import React, { useState } from 'react';
 import { useAppContext } from '../AppContext.tsx';
+import { useSessionContext } from '../contexts/SessionContext.tsx';
 import { Version } from '../types.ts';
 import { Button } from './Button.tsx';
 import { BoltIcon, DeleteIcon, ImportIcon, SaveIcon as LoadIcon } from './Icons.tsx';
+import { DOCS_INSTRUCTION, LANGUAGE_TAG_MAP } from '../constants.ts';
+
 
 interface DocumentationCenterModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onGenerate: (code: string) => void;
   onLoadVersion: (version: Version) => void;
   onDeleteVersion: (versionId: string) => void;
   onDownload: (content: string, filename: string) => void;
+  isLoading?: boolean;
 }
 
 type ActiveTab = 'generate' | 'saved';
@@ -42,10 +50,12 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; children: Reac
 );
 
 export const DocumentationCenterModal = ({ 
-    isOpen, onClose, onGenerate, 
-    onLoadVersion, onDeleteVersion, onDownload 
+    isOpen, onClose, 
+    onLoadVersion, onDeleteVersion, onDownload,
+    isLoading = false
 }: DocumentationCenterModalProps) => {
-  const { versions, userOnlyCode: currentUserCode } = useAppContext();
+  const { versions, userOnlyCode: currentUserCode, language } = useAppContext();
+  const { handleGenerateDocs } = useSessionContext();
   const [activeTab, setActiveTab] = useState<ActiveTab>('generate');
 
   if (!isOpen) return null;
@@ -58,8 +68,9 @@ export const DocumentationCenterModal = ({
     onClose();
   };
   
-  const handleGenerate = (code: string) => {
-    onGenerate(code);
+  const handleGenerate = (codeToDocument: string) => {
+    if (!codeToDocument.trim()) return;
+    handleGenerateDocs(codeToDocument);
     onClose();
   }
 
@@ -69,7 +80,7 @@ export const DocumentationCenterModal = ({
             <h4 className="text-lg font-heading mb-2">From Current Code</h4>
             <div className="p-3 bg-black/50 border border-[var(--hud-color-darkest)] flex justify-between items-center">
                 <p className="text-sm text-[var(--hud-color-darker)] truncate pr-4">Generate documentation for the code currently in the editor.</p>
-                <Button onClick={() => handleGenerate(currentUserCode)} disabled={!currentUserCode.trim()}>Generate</Button>
+                <Button onClick={() => handleGenerate(currentUserCode)} disabled={!currentUserCode.trim() || isLoading}>Generate</Button>
             </div>
         </div>
         <div>
@@ -82,7 +93,7 @@ export const DocumentationCenterModal = ({
                                 <p className="font-semibold text-[var(--hud-color)] uppercase tracking-wider text-sm truncate">{version.name}</p>
                                 <p className="text-xs text-[var(--hud-color-darker)]">{timeAgo(version.timestamp)}</p>
                             </div>
-                            <Button onClick={() => handleGenerate(version.userCode)}>
+                            <Button onClick={() => handleGenerate(version.userCode)} disabled={isLoading}>
                                 <BoltIcon className="w-4 h-4 mr-2" /> Generate
                             </Button>
                         </div>
@@ -107,13 +118,13 @@ export const DocumentationCenterModal = ({
                                  <p className="text-xs text-[var(--hud-color-darker)]">{timeAgo(doc.timestamp)}</p>
                              </div>
                              <div className="flex items-center space-x-1 flex-shrink-0">
-                                 <button onClick={() => handleLoad(doc)} title="Load Document" className="p-1.5 text-[var(--hud-color)] rounded-full hover:bg-[var(--hud-color)]/20 focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)]">
+                                 <button onClick={() => handleLoad(doc)} title="Load Document" className="p-1.5 text-[var(--hud-color)] rounded-full hover:bg-[var(--hud-color)]/20 focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)] disabled:opacity-50 disabled:cursor-not-allowed" disabled={isLoading}>
                                      <LoadIcon className="w-4 h-4" />
                                  </button>
-                                 <button onClick={() => onDownload(doc.feedback, `${doc.name.replace(/ /g, '_')}.md`)} title="Download .md" className="p-1.5 text-[var(--hud-color)] rounded-full hover:bg-[var(--hud-color)]/20 focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)]">
+                                 <button onClick={() => onDownload(doc.feedback, `${doc.name.replace(/ /g, '_')}.md`)} title="Download .md" className="p-1.5 text-[var(--hud-color)] rounded-full hover:bg-[var(--hud-color)]/20 focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)] disabled:opacity-50 disabled:cursor-not-allowed" disabled={isLoading}>
                                      <ImportIcon className="w-4 h-4" />
                                  </button>
-                                 <button onClick={() => onDeleteVersion(doc.id)} title="Delete Document" className="p-1.5 text-[var(--red-color)]/70 rounded-full hover:bg-red-500/30 hover:text-[var(--red-color)] focus:outline-none focus:ring-1 focus:ring-[var(--red-color)]">
+                                 <button onClick={() => onDeleteVersion(doc.id)} title="Delete Document" className="p-1.5 text-[var(--red-color)]/70 rounded-full hover:bg-red-500/30 hover:text-[var(--red-color)] focus:outline-none focus:ring-1 focus:ring-[var(--red-color)] disabled:opacity-50 disabled:cursor-not-allowed" disabled={isLoading}>
                                      <DeleteIcon className="w-4 h-4" />
                                  </button>
                              </div>
@@ -132,7 +143,7 @@ export const DocumentationCenterModal = ({
 
   return (
     <div
-      className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4 transition-opacity duration-300 animate-fade-in"
+      className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4 transition-opacity duration-300 animate-fade-in"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -153,6 +164,7 @@ export const DocumentationCenterModal = ({
                 onClick={onClose}
                 className="absolute -top-4 -right-4 p-1.5 rounded-full hover:bg-white/10 focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)]"
                 aria-label="Close documentation center"
+                disabled={isLoading}
             >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />

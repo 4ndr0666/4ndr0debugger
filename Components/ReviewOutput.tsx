@@ -1,39 +1,18 @@
-
-
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { useAppContext } from '../AppContext.tsx';
+import { useSessionContext } from '../contexts/SessionContext.tsx';
 import { MarkdownRenderer } from './MarkdownRenderer.tsx';
-import { LoadingAction, AppMode, Version, Feature, FeatureDecision, FeatureDecisionRecord, ProjectFile, ReviewProfile } from '../types.ts';
-import { SaveIcon, CopyIcon, CheckIcon, CompareIcon, ChatIcon, CommitIcon, BugIcon, BoltIcon, ImportIcon, RootCauseIcon, EngineIcon } from './Icons.tsx';
+import { AppMode, ReviewProfile } from '../types.ts';
+import { SaveIcon, CopyIcon, CheckIcon, CompareIcon, ChatIcon, CommitIcon, BugIcon, BoltIcon, ImportIcon, RootCauseIcon, PayloadIcon } from './Icons.tsx';
 import { LoadingSpinner } from './LoadingSpinner.tsx';
 import { Button } from './Button.tsx';
 import { FeatureMatrix } from './FeatureMatrix.tsx';
-import { PayloadSynthesizer } from './EngineSynthesizer.tsx';
+import { PayloadSynthesizer } from './PayloadSynthesizer.tsx';
 
 interface ReviewOutputProps {
-  feedback: string | null;
-  revisedCode: string | null;
-  isLoading: boolean;
-  isChatLoading: boolean;
-  loadingAction: LoadingAction;
-  outputType: LoadingAction;
-  error: string | null;
   onSaveVersion: () => void;
   onShowDiff: () => void;
-  canCompare: boolean;
   isActive: boolean;
-  onStartFollowUp: (version?: Version, modeOverride?: AppMode) => void;
-  onGenerateCommitMessage: () => void;
-  reviewAvailable: boolean;
-  featureMatrix: Feature[] | null;
-  featureDecisions: Record<string, FeatureDecisionRecord>;
-  onFeatureDecision: (feature: Feature, decision: FeatureDecision) => void;
-  allFeaturesDecided: boolean;
-  onFinalize: () => void;
-  onDownloadOutput: () => void;
-  onSaveGeneratedFile: (filename: string, content: string) => void;
-  onAnalyzeRootCause: () => void;
-  errorMessage: string; // User-provided error message for context
 }
 
 const analysisSteps = [
@@ -77,13 +56,17 @@ const AnalysisLoader: React.FC = () => {
 
 
 export const ReviewOutput = ({ 
-    feedback, revisedCode, isLoading, isChatLoading, loadingAction, error, 
-    onSaveVersion, isActive, outputType, onShowDiff, canCompare,
-    onStartFollowUp, onGenerateCommitMessage, reviewAvailable,
-    featureMatrix, featureDecisions, onFeatureDecision, allFeaturesDecided, onFinalize,
-    onDownloadOutput, onSaveGeneratedFile, onAnalyzeRootCause
+    onSaveVersion, isActive, onShowDiff
 }: ReviewOutputProps) => {
-  const { appMode, reviewProfile, userOnlyCode } = useAppContext();
+  const { appMode, reviewProfile, userOnlyCode, errorMessage } = useAppContext();
+  const {
+      reviewFeedback: feedback, revisedCode, isLoading, isChatLoading, loadingAction,
+      error, handleStartFollowUp, handleGenerateCommitMessage, reviewAvailable,
+      featureMatrix, featureDecisions, setFeatureDecisions, allFeaturesDecided,
+      handleFinalizeComparison, handleDownloadOutput, onSaveGeneratedFile, handleAnalyzeRootCause,
+      outputType, commitMessageAvailable
+  } = useSessionContext();
+
   const [copied, setCopied] = useState(false);
   const [showSynthesizer, setShowSynthesizer] = useState(false);
   const showLoading = isLoading || isChatLoading;
@@ -142,11 +125,12 @@ export const ReviewOutput = ({
 
   const activeClass = isActive ? 'active' : '';
   const followUpButtonText = appMode === 'debug' ? 'Test Results' : 'Follow-up';
-  const showBorder = !isLoading || (isLoading && !!feedback);
+  const showLoadingPlaceholder = isLoading && !feedback;
+  const loadingPulseClass = isLoading && feedback ? 'is-loading-streaming' : '';
 
   return (
-    <div className={`min-h-[200px] flex flex-col h-full ${showBorder ? 'hud-container' : 'p-[1.5rem]'} ${activeClass} ${showBorder ? 'animate-fade-in' : ''}`}>
-      {showBorder && (
+    <div className={`hud-container min-h-[200px] flex flex-col h-full ${activeClass} ${loadingPulseClass} animate-fade-in ${showLoadingPlaceholder ? 'border-transparent bg-transparent shadow-none' : ''}`}>
+      {!showLoadingPlaceholder && (
         <>
             <div className="hud-corner corner-top-left"></div>
             <div className="hud-corner corner-top-right"></div>
@@ -173,19 +157,16 @@ export const ReviewOutput = ({
       </div>
 
       <div className="flex-grow overflow-hidden relative">
-        {isLoading && !feedback && (
+        {showLoadingPlaceholder ? (
           <div className="flex flex-col items-center justify-center h-full">
             <AnalysisLoader />
           </div>
-        )}
-        {error && !isLoading && (
+        ) : error ? (
           <div className="p-4 bg-[var(--red-color)]/20 border border-[var(--red-color)] text-[var(--red-color)]">
             <p className="font-semibold uppercase">Error:</p>
             <p className="whitespace-pre-wrap font-mono mt-2">{error}</p>
           </div>
-        )}
-        
-        {showBorder && (
+        ) : (
             <div 
             id="review-output-content" 
             ref={contentRef}
@@ -194,11 +175,10 @@ export const ReviewOutput = ({
             {showSynthesizer ? (
               <PayloadSynthesizer initialCode={revisedCode || userOnlyCode} onClose={() => setShowSynthesizer(false)} />
             ) : outputType === 'revise' && featureMatrix ? (
-              <FeatureMatrix features={featureMatrix} decisions={featureDecisions} onDecision={onFeatureDecision} />
+              <FeatureMatrix features={featureMatrix} decisions={featureDecisions} onDecision={(feature, decision) => setFeatureDecisions(prev => ({ ...prev, [feature.name]: { decision } }))} />
             ) : (
-              feedback && <div className="space-y-4"><MarkdownRenderer markdown={feedback} onSaveGeneratedFile={onSaveGeneratedFile} /></div>
+              feedback && <div className="space-y-4"><MarkdownRenderer markdown={feedback} onSaveGeneratedFile={onSaveGeneratedFile} />{isLoading && <span className="animate-blink inline-block">_</span>}</div>
             )}
-            {isLoading && feedback && outputType !== 'revise' && !showSynthesizer && <LoadingSpinner size="w-5 h-5" className="mx-auto mt-4" />}
             </div>
         )}
       </div>
@@ -208,7 +188,7 @@ export const ReviewOutput = ({
             {outputType === 'revise' ? (
               <>
                 {allFeaturesDecided ? (
-                    <Button onClick={onFinalize} variant="primary" className="post-review-button w-full">
+                    <Button onClick={handleFinalizeComparison} variant="primary" className="post-review-button w-full">
                         <BoltIcon className="w-4 h-4 mr-2" />
                         Finalize Revision
                     </Button>
@@ -222,38 +202,38 @@ export const ReviewOutput = ({
               <>
                 {reviewProfile === ReviewProfile.REDTEAM && (
                   <Button onClick={() => setShowSynthesizer(true)} variant="danger" className="post-review-button">
-                    <EngineIcon className="w-4 h-4 mr-2" />
+                    <PayloadIcon className="w-4 h-4 mr-2" />
                     Synthesize Payload
                   </Button>
                 )}
                 {outputType === 'docs' && (
-                  <Button onClick={onDownloadOutput} variant="primary" className="post-review-button">
+                  <Button onClick={handleDownloadOutput} variant="primary" className="post-review-button">
                     <ImportIcon className="w-4 h-4 mr-2" />
                     Download .md
                   </Button>
                 )}
                 {appMode === 'debug' && reviewAvailable && revisedCode && (
-                  <Button onClick={onAnalyzeRootCause} variant="primary" className="post-review-button">
+                  <Button onClick={handleAnalyzeRootCause} variant="primary" className="post-review-button">
                       <RootCauseIcon className="w-4 h-4 mr-2"/>
                       Analyze Root Cause
                   </Button>
                 )}
                 {appMode === 'single' ? (
-                  <Button onClick={() => onStartFollowUp(undefined, 'debug')} disabled={!reviewAvailable} variant="primary" className="post-review-button">
+                  <Button onClick={() => handleStartFollowUp()} disabled={!reviewAvailable} variant="primary" className="post-review-button">
                       <BugIcon className="w-4 h-4 mr-2"/>
                       Debugger
                   </Button>
                 ) : (
-                  <Button onClick={onShowDiff} disabled={!canCompare} variant="primary" className="post-review-button">
+                  <Button onClick={onShowDiff} disabled={!commitMessageAvailable} variant="primary" className="post-review-button">
                       <CompareIcon className="w-4 h-4 mr-2"/>
                       Show Diff
                   </Button>
                 )}
-                <Button onClick={onGenerateCommitMessage} disabled={!canCompare} variant="primary" className="post-review-button">
+                <Button onClick={handleGenerateCommitMessage} disabled={!commitMessageAvailable} variant="primary" className="post-review-button">
                     <CommitIcon className="w-4 h-4 mr-2" />
                     Generate Commit
                 </Button>
-                <Button onClick={() => onStartFollowUp()} variant="primary" className="post-review-button">
+                <Button onClick={() => handleStartFollowUp()} variant="primary" className="post-review-button">
                     <ChatIcon className="w-4 h-4 mr-2" />
                     {followUpButtonText}
                 </Button>

@@ -1,48 +1,23 @@
 
+
+
+
+
+
 import React, { useEffect, useRef } from 'react';
-import { ChatMessage, SupportedLanguage, ChatRevision, Feature, ChatContext as ChatContextType, FinalizationSummary, ChatFile, AppMode, FeatureDecisionRecord } from '../types.ts';
+import { ChatMessage, SupportedLanguage, AppMode } from '../types.ts';
 import { Button } from './Button.tsx';
 import { LoadingSpinner } from './LoadingSpinner.tsx';
 import { MarkdownRenderer } from './MarkdownRenderer.tsx';
 import { ChatContext } from './ChatContext.tsx';
 import { DeleteIcon, FolderIcon, PaperclipIcon } from './Icons.tsx';
+import { useSessionContext } from '../contexts/SessionContext.tsx';
+import { useAppContext } from '../AppContext.tsx';
 
 interface ChatInterfaceProps {
-  onFinalizeFeatureDiscussion: () => void;
-  onReturnToOutputView: () => void;
-  chatHistory: ChatMessage[];
-  onFollowUpSubmit: (message: string) => void;
-  isChatLoading: boolean;
-  chatInputValue: string;
-  setChatInputValue: (value: string) => void;
-  onNewReview: () => void;
-  onSaveChatSession: () => void;
-  onLoadRevisionIntoEditor?: () => void;
-  // Context props
-  originalReviewedCode: string | null;
-  revisedCode: string | null;
-  chatRevisions: ChatRevision[];
-  appMode: AppMode;
-  codeB: string | null;
-  language: SupportedLanguage;
-  onCodeLineClick: (line: string) => void;
-  onClearChatRevisions: () => void;
-  onRenameChatRevision: (id: string, newName: string) => void;
-  onDeleteChatRevision: (id: string) => void;
-  chatFiles: ChatFile[];
-  onClearChatFiles: () => void;
-  onRenameChatFile: (id: string, newName: string) => void;
-  onDeleteChatFile: (id: string) => void;
-  chatContext: ChatContextType;
-  activeFeatureForDiscussion: Feature | null;
-  finalizationSummary: FinalizationSummary | null;
-  featureDecisions: Record<string, FeatureDecisionRecord>;
-  // Attachment props
-  attachments: { file: File; content: string; mimeType: string }[];
+  onSaveChatSession?: () => void;
   onAttachFileClick: () => void;
-  onRemoveAttachment: (file: File) => void;
   onOpenProjectFilesModal: () => void;
-  onSaveGeneratedFile: (filename: string, content: string) => void;
 }
 
 const AttachmentPreview: React.FC<{ file: File; onRemove: () => void; }> = ({ file, onRemove }) => {
@@ -74,19 +49,15 @@ const AttachmentPreview: React.FC<{ file: File; onRemove: () => void; }> = ({ fi
 };
 
 
-export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
-  const { 
-    onFinalizeFeatureDiscussion, onReturnToOutputView, chatHistory, onFollowUpSubmit, isChatLoading,
-    chatInputValue, setChatInputValue, onNewReview, onSaveChatSession,
-    onLoadRevisionIntoEditor,
-    originalReviewedCode, appMode, codeB,
-    language, onCodeLineClick, revisedCode,
-    chatRevisions, onClearChatRevisions, onRenameChatRevision, onDeleteChatRevision,
-    chatFiles, onClearChatFiles, onRenameChatFile, onDeleteChatFile,
-    chatContext, activeFeatureForDiscussion, finalizationSummary, featureDecisions,
-    attachments, onAttachFileClick, onRemoveAttachment, onOpenProjectFilesModal,
-    onSaveGeneratedFile,
-  } = props;
+export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSaveChatSession, onAttachFileClick, onOpenProjectFilesModal }) => {
+    const { appMode, language, codeB, resetAndSetMode } = useAppContext();
+    const { 
+        handleFinalizeFeatureDiscussion, isChatLoading, chatHistory, handleChatSubmit,
+        chatInputValue, setChatInputValue, reviewedCode, revisedCode,
+        attachments, setAttachments,
+        handleLoadRevisionIntoEditor, chatContext, activeFeatureForDiscussion,
+        onSaveGeneratedFile, handleExitChatMode
+    } = useSessionContext();
   
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -94,7 +65,10 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
   useEffect(() => {
     // Auto-scroll to bottom on new message
     if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+      chatContainerRef.current.scrollTo({
+        top: chatContainerRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
     }
   }, [chatHistory]);
   
@@ -107,8 +81,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
 
   const handleSend = () => {
     if ((chatInputValue?.trim() || (attachments && attachments.length > 0)) && !isChatLoading) {
-      onFollowUpSubmit(chatInputValue || '');
-      setChatInputValue('');
+      handleChatSubmit();
     }
   };
   
@@ -127,7 +100,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
   
   const isGeneralChat = chatContext !== 'feature_discussion';
   const endButtonText = isGeneralChat ? 'Back to Output' : 'Finalize Discussion';
-  const endButtonAction = isGeneralChat ? onReturnToOutputView : onFinalizeFeatureDiscussion;
+  const endButtonAction = isGeneralChat ? handleExitChatMode : handleFinalizeFeatureDiscussion;
   
   const generationComplete = !isChatLoading && chatContext === 'finalization' && !!revisedCode;
 
@@ -153,6 +126,10 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
       </div>
     );
   };
+  
+  const onRemoveAttachment = (fileToRemove: File) => {
+    setAttachments(atts => atts.filter(att => att.file !== fileToRemove));
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -165,20 +142,15 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
             )}
         </div>
 
-        {/* Main Content Area: A single pane with responsive sections for chat and history */}
         <div className="flex flex-col flex-grow min-h-0 mt-4">
-
-            {/* Middle Section: Contains chat log and revision history */}
             <div className="flex flex-col md:flex-row flex-grow min-h-0 gap-6 md:gap-8">
-                
-                {/* Left Part: Chat History */}
                 <div ref={chatContainerRef} className="w-full md:w-3/5 flex-grow min-h-0 overflow-y-auto overflow-x-hidden border border-[var(--hud-color-darkest)]">
                     <div className="p-3 space-y-4 flex flex-col">
                         {chatHistory?.map((msg) => (
                             <div 
                             key={msg.id} 
                             className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                            <div className={`max-w-[80%] p-3 text-sm ${msg.role === 'user' ? 'bg-transparent border border-[var(--hud-color-darker)] text-[var(--hud-color)]' : 'bg-[var(--hud-color-darkest)] text-[var(--hud-color-darker)]'}`}>
+                            <div className={`max-w-[80%] p-3 text-sm rounded-lg ${msg.role === 'user' ? 'bg-transparent border border-[var(--hud-color-darker)] text-[var(--hud-color)]' : 'bg-[var(--hud-color-darkest)] text-[var(--hud-color-darker)]'}`}>
                                 {msg.role === 'user' && renderAttachments(msg.attachments)}
                                 <MarkdownRenderer markdown={msg.content} onSaveGeneratedFile={onSaveGeneratedFile} />
                             </div>
@@ -186,7 +158,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
                         ))}
                         {isChatLoading && (
                             <div className="flex justify-start">
-                                <div className="max-w-[80%] p-3 bg-[var(--hud-color-darkest)] text-[var(--hud-color)]">
+                                <div className="max-w-[80%] p-3 bg-[var(--hud-color-darkest)] text-[var(--hud-color)] rounded-lg">
                                 <LoadingSpinner size="w-5 h-5" />
                                 </div>
                             </div>
@@ -194,38 +166,17 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
                     </div>
                 </div>
 
-                {/* Right Part: Revision History / Feature Context */}
                 <div className="w-full md:w-2/5 flex flex-col min-h-0">
-                    <ChatContext 
-                        codeA={originalReviewedCode || ''}
-                        codeB={appMode === 'comparison' ? (codeB || undefined) : undefined}
-                        language={language}
-                        onLineClick={onCodeLineClick}
-                        revisedCode={revisedCode}
-                        chatRevisions={chatRevisions}
-                        onClearChatRevisions={onClearChatRevisions}
-                        onRenameRevision={onRenameChatRevision}
-                        onDeleteRevision={onDeleteChatRevision}
-                        chatFiles={chatFiles}
-                        onClearChatFiles={onClearChatFiles}
-                        onRenameFile={onRenameChatFile}
-                        onDeleteFile={onDeleteChatFile}
-                        appMode={appMode}
-                        chatContext={chatContext}
-                        activeFeatureForDiscussion={activeFeatureForDiscussion}
-                        finalizationSummary={finalizationSummary}
-                        featureDecisions={featureDecisions}
-                    />
+                    <ChatContext />
                 </div>
             </div>
 
-            {/* Footer Section: Chat Input */}
             <div className="flex items-end space-x-2 flex-shrink-0 mt-4">
                {generationComplete ? (
                     <div className="w-full flex flex-wrap justify-center gap-3 animate-fade-in">
-                        <Button onClick={onNewReview} variant="secondary" className="post-review-button">Start New</Button>
-                        <Button onClick={onSaveChatSession} variant="primary" className="post-review-button">Save Final Revision</Button>
-                        {onLoadRevisionIntoEditor && <Button onClick={onLoadRevisionIntoEditor} variant="primary" className="post-review-button">Load in Editor</Button>}
+                        <Button onClick={() => resetAndSetMode(appMode)} variant="secondary" className="post-review-button">Start New</Button>
+                        {onSaveChatSession && <Button onClick={onSaveChatSession} variant="primary" className="post-review-button">Save Final Revision</Button>}
+                        <Button onClick={() => handleLoadRevisionIntoEditor(revisedCode || '')} variant="primary" className="post-review-button">Load in Editor</Button>
                     </div>
                 ) : (
                     <>

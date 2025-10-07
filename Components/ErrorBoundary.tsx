@@ -1,5 +1,3 @@
-
-
 import React from 'react';
 
 type Props = React.PropsWithChildren<{}>;
@@ -40,9 +38,10 @@ class ErrorBoundary extends React.Component<Props, State> {
         </div>
       );
     }
-    // Destructuring props to avoid potential `this` context issues with some TypeScript configurations.
-    const { children } = this.props;
-    return children;
+    // FIX: The previous attempt to fix a type inference issue by destructuring `children`
+    // was not successful and resulted in a "Property 'props' does not exist" error.
+    // Reverting to the standard, direct return of `this.props.children`.
+    return this.props.children;
   }
 }
 

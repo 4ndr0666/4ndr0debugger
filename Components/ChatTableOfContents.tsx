@@ -1,33 +1,27 @@
+
+
+
 import React, { useState } from 'react';
-import { SupportedLanguage, ChatRevision, ChatFile } from '../types.ts';
 import { AccordionItem } from './AccordionItem.tsx';
-import { CopyIcon, CheckIcon, DeleteIcon } from './Icons.tsx';
+import { CopyIcon, CheckIcon, DeleteIcon, LoadIntoEditorIcon } from './Icons.tsx';
 import { EditableTitle } from './EditableTitle.tsx';
 import { MarkdownRenderer } from './MarkdownRenderer.tsx';
+import { useAppContext } from '../AppContext.tsx';
+import { useSessionContext } from '../contexts/SessionContext.tsx';
 
-interface ChatTableOfContentsProps {
-  codeA: string;
-  codeB?: string;
-  language: SupportedLanguage;
-  onLineClick: (line: string) => void;
-  revisedCode: string | null;
-  chatRevisions: ChatRevision[];
-  onClearChatRevisions: () => void;
-  onRenameRevision: (id: string, newName: string) => void;
-  onDeleteRevision: (id: string) => void;
-  chatFiles: ChatFile[];
-  onClearChatFiles: () => void;
-  onRenameFile: (id: string, newName: string) => void;
-  onDeleteFile: (id: string) => void;
+interface ClickableCodeBlockProps {
+  code: string;
 }
 
-const ClickableCodeBlock: React.FC<{
-  code: string;
-  onLineClick: (line: string) => void;
-}> = ({ code, onLineClick }) => {
+const ClickableCodeBlock: React.FC<ClickableCodeBlockProps> = ({ code }) => {
+    const { setChatInputValue } = useSessionContext();
     const [isCopied, setIsCopied] = useState(false);
     if (!code) return null;
     const lines = code.split('\n');
+    
+    const onLineClick = (line: string) => {
+        setChatInputValue(prev => `${prev}\n> ${line}\n`);
+    };
 
     const handleCopy = () => {
         navigator.clipboard.writeText(code).then(() => {
@@ -75,10 +69,13 @@ const FileDisplay: React.FC<{ content: string }> = ({ content }) => {
     )
 };
 
-export const ChatTableOfContents = ({ 
-    codeA, codeB, onLineClick, revisedCode, chatRevisions, onClearChatRevisions, 
-    onRenameRevision, onDeleteRevision, chatFiles, onClearChatFiles, onRenameFile, onDeleteFile 
-}: ChatTableOfContentsProps) => {
+export const ChatTableOfContents = () => {
+    const { codeB } = useAppContext();
+    const {
+        reviewedCode, revisedCode, chatRevisions, chatFiles,
+        onClearChatRevisions, onRenameChatRevision, onDeleteChatRevision,
+        handleLoadRevisionIntoEditor, onClearChatFiles, onRenameChatFile, onDeleteChatFile
+    } = useSessionContext();
 
   const handleClearRevisions = () => {
     if (window.confirm('Are you sure you want to clear all code revisions from this chat? This cannot be undone.')) {
@@ -100,20 +97,20 @@ export const ChatTableOfContents = ({
                 <div className="space-y-4">
                     <div>
                         <h4 className="text-md text-[var(--hud-color-darker)] mb-1">Codebase A</h4>
-                        <ClickableCodeBlock code={codeA} onLineClick={onLineClick} />
+                        <ClickableCodeBlock code={reviewedCode || ''} />
                     </div>
                     <div>
                         <h4 className="text-md text-[var(--hud-color-darker)] mb-1">Codebase B</h4>
-                        <ClickableCodeBlock code={codeB} onLineClick={onLineClick} />
+                        <ClickableCodeBlock code={codeB} />
                     </div>
                 </div>
             ) : (
-                <ClickableCodeBlock code={codeA} onLineClick={onLineClick} />
+                <ClickableCodeBlock code={reviewedCode || ''} />
             )}
         </AccordionItem>
         {revisedCode && (
             <AccordionItem title="Initial Revision" defaultOpen={false}>
-                <ClickableCodeBlock code={revisedCode} onLineClick={onLineClick} />
+                <ClickableCodeBlock code={revisedCode} />
             </AccordionItem>
         )}
         
@@ -132,23 +129,33 @@ export const ChatTableOfContents = ({
                             <div className="flex items-center justify-between w-full gap-2">
                                 <EditableTitle 
                                     initialTitle={revision.name} 
-                                    onSave={(newName) => onRenameRevision(revision.id, newName)} 
+                                    onSave={(newName) => onRenameChatRevision(revision.id, newName)} 
                                     className="font-heading text-base cursor-pointer"
                                     inputClassName="bg-transparent text-base font-heading text-[var(--hud-color)] w-full outline-none border-b border-b-[var(--hud-color-darker)]"
                                 />
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); onDeleteRevision(revision.id); }}
-                                    className="p-1 text-[var(--red-color)]/70 rounded-full hover:bg-red-500/30 hover:text-[var(--red-color)] focus:outline-none focus:ring-1 focus:ring-[var(--red-color)] flex-shrink-0"
-                                    title="Delete this revision"
-                                    aria-label={`Delete revision ${revision.name}`}
-                                >
-                                    <DeleteIcon className="w-4 h-4" />
-                                </button>
+                                <div className="flex items-center flex-shrink-0">
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); handleLoadRevisionIntoEditor(revision.code); }}
+                                        className="p-1 text-[var(--hud-color)]/80 rounded-full hover:bg-white/10 hover:text-[var(--hud-color)] focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)]"
+                                        title="Load this revision into the main editor"
+                                        aria-label={`Load revision ${revision.name} into editor`}
+                                    >
+                                        <LoadIntoEditorIcon className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); onDeleteChatRevision(revision.id); }}
+                                        className="p-1 text-[var(--red-color)]/70 rounded-full hover:bg-red-500/30 hover:text-[var(--red-color)] focus:outline-none focus:ring-1 focus:ring-[var(--red-color)]"
+                                        title="Delete this revision"
+                                        aria-label={`Delete revision ${revision.name}`}
+                                    >
+                                        <DeleteIcon className="w-4 h-4" />
+                                    </button>
+                                </div>
                             </div>
                         } 
                         defaultOpen={index === chatRevisions.length - 1}
                     >
-                        <ClickableCodeBlock code={revision.code} onLineClick={onLineClick} />
+                        <ClickableCodeBlock code={revision.code} />
                     </AccordionItem>
                 ))}
             </div>
@@ -169,12 +176,12 @@ export const ChatTableOfContents = ({
                             <div className="flex items-center justify-between w-full gap-2">
                                 <EditableTitle 
                                     initialTitle={file.name} 
-                                    onSave={(newName) => onRenameFile(file.id, newName)} 
+                                    onSave={(newName) => onRenameChatFile(file.id, newName)} 
                                     className="font-heading text-base cursor-pointer"
                                     inputClassName="bg-transparent text-base font-heading text-[var(--hud-color)] w-full outline-none border-b border-b-[var(--hud-color-darker)]"
                                 />
                                 <button
-                                    onClick={(e) => { e.stopPropagation(); onDeleteFile(file.id); }}
+                                    onClick={(e) => { e.stopPropagation(); onDeleteChatFile(file.id); }}
                                     className="p-1 text-[var(--red-color)]/70 rounded-full hover:bg-red-500/30 hover:text-[var(--red-color)] focus:outline-none focus:ring-1 focus:ring-[var(--red-color)] flex-shrink-0"
                                     title="Delete this file"
                                     aria-label={`Delete file ${file.name}`}

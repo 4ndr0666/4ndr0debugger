@@ -130,7 +130,7 @@ export const DiffViewer = ({ oldCode, newCode, onClose, language }: DiffViewerPr
 
   return (
     <div
-      className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4 transition-opacity duration-300 animate-fade-in"
+      className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4 transition-opacity duration-300 animate-fade-in"
       onClick={onClose}
       role="dialog"
       aria-modal="true"

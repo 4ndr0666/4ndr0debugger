@@ -124,6 +124,18 @@ export interface FinalizationSummary {
   revised: Feature[];
 }
 
+// FIX: Added missing properties `sessionEndpoint` and `uploadEndpoint`, and reordered for consistency.
+export interface TargetProfile {
+  generateEndpoint: string;
+  statusEndpoint: string;
+  creditsEndpoint: string;
+  sessionEndpoint: string;
+  uploadEndpoint: string;
+  authTokenKey: string;
+  taskIdKey: string;
+  creditAmountKey: string;
+}
+
 export interface ImportedSession {
   id: string;
   filename: string;

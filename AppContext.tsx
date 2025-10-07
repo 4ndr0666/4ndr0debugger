@@ -80,6 +80,7 @@ export interface AppContextType {
   projectFiles: ProjectFile[];
   versions: Version[];
   importedSessions: ImportedSession[];
+  targetHostname: string;
 
   // Setters
   setAppMode: React.Dispatch<React.SetStateAction<AppMode>>;
@@ -93,6 +94,7 @@ export interface AppContextType {
   setProjectFiles: React.Dispatch<React.SetStateAction<ProjectFile[]>>;
   setVersions: React.Dispatch<React.SetStateAction<Version[]>>;
   setImportedSessions: React.Dispatch<React.SetStateAction<ImportedSession[]>>;
+  setTargetHostname: React.Dispatch<React.SetStateAction<string>>;
 
   // Derived State & Helpers
   resetAndSetMode: (mode: AppMode) => void;
@@ -112,6 +114,7 @@ export const AppContextProvider: React.FC<React.PropsWithChildren<{ onReset: () 
   const [projectFiles, setProjectFiles] = usePersistentState<ProjectFile[]>('projectFiles', []);
   const [versions, setVersions] = usePersistentState<Version[]>('codeReviewVersions', []);
   const [importedSessions, setImportedSessions] = usePersistentState<ImportedSession[]>('importedSessions', []);
+  const [targetHostname, setTargetHostname] = useState<string>('');
   
   const resetAndSetMode = useCallback((mode: AppMode) => {
     setAppMode(mode);
@@ -121,6 +124,7 @@ export const AppContextProvider: React.FC<React.PropsWithChildren<{ onReset: () 
     setCodeB('');
     setErrorMessage('');
     setComparisonGoal('');
+    // Do not reset targetHostname, as it might be useful across modes
     onReset(); // Delegate resetting session-specific state to App.tsx
   }, [onReset]);
 
@@ -136,10 +140,11 @@ export const AppContextProvider: React.FC<React.PropsWithChildren<{ onReset: () 
     projectFiles, setProjectFiles,
     versions, setVersions,
     importedSessions, setImportedSessions,
+    targetHostname, setTargetHostname,
     resetAndSetMode,
   }), [
     appMode, language, reviewProfile, customReviewProfile, userOnlyCode, 
-    codeB, errorMessage, comparisonGoal, projectFiles, versions, importedSessions, resetAndSetMode
+    codeB, errorMessage, comparisonGoal, projectFiles, versions, importedSessions, targetHostname, resetAndSetMode
   ]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

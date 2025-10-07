@@ -1,5 +1,3 @@
-
-
 import React, { useRef } from 'react';
 import { useAppContext } from '../AppContext.tsx';
 import { ImportedSession } from '../types.ts';
@@ -12,6 +10,7 @@ interface SessionManagerModalProps {
   onImportFile: (file: File) => void;
   onLoadSession: (sessionState: any) => void;
   onDeleteSession: (sessionId: string) => void;
+  isLoading?: boolean;
 }
 
 const timeAgo = (timestamp: number): string => {
@@ -25,7 +24,7 @@ const timeAgo = (timestamp: number): string => {
     return `${days}d ago`;
 }
 
-export const SessionManagerModal = ({ isOpen, onClose, onImportFile, onLoadSession, onDeleteSession }: SessionManagerModalProps) => {
+export const SessionManagerModal = ({ isOpen, onClose, onImportFile, onLoadSession, onDeleteSession, isLoading = false }: SessionManagerModalProps) => {
     const { importedSessions } = useAppContext();
     const importInputRef = useRef<HTMLInputElement>(null);
 
@@ -54,7 +53,7 @@ export const SessionManagerModal = ({ isOpen, onClose, onImportFile, onLoadSessi
     
     return (
         <div
-          className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4 transition-opacity duration-300 animate-fade-in"
+          className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4 transition-opacity duration-300 animate-fade-in"
           onClick={onClose}
           role="dialog"
           aria-modal="true"
@@ -75,6 +74,7 @@ export const SessionManagerModal = ({ isOpen, onClose, onImportFile, onLoadSessi
                     onClick={onClose}
                     className="absolute -top-4 -right-4 p-1.5 rounded-full hover:bg-white/10 focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)]"
                     aria-label="Close session manager"
+                    disabled={isLoading}
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -83,7 +83,7 @@ export const SessionManagerModal = ({ isOpen, onClose, onImportFile, onLoadSessi
             </div>
 
             <div className="flex-shrink-0 my-4">
-                <Button onClick={handleImportClick} className="w-full">
+                <Button onClick={handleImportClick} className="w-full" disabled={isLoading}>
                     <ImportIcon className="w-5 h-5 mr-2" />
                     Import Session(s) From File...
                 </Button>
@@ -94,6 +94,7 @@ export const SessionManagerModal = ({ isOpen, onClose, onImportFile, onLoadSessi
                   className="hidden"
                   accept=".json,application/json"
                   multiple
+                  disabled={isLoading}
                 />
             </div>
 
@@ -112,10 +113,10 @@ export const SessionManagerModal = ({ isOpen, onClose, onImportFile, onLoadSessi
                                     </p>
                                 </div>
                                 <div className="flex items-center space-x-1 flex-shrink-0">
-                                    <button onClick={() => onLoadSession(session.sessionState)} title="Load Session" className="p-1.5 text-[var(--hud-color)] rounded-full hover:bg-[var(--hud-color)]/20 focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)]">
+                                    <button onClick={() => onLoadSession(session.sessionState)} title="Load Session" className="p-1.5 text-[var(--hud-color)] rounded-full hover:bg-[var(--hud-color)]/20 focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)] disabled:opacity-50 disabled:cursor-not-allowed" disabled={isLoading}>
                                         <LoadIcon className="w-4 h-4" />
                                     </button>
-                                    <button onClick={() => handleDeleteClick(session)} title="Remove From List" className="p-1.5 text-[var(--red-color)]/70 rounded-full hover:bg-red-500/30 hover:text-[var(--red-color)] focus:outline-none focus:ring-1 focus:ring-[var(--red-color)]">
+                                    <button onClick={() => handleDeleteClick(session)} title="Remove From List" className="p-1.5 text-[var(--red-color)]/70 rounded-full hover:bg-red-500/30 hover:text-[var(--red-color)] focus:outline-none focus:ring-1 focus:ring-[var(--red-color)] disabled:opacity-50 disabled:cursor-not-allowed" disabled={isLoading}>
                                         <DeleteIcon className="w-4 h-4" />
                                     </button>
                                 </div>

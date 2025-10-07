@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState, useEffect } from 'react';
 import { useAppContext } from '../AppContext.tsx';
 import { Button } from './Button.tsx';
@@ -15,11 +14,12 @@ interface SaveVersionModalProps {
   isGeneratingName: boolean;
   outputType: LoadingAction;
   isSavingChat: boolean;
+  disabled?: boolean;
 }
 
 export const SaveVersionModal = ({ 
     isOpen, onClose, onSave, versionName, setVersionName, onAutoGenerate, isGeneratingName,
-    outputType, isSavingChat
+    outputType, isSavingChat, disabled = false
 }: SaveVersionModalProps) => {
   const { language, reviewProfile } = useAppContext();
   const [suggestionsVisible, setSuggestionsVisible] = useState(true);
@@ -77,7 +77,7 @@ export const SaveVersionModal = ({
 
   return (
     <div 
-      className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4 transition-opacity duration-300 animate-fade-in"
+      className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4 transition-opacity duration-300 animate-fade-in"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -107,15 +107,15 @@ export const SaveVersionModal = ({
                 value={versionName}
                 onChange={(e) => setVersionName(e.target.value)}
                 onKeyDown={handleKeyDown}
-                className="block w-full p-3 pr-12 font-mono text-base text-[var(--hud-color)] bg-black border border-[var(--hud-color-darker)] focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)] focus:border-[var(--hud-color)]"
+                className="block w-full p-3 pr-12 font-mono text-base text-[var(--hud-color)] bg-black border border-[var(--hud-color-darker)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-black focus:ring-[var(--bright-cyan)] transition-all duration-150"
                 placeholder="e.g., Initial Refactor"
                 autoFocus
-                disabled={isGeneratingName}
+                disabled={isGeneratingName || disabled}
               />
               <Button
                   onClick={onAutoGenerate}
                   isLoading={isGeneratingName}
-                  disabled={isGeneratingName}
+                  disabled={isGeneratingName || disabled}
                   variant="secondary"
                   className="absolute right-1 top-1/2 -translate-y-1/2 py-2 px-2 h-auto text-xs"
                   title="Auto-generate name"
@@ -137,6 +137,7 @@ export const SaveVersionModal = ({
                       setSuggestionsVisible(false);
                     }}
                     className="px-2 py-1 font-mono text-xs border border-[var(--hud-color-darkest)] text-[var(--hud-color-darker)] transition-all duration-150 hover:border-[var(--hud-color)] hover:text-[var(--hud-color)] hover:bg-[var(--hud-color)]/10"
+                    disabled={disabled}
                   >
                     {s}
                   </button>
@@ -146,10 +147,10 @@ export const SaveVersionModal = ({
           )}
         </div>
         <div className="mt-6 flex justify-end space-x-3">
-          <Button variant="secondary" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose} disabled={disabled}>
             Cancel
           </Button>
-          <Button onClick={handleSaveClick} disabled={!versionName.trim() || isGeneratingName}>
+          <Button onClick={handleSaveClick} disabled={!versionName.trim() || isGeneratingName || disabled}>
             Save
           </Button>
         </div>
