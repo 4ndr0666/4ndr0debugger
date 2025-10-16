@@ -260,7 +260,7 @@ export const SessionProvider: React.FC<React.PropsWithChildren<{}>> = ({ childre
     const handleChatSubmit = useCallback(async () => {
         const message = chatInputValue;
         if (isChatLoading || !chatSession) {
-            if (!chatSession) addToast("Chat session not initialized.", "error");
+            if (!chatSession) addToast("Chat Session Not Initialized.", "error");
             return;
         }
     
@@ -484,55 +484,112 @@ export const SessionProvider: React.FC<React.PropsWithChildren<{}>> = ({ childre
       }, [addToast, setLanguage, setUserOnlyCode, setReviewProfile, customReviewProfile, comparisonGoal, appMode, chatContext, activeFeatureForDiscussion, getSystemInstructionForReview, reviewFeedback, fullCodeForReview]);
       
       const handleLoadSession = useCallback((sessionState: any) => {
-          try {
-            resetForNewRequest();
-        
-            // This logic stays, but uses setters from useAppContext
-            if (sessionState.appMode) setAppMode(sessionState.appMode);
-            if (sessionState.language) setLanguage(sessionState.language);
-            if (sessionState.reviewProfile) setReviewProfile(sessionState.reviewProfile);
-            if (sessionState.customReviewProfile) setCustomReviewProfile(sessionState.customReviewProfile);
-            if (typeof sessionState.userOnlyCode === 'string') setUserOnlyCode(sessionState.userOnlyCode);
-            if (typeof sessionState.codeB === 'string') setCodeB(sessionState.codeB);
-            if (typeof sessionState.errorMessage === 'string') setErrorMessage(sessionState.errorMessage);
-            if (typeof sessionState.comparisonGoal === 'string') setComparisonGoal(sessionState.comparisonGoal);
-            if (Array.isArray(sessionState.versions)) setVersions(sessionState.versions);
-            if (Array.isArray(sessionState.projectFiles)) setProjectFiles(sessionState.projectFiles);
-            if (Array.isArray(sessionState.contextFileIds)) setContextFileIds(new Set(sessionState.contextFileIds));
-            if (typeof sessionState.targetHostname === 'string') setTargetHostname(sessionState.targetHostname);
+        try {
+          resetForNewRequest();
       
-            // This logic updates the local session state
-            if (typeof sessionState.reviewFeedback === 'string') setReviewFeedback(sessionState.reviewFeedback);
-            if (typeof sessionState.revisedCode === 'string') setRevisedCode(sessionState.revisedCode);
-            if (typeof sessionState.reviewedCode === 'string') setReviewedCode(sessionState.reviewedCode);
-            if (Array.isArray(sessionState.chatHistory)) setChatHistory(sessionState.chatHistory);
-            if (Array.isArray(sessionState.chatRevisions)) setChatRevisions(sessionState.chatRevisions);
-            if (Array.isArray(sessionState.chatFiles)) setChatFiles(sessionState.chatFiles);
-            if (sessionState.featureMatrix) setFeatureMatrix(sessionState.featureMatrix);
-            if (sessionState.rawFeatureMatrixJson) setRawFeatureMatrixJson(sessionState.rawFeatureMatrixJson);
-            if (sessionState.featureDecisions) setFeatureDecisions(sessionState.featureDecisions);
-            if (sessionState.finalizationSummary) setFinalizationSummary(sessionState.finalizationSummary);
-            if (sessionState.finalizationBriefing) setFinalizationBriefing(sessionState.finalizationBriefing);
-      
-            const hasChat = Array.isArray(sessionState.chatHistory) && sessionState.chatHistory.length > 0;
-            const hasFeedback = typeof sessionState.reviewFeedback === 'string' && sessionState.reviewFeedback.length > 0;
-      
-            if (hasChat) {
-              setIsChatMode(true);
-              setIsInputPanelVisible(true);
-            } else {
-              setIsChatMode(false);
-              setIsInputPanelVisible(!hasFeedback);
+          // Global Config State
+          if (sessionState.appMode) setAppMode(sessionState.appMode);
+          if (sessionState.language) setLanguage(sessionState.language);
+          if (sessionState.reviewProfile) setReviewProfile(sessionState.reviewProfile);
+          if (sessionState.customReviewProfile) setCustomReviewProfile(sessionState.customReviewProfile);
+          if (typeof sessionState.userOnlyCode === 'string') setUserOnlyCode(sessionState.userOnlyCode);
+          if (typeof sessionState.codeB === 'string') setCodeB(sessionState.codeB);
+          if (typeof sessionState.errorMessage === 'string') setErrorMessage(sessionState.errorMessage);
+          if (typeof sessionState.comparisonGoal === 'string') setComparisonGoal(sessionState.comparisonGoal);
+          if (Array.isArray(sessionState.versions)) setVersions(sessionState.versions);
+          if (Array.isArray(sessionState.projectFiles)) setProjectFiles(sessionState.projectFiles);
+          if (Array.isArray(sessionState.contextFileIds)) setContextFileIds(new Set(sessionState.contextFileIds));
+          if (typeof sessionState.targetHostname === 'string') setTargetHostname(sessionState.targetHostname);
+    
+          // Operational Session State
+          if (typeof sessionState.reviewFeedback === 'string') setReviewFeedback(sessionState.reviewFeedback);
+          if (typeof sessionState.revisedCode === 'string') setRevisedCode(sessionState.revisedCode);
+          if (typeof sessionState.reviewedCode === 'string') setReviewedCode(sessionState.reviewedCode);
+          const chatHistoryToLoad = Array.isArray(sessionState.chatHistory) ? sessionState.chatHistory : [];
+          setChatHistory(chatHistoryToLoad);
+          if (Array.isArray(sessionState.chatRevisions)) setChatRevisions(sessionState.chatRevisions);
+          if (Array.isArray(sessionState.chatFiles)) setChatFiles(sessionState.chatFiles);
+          if (sessionState.featureMatrix) setFeatureMatrix(sessionState.featureMatrix);
+          if (sessionState.rawFeatureMatrixJson) setRawFeatureMatrixJson(sessionState.rawFeatureMatrixJson);
+          if (sessionState.featureDecisions) setFeatureDecisions(sessionState.featureDecisions);
+          if (sessionState.finalizationSummary) setFinalizationSummary(sessionState.finalizationSummary);
+          if (sessionState.finalizationBriefing) setFinalizationBriefing(sessionState.finalizationBriefing);
+    
+          const hasChat = chatHistoryToLoad.length > 0;
+          const hasFeedback = typeof sessionState.reviewFeedback === 'string' && sessionState.reviewFeedback.length > 0;
+    
+          if (hasChat) {
+            setIsChatMode(true);
+            setIsInputPanelVisible(true);
+    
+            const ai = geminiService.getAiClient();
+            if (!ai) {
+                addToast("Gemini AI not configured. Cannot restore chat.", "error");
+                return;
             }
+    
+            const getChatSystemInstruction = () => {
+                const mode = sessionState.appMode || appMode;
+                const profile = sessionState.reviewProfile;
+                const customProfile = sessionState.customReviewProfile;
+    
+                switch(mode) {
+                    case 'debug': return `${SYSTEM_INSTRUCTION}\n\n${DEBUG_SYSTEM_INSTRUCTION}`;
+                    case 'comparison': return `${SYSTEM_INSTRUCTION}\n\n${COMPARISON_SYSTEM_INSTRUCTION}`;
+                    case 'audit': return `${SYSTEM_INSTRUCTION}\n\n${AUDIT_SYSTEM_INSTRUCTION}`;
+                    default: 
+                        let instruction = SYSTEM_INSTRUCTION;
+                        if (profile && profile !== 'none' && profile !== ReviewProfile.CUSTOM && PROFILE_SYSTEM_INSTRUCTIONS[profile]) {
+                            instruction += `\n\n## Special Focus: ${profile}\n${PROFILE_SYSTEM_INSTRUCTIONS[profile]}`;
+                        } else if (profile === ReviewProfile.CUSTOM && customProfile && customProfile.trim()) {
+                            instruction += `\n\n## Custom Review Instructions:\n${customProfile.trim()}`;
+                        }
+                        return instruction;
+                }
+            };
+    
+            const geminiHistory = chatHistoryToLoad.map((msg: ChatMessage) => {
+                const parts: Part[] = [];
+                if (msg.content) {
+                    parts.push({ text: msg.content });
+                }
+                msg.attachments?.forEach(att => {
+                    parts.push({
+                        inlineData: {
+                            mimeType: att.mimeType,
+                            data: att.content
+                        }
+                    });
+                });
+                return { role: msg.role, parts: parts };
+            });
+    
+            const newChat = ai.chats.create({
+                model: GEMINI_MODELS.CORE_ANALYSIS,
+                history: geminiHistory,
+                config: {
+                    systemInstruction: getChatSystemInstruction(),
+                }
+            });
+            setChatSession(newChat);
       
-            addToast("Session loaded successfully!", "success");
-      
-          } catch (err) {
-            const message = err instanceof Error ? err.message : "An unexpected error occurred.";
-            console.error("Failed to load session state:", err);
-            addToast(`Failed to load session: ${message}`, "error");
+          } else {
+            setIsChatMode(false);
+            setIsInputPanelVisible(!hasFeedback);
           }
-        }, [resetForNewRequest, addToast, setAppMode, setLanguage, setReviewProfile, setCustomReviewProfile, setUserOnlyCode, setCodeB, setErrorMessage, setComparisonGoal, setVersions, setProjectFiles, setTargetHostname]);
+      
+          addToast("Session loaded successfully!", "success");
+      
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "An unexpected error occurred.";
+          console.error("Failed to load session state:", err);
+          addToast(`Failed to load session: ${message}`, "error");
+        }
+      }, [
+        resetForNewRequest, addToast, setAppMode, setLanguage, setReviewProfile, 
+        setCustomReviewProfile, setUserOnlyCode, setCodeB, setErrorMessage, 
+        setComparisonGoal, setVersions, setProjectFiles, setTargetHostname, appMode
+      ]);
     
     // ... other handlers ...
     const handleFinalizeFeatureDiscussion = useCallback(() => {
