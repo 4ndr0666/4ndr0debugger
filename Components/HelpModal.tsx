@@ -78,7 +78,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                     </li>
                     <li><b>Live Recon:</b> Generates a 'scout' script to execute in a target's browser console. It intercepts network traffic and prepares it for exfiltration.
                          <blockquote className="mt-1 pl-2 border-l-2 border-[var(--hud-color-darkest)] text-xs">
-                           <b>Workflow:</b> Generate script -> Execute in target console -> Interact with site -> Call `dumpRecon()` in console -> Copy JSON output.
+                           <b>Workflow:</b> Generate script &rarr; Execute in target console &rarr; Interact with site &rarr; Call `dumpRecon()` in console &rarr; Copy JSON output.
                         </blockquote>
                     </li>
                     <li><b>Exploit Stager:</b> For a known RCE or injection vulnerability, this tool generates `curl` commands to deliver common C2 payloads (e.g., reverse shells).
