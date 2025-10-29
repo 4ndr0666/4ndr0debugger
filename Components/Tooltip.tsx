@@ -27,8 +27,8 @@ export const Tooltip: React.FC<TooltipProps> = ({ text, children, position = 'to
       onBlur={() => setIsVisible(false)}
     >
       {React.cloneElement(children, {
-        // FIX: The 'aria-describedby' attribute must be camelCased to 'ariaDescribedby' when passed as a property in a JavaScript object to React.
-        ariaDescribedby: isVisible && text ? tooltipId : undefined,
+        // Fix: ARIA attributes in React should be kebab-cased, not camelCased.
+        'aria-describedby': isVisible && text ? tooltipId : undefined,
       })}
       {isVisible && text && (
         <div
