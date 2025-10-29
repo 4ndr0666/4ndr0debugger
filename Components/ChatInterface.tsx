@@ -1,23 +1,18 @@
-
-
-
-
-
-
-import React, { useEffect, useRef } from 'react';
-import { ChatMessage, SupportedLanguage, AppMode } from '../types.ts';
+import React, { useEffect, useRef, memo } from 'react';
+import { ChatMessage } from '../types.ts';
 import { Button } from './Button.tsx';
 import { LoadingSpinner } from './LoadingSpinner.tsx';
 import { MarkdownRenderer } from './MarkdownRenderer.tsx';
 import { ChatContext } from './ChatContext.tsx';
 import { DeleteIcon, FolderIcon, PaperclipIcon } from './Icons.tsx';
-import { useSessionContext } from '../contexts/SessionContext.tsx';
-import { useAppContext } from '../AppContext.tsx';
+import { useConfigContext, useActionsContext } from '../AppContext.tsx';
+import { useChatStateContext, useLoadingStateContext, useOutputContext, useSessionActionsContext } from '../contexts/SessionContext.tsx';
 
 interface ChatInterfaceProps {
   onSaveChatSession?: () => void;
   onAttachFileClick: () => void;
   onOpenProjectFilesModal: () => void;
+  onLoadCodeIntoWorkbench?: (code: string) => void;
 }
 
 const AttachmentPreview: React.FC<{ file: File; onRemove: () => void; }> = ({ file, onRemove }) => {
@@ -48,22 +43,64 @@ const AttachmentPreview: React.FC<{ file: File; onRemove: () => void; }> = ({ fi
     );
 };
 
+const renderAttachments = (attachments?: ChatMessage['attachments']) => {
+    if (!attachments || attachments.length === 0) return null;
+    return (
+      <div className="mb-2 space-y-2">
+        {attachments.map((att, index) => {
+          const isImage = att.mimeType.startsWith('image/');
+          return (
+            <div key={index} className="border border-[var(--hud-color-darkest)] bg-black/30 p-2">
+              {isImage ? (
+                <img src={`data:${att.mimeType};base64,${att.content}`} alt={att.name} className="max-w-xs max-h-48 object-contain" />
+              ) : (
+                <div className="text-xs text-[var(--hud-color-darker)]">
+                  <p className="font-mono font-bold text-[var(--hud-color)]">{att.name}</p>
+                  <p>Content included in prompt.</p>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+};
 
-export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSaveChatSession, onAttachFileClick, onOpenProjectFilesModal }) => {
-    const { appMode, language, codeB, resetAndSetMode } = useAppContext();
-    const { 
-        handleFinalizeFeatureDiscussion, isChatLoading, chatHistory, handleChatSubmit,
-        chatInputValue, setChatInputValue, reviewedCode, revisedCode,
-        attachments, setAttachments,
-        handleLoadRevisionIntoEditor, chatContext, activeFeatureForDiscussion,
-        onSaveGeneratedFile, handleExitChatMode
-    } = useSessionContext();
+const ChatMessageItem = memo<{
+    msg: ChatMessage;
+    onSaveGeneratedFile?: (filename: string, content: string) => void;
+    onLoadCodeIntoWorkbench?: (code: string) => void;
+}>(({ msg, onSaveGeneratedFile, onLoadCodeIntoWorkbench }) => {
+    return (
+        <div 
+            className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div className={`max-w-[80%] p-3 text-sm rounded-lg ${msg.role === 'user' ? 'bg-transparent border border-[var(--hud-color-darker)] text-[var(--hud-color)]' : 'bg-[var(--hud-color-darkest)] text-[var(--hud-color-darker)]'}`}>
+                {msg.role === 'user' && renderAttachments(msg.attachments)}
+                <MarkdownRenderer markdown={msg.content} onSaveGeneratedFile={onSaveGeneratedFile} onLoadCodeIntoWorkbench={onLoadCodeIntoWorkbench} />
+            </div>
+        </div>
+    );
+});
+
+
+export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSaveChatSession, onAttachFileClick, onOpenProjectFilesModal, onLoadCodeIntoWorkbench }) => {
+  const { appMode } = useConfigContext();
+  const { resetAndSetMode } = useActionsContext();
+  const { isChatLoading } = useLoadingStateContext();
+  const { revisedCode } = useOutputContext();
+  const { 
+    chatHistory, chatInputValue, setChatInputValue, attachments, setAttachments,
+    chatContext, activeFeatureForDiscussion
+  } = useChatStateContext();
+  const {
+    handleFinalizeFeatureDiscussion, handleChatSubmit, handleLoadRevisionIntoEditor, 
+    onSaveGeneratedFile, handleExitChatMode
+  } = useSessionActionsContext();
   
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    // Auto-scroll to bottom on new message
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTo({
         top: chatContainerRef.current.scrollHeight,
@@ -73,7 +110,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSaveChatSession,
   }, [chatHistory]);
   
   useEffect(() => {
-    // Auto-focus input when chat mode is entered
     if (chatContext !== 'finalization' || !revisedCode) {
       inputRef.current?.focus();
     }
@@ -103,38 +139,15 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSaveChatSession,
   const endButtonAction = isGeneralChat ? handleExitChatMode : handleFinalizeFeatureDiscussion;
   
   const generationComplete = !isChatLoading && chatContext === 'finalization' && !!revisedCode;
-
-  const renderAttachments = (attachments?: ChatMessage['attachments']) => {
-    if (!attachments || attachments.length === 0) return null;
-    return (
-      <div className="mb-2 space-y-2">
-        {attachments.map((att, index) => {
-          const isImage = att.mimeType.startsWith('image/');
-          return (
-            <div key={index} className="border border-[var(--hud-color-darkest)] bg-black/30 p-2">
-              {isImage ? (
-                <img src={`data:${att.mimeType};base64,${att.content}`} alt={att.name} className="max-w-xs max-h-48 object-contain" />
-              ) : (
-                <div className="text-xs text-[var(--hud-color-darker)]">
-                  <p className="font-mono font-bold text-[var(--hud-color)]">{att.name}</p>
-                  <p>Content included in prompt.</p>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
   
   const onRemoveAttachment = (fileToRemove: File) => {
     setAttachments(atts => atts.filter(att => att.file !== fileToRemove));
   };
 
   return (
-    <div className="flex flex-col h-full">
-        <div className="flex justify-between items-center flex-shrink-0">
-            <h3 className="text-xl font-heading truncate pr-4" title={chatTitle}>{chatTitle}</h3>
+    <div className="flex flex-col h-full min-h-0">
+        <div className={`flex justify-between items-center flex-shrink-0`}>
+            <h3 className={`text-xl font-heading truncate pr-4`} title={chatTitle}>{chatTitle}</h3>
             {chatContext !== 'finalization' && endButtonAction && (
               <Button onClick={endButtonAction} variant="secondary" className="py-1 px-3 text-xs">
                   {endButtonText}
@@ -147,14 +160,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSaveChatSession,
                 <div ref={chatContainerRef} className="w-full md:w-3/5 flex-grow min-h-0 overflow-y-auto overflow-x-hidden border border-[var(--hud-color-darkest)]">
                     <div className="p-3 space-y-4 flex flex-col">
                         {chatHistory?.map((msg) => (
-                            <div 
-                            key={msg.id} 
-                            className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                            <div className={`max-w-[80%] p-3 text-sm rounded-lg ${msg.role === 'user' ? 'bg-transparent border border-[var(--hud-color-darker)] text-[var(--hud-color)]' : 'bg-[var(--hud-color-darkest)] text-[var(--hud-color-darker)]'}`}>
-                                {msg.role === 'user' && renderAttachments(msg.attachments)}
-                                <MarkdownRenderer markdown={msg.content} onSaveGeneratedFile={onSaveGeneratedFile} />
-                            </div>
-                            </div>
+                            <ChatMessageItem
+                                key={msg.id}
+                                msg={msg}
+                                onSaveGeneratedFile={onSaveGeneratedFile}
+                                onLoadCodeIntoWorkbench={onLoadCodeIntoWorkbench}
+                            />
                         ))}
                         {isChatLoading && (
                             <div className="flex justify-start">

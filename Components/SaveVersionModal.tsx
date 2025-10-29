@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { useAppContext } from '../AppContext.tsx';
+import { useConfigContext } from '../AppContext.tsx';
 import { Button } from './Button.tsx';
 import { SparklesIcon } from './Icons.tsx';
 import { ReviewProfile, LoadingAction } from '../types.ts';
@@ -21,7 +21,7 @@ export const SaveVersionModal = ({
     isOpen, onClose, onSave, versionName, setVersionName, onAutoGenerate, isGeneratingName,
     outputType, isSavingChat, disabled = false
 }: SaveVersionModalProps) => {
-  const { language, reviewProfile } = useAppContext();
+  const { language, reviewProfile } = useConfigContext();
   const [suggestionsVisible, setSuggestionsVisible] = useState(true);
 
   useEffect(() => {

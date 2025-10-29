@@ -197,33 +197,139 @@
       content: '_';
       animation: blink-caret 1s step-end infinite;
     }
+    
+    /* --- Radial Command Palette --- */
+    .radial-menu-overlay {
+      position: fixed;
+      inset: 0;
+      background-color: rgba(0, 15, 15, 0.5);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      z-index: 100;
+      opacity: 0;
+      transition: opacity 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+      pointer-events: none;
+    }
+    .radial-menu-overlay.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
 
-    /* Hamburger Menu Icon Styling */
-    .hamburger-container {
-        width: 24px;
-        height: 24px;
+    .radial-menu-container {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 101;
+      pointer-events: none;
+    }
+    
+    .radial-menu-center {
+      position: relative;
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      color: var(--hud-color);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      pointer-events: auto;
+      transition: all 0.3s ease;
+      filter: drop-shadow(0 0 8px var(--glow-color));
+    }
+    .radial-menu-center:hover {
+      transform: scale(1.1);
+      filter: drop-shadow(0 0 15px var(--glow-color));
+    }
+    
+    .radial-menu-item-wrapper {
+        position: absolute;
+        top: 50%; left: 50%;
+        width: 0; height: 0;
+        transition: transform 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+        transform: rotate(var(--angle)) translateX(0) rotate(calc(-1 * var(--angle)));
+        opacity: 0;
+        pointer-events: none;
+    }
+    .radial-menu-overlay.open .radial-menu-item-wrapper {
+        transform: rotate(var(--angle)) translateX(var(--radius)) rotate(calc(-1 * var(--angle)));
+        opacity: 1;
+        transition-delay: calc(var(--index) * 0.02s);
+        pointer-events: auto;
+    }
+
+    .radial-menu-item, .radial-menu-divider {
+        position: absolute;
+        transform: translate(-50%, -50%);
         display: flex;
         flex-direction: column;
-        justify-content: space-around;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        color: var(--secondary-text);
+        background: transparent;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+        width: 80px;
+        height: 80px;
     }
-    .hamburger-line {
-        display: block;
-        width: 100%;
-        height: 2px;
-        background-color: currentColor;
-        border-radius: 1px;
-        transition: transform 0.3s ease-in-out, opacity 0.3s ease-in-out;
-        transform-origin: center;
+    
+    .radial-menu-item:hover:not(:disabled) .radial-menu-item-icon {
+        color: var(--primary-text);
+        transform: scale(1.2);
+        filter: drop-shadow(0 0 8px var(--glow-color));
     }
-    .hamburger-line.top-line.open {
-        transform: translateY(8px) rotate(45deg);
+
+     .radial-menu-item:disabled {
+        opacity: 0.3;
+        cursor: not-allowed;
+        filter: grayscale(1);
     }
-    .hamburger-line.middle-line.open {
-        opacity: 0;
+    
+    .radial-menu-item-icon {
+        width: 2rem;
+        height: 2rem;
+        transition: all 0.2s ease;
     }
-    .hamburger-line.bottom-line.open {
-        transform: translateY(-8px) rotate(-45deg);
+    
+    .radial-menu-item-label {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      color: var(--primary-text);
+      text-shadow: 0 0 5px var(--glow-color);
+      opacity: 1;
+      margin-top: 4px;
+      transition: all 0.2s ease;
     }
+    
+    .radial-menu-divider {
+        width: auto;
+        height: auto;
+        background: transparent;
+        cursor: default;
+    }
+    .radial-menu-divider-label {
+        font-family: 'Orbitron', sans-serif;
+        font-size: 0.8rem;
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+        color: var(--hud-color);
+        padding: 0;
+        text-shadow: 0 0 5px var(--glow-color);
+    }
+
+    /* Animated Psi Icon */
+    @keyframes rotate-cw { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    @keyframes rotate-ccw { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
+    .arc-rotate-outer { animation: rotate-cw 10s linear infinite; }
+    .arc-rotate-inner { animation: rotate-ccw 8s linear infinite; }
+
 
     /* Post Review Action Button Style */
     .post-review-button {

@@ -11,8 +11,14 @@ The application features a sleek, futuristic HUD (Heads-Up Display) inspired UI 
     *   **Single Review:** Submit code for a comprehensive review of quality, bugs, style, and potential improvements.
     *   **Comparative Analysis:** Input two codebases and a shared goal. The AI can either generate a single, merged, and optimized version or initiate an interactive revision workflow.
     *   **Code Audit Mode:** Analyze code against a selection of industry-recognized security and programming standards (e.g., OSCP, OSWE, Security+, PCAP).
+    *   **Workbench Mode:** A dedicated workspace with a script editor and an AI chat. Paste any script to iteratively enhance, audit, or optimize it using intel from other tools or direct instructions.
 
 *   **Advanced Tools & Workflows:**
+    *   **Red Team Toolkit:**
+        *   **Threat Vector Analysis:** Perform passive reconnaissance on a target URL. The AI infers the tech stack and generates a report of likely vulnerabilities and actionable enumeration commands.
+        *   **Live Reconnaissance:** Generate a disposable 'scout' script to inject into a target's browser console, intercepting network traffic to capture live API calls and data.
+        *   **Exploit Stager:** For a discovered vulnerability, generate ready-to-use `curl` commands to deliver C2 payloads (e.g., reverse shells) to the target.
+        *   **Adversarial Report Generator:** Use exfiltrated recon data to have the AI write a compelling, high-impact bug bounty report.
     *   **Follow-up Chat:** After any analysis, engage in a contextual conversation with the AI to ask questions, request modifications, and iterate on the code.
     *   **Contextual Actions:** Highlight code in the editor to trigger specific actions like "Explain Selection" or "Review Selection".
     *   **Code Generators:** Automatically generate Unit Tests, Documentation, and Conventional Commit Messages based on the code and its revisions.
@@ -75,7 +81,7 @@ This project uses Vite for development.
 ## How to Use
 
 1.  **Open the App:** Navigate to the local URL after starting the dev server.
-2.  **Select a Mode:** Use the hamburger menu in the top-left to choose between "Debug", "Single Review", "Comparative Analysis", or "Audit".
+2.  **Select a Mode:** Use the segmented control to choose between "Debug", "Single Review", "Compare", "Audit", or "Workbench".
 3.  **Input Code:** Paste your code into the appropriate editor panel(s).
 4.  **Configure & Submit:** Select the language and an optional review profile, then click the primary action button.
 5.  **View Feedback:** The input panel will collapse, and the AI's analysis will stream into the output panel.

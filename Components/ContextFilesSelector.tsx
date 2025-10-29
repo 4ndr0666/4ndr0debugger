@@ -1,8 +1,8 @@
-
 import React from 'react';
 import { ProjectFile } from '../types.ts';
 import { AccordionItem } from './AccordionItem.tsx';
-import { useAppContext } from '../AppContext.tsx';
+import { usePersistenceContext } from '../contexts/PersistenceContext.tsx';
+import { useFeatureFlags } from '../contexts/FeatureFlagsContext.tsx';
 
 interface ContextFilesSelectorProps {
   selectedFileIds: Set<string>;
@@ -10,7 +10,12 @@ interface ContextFilesSelectorProps {
 }
 
 export const ContextFilesSelector: React.FC<ContextFilesSelectorProps> = ({ selectedFileIds, onSelectionChange }) => {
-  const { projectFiles } = useAppContext();
+  const { projectFiles } = usePersistenceContext();
+  const { featureFlags } = useFeatureFlags();
+
+  if (!featureFlags.multi_file_context) {
+    return null;
+  }
 
   const title = `Context Files (${selectedFileIds.size} selected)`;
 

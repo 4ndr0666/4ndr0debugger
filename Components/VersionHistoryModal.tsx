@@ -1,9 +1,7 @@
-
-
 import React from 'react';
-import { useAppContext } from '../AppContext.tsx';
 import { Version } from '../types.ts';
 import { VersionHistory } from './VersionHistory.tsx';
+import { usePersistenceContext } from '../contexts/PersistenceContext.tsx';
 
 interface VersionHistoryModalProps {
   isOpen: boolean;
@@ -16,7 +14,7 @@ interface VersionHistoryModalProps {
 }
 
 export const VersionHistoryModal = ({ isOpen, onClose, isLoading = false, ...versionHistoryProps }: VersionHistoryModalProps) => {
-  const { versions } = useAppContext();
+  const { versions } = usePersistenceContext();
   
   if (!isOpen) return null;
 

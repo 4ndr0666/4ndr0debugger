@@ -1,32 +1,7 @@
-
 import React, { createContext, useState, useContext, useMemo, useCallback } from 'react';
-import { AppMode, SupportedLanguage, ProjectFile, Toast, ReviewProfile, Version, ImportedSession } from './types.ts';
+import { AppMode, SupportedLanguage, Toast, ReviewProfile } from './types.ts';
 import { SUPPORTED_LANGUAGES } from './constants.ts';
 import { ToastContainer } from './Components/ToastContainer.tsx';
-
-// A custom hook to manage state with localStorage persistence.
-const usePersistentState = <T,>(storageKey: string, defaultValue: T): [T, React.Dispatch<React.SetStateAction<T>>] => {
-    const [state, setState] = useState<T>(() => {
-        try {
-            const item = window.localStorage.getItem(storageKey);
-            return item ? JSON.parse(item) : defaultValue;
-        } catch (error) {
-            console.error(`Error reading localStorage key "${storageKey}":`, error);
-            return defaultValue;
-        }
-    });
-
-    React.useEffect(() => {
-        try {
-            window.localStorage.setItem(storageKey, JSON.stringify(state));
-        } catch (error) {
-            console.error(`Error setting localStorage key "${storageKey}":`, error);
-        }
-    }, [storageKey, state]);
-
-    return [state, setState];
-};
-
 
 // --- Toast Context ---
 interface ToastContextType {
@@ -66,43 +41,47 @@ export const useToast = (): ToastContextType => {
 };
 
 
-// --- Main App Context ---
-export interface AppContextType {
-  // State
+// --- Refactored App Contexts ---
+
+// 1. Config Context: For global settings that change infrequently.
+export interface ConfigContextType {
   appMode: AppMode;
   language: SupportedLanguage;
   reviewProfile: ReviewProfile | 'none';
   customReviewProfile: string;
-  userOnlyCode: string; // Code A
-  codeB: string;
-  errorMessage: string;
-  comparisonGoal: string;
-  projectFiles: ProjectFile[];
-  versions: Version[];
-  importedSessions: ImportedSession[];
   targetHostname: string;
-
-  // Setters
   setAppMode: React.Dispatch<React.SetStateAction<AppMode>>;
   setLanguage: React.Dispatch<React.SetStateAction<SupportedLanguage>>;
   setReviewProfile: React.Dispatch<React.SetStateAction<ReviewProfile | 'none'>>;
   setCustomReviewProfile: React.Dispatch<React.SetStateAction<string>>;
+  setTargetHostname: React.Dispatch<React.SetStateAction<string>>;
+}
+const ConfigContext = createContext<ConfigContextType | undefined>(undefined);
+
+// 2. Input Context: For user-provided data that changes often.
+export interface InputContextType {
+  userOnlyCode: string; // Code A
+  codeB: string;
+  errorMessage: string;
+  comparisonGoal: string;
+  workbenchScript: string;
   setUserOnlyCode: React.Dispatch<React.SetStateAction<string>>;
   setCodeB: React.Dispatch<React.SetStateAction<string>>;
   setErrorMessage: React.Dispatch<React.SetStateAction<string>>;
   setComparisonGoal: React.Dispatch<React.SetStateAction<string>>;
-  setProjectFiles: React.Dispatch<React.SetStateAction<ProjectFile[]>>;
-  setVersions: React.Dispatch<React.SetStateAction<Version[]>>;
-  setImportedSessions: React.Dispatch<React.SetStateAction<ImportedSession[]>>;
-  setTargetHostname: React.Dispatch<React.SetStateAction<string>>;
+  setWorkbenchScript: React.Dispatch<React.SetStateAction<string>>;
+}
+const InputContext = createContext<InputContextType | undefined>(undefined);
 
-  // Derived State & Helpers
+// 3. Actions Context: For functions that trigger state changes.
+export interface ActionsContextType {
   resetAndSetMode: (mode: AppMode) => void;
 }
+const ActionsContext = createContext<ActionsContextType | undefined>(undefined);
 
-export const AppContext = createContext<AppContextType | undefined>(undefined);
 
-export const AppContextProvider: React.FC<React.PropsWithChildren<{ onReset: () => void }>> = ({ children, onReset }) => {
+// --- Combined Provider ---
+export const GlobalStateProvider: React.FC<React.PropsWithChildren<{ onReset: () => void }>> = ({ children, onReset }) => {
   const [appMode, setAppMode] = useState<AppMode>('debug');
   const [language, setLanguage] = useState<SupportedLanguage>(SUPPORTED_LANGUAGES[0].value);
   const [reviewProfile, setReviewProfile] = useState<ReviewProfile | 'none'>('none');
@@ -111,10 +90,8 @@ export const AppContextProvider: React.FC<React.PropsWithChildren<{ onReset: () 
   const [codeB, setCodeB] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [comparisonGoal, setComparisonGoal] = useState<string>('');
-  const [projectFiles, setProjectFiles] = usePersistentState<ProjectFile[]>('projectFiles', []);
-  const [versions, setVersions] = usePersistentState<Version[]>('codeReviewVersions', []);
-  const [importedSessions, setImportedSessions] = usePersistentState<ImportedSession[]>('importedSessions', []);
   const [targetHostname, setTargetHostname] = useState<string>('');
+  const [workbenchScript, setWorkbenchScript] = useState<string>('// Paste your script here to begin analysis...');
   
   const resetAndSetMode = useCallback((mode: AppMode) => {
     setAppMode(mode);
@@ -124,36 +101,57 @@ export const AppContextProvider: React.FC<React.PropsWithChildren<{ onReset: () 
     setCodeB('');
     setErrorMessage('');
     setComparisonGoal('');
-    // Do not reset targetHostname, as it might be useful across modes
-    onReset(); // Delegate resetting session-specific state to App.tsx
+    setWorkbenchScript('// Paste your script here to begin analysis...');
+    onReset();
   }, [onReset]);
 
-  const value: AppContextType = useMemo(() => ({
+  const configValue: ConfigContextType = useMemo(() => ({
     appMode, setAppMode,
     language, setLanguage,
     reviewProfile, setReviewProfile,
     customReviewProfile, setCustomReviewProfile,
+    targetHostname, setTargetHostname,
+  }), [appMode, language, reviewProfile, customReviewProfile, targetHostname]);
+
+  const inputValue: InputContextType = useMemo(() => ({
     userOnlyCode, setUserOnlyCode,
     codeB, setCodeB,
     errorMessage, setErrorMessage,
     comparisonGoal, setComparisonGoal,
-    projectFiles, setProjectFiles,
-    versions, setVersions,
-    importedSessions, setImportedSessions,
-    targetHostname, setTargetHostname,
-    resetAndSetMode,
-  }), [
-    appMode, language, reviewProfile, customReviewProfile, userOnlyCode, 
-    codeB, errorMessage, comparisonGoal, projectFiles, versions, importedSessions, targetHostname, resetAndSetMode
-  ]);
+    workbenchScript, setWorkbenchScript,
+  }), [userOnlyCode, codeB, errorMessage, comparisonGoal, workbenchScript]);
 
-  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+  const actionsValue: ActionsContextType = useMemo(() => ({
+    resetAndSetMode,
+  }), [resetAndSetMode]);
+
+  return (
+    <ActionsContext.Provider value={actionsValue}>
+      <ConfigContext.Provider value={configValue}>
+        <InputContext.Provider value={inputValue}>
+          {children}
+        </InputContext.Provider>
+      </ConfigContext.Provider>
+    </ActionsContext.Provider>
+  );
 };
 
-export const useAppContext = (): AppContextType => {
-  const context = useContext(AppContext);
-  if (!context) {
-    throw new Error('useAppContext must be used within an AppContextProvider');
-  }
+
+// --- Custom Hooks for Consumption ---
+export const useConfigContext = (): ConfigContextType => {
+  const context = useContext(ConfigContext);
+  if (!context) throw new Error('useConfigContext must be used within a GlobalStateProvider');
+  return context;
+};
+
+export const useInputContext = (): InputContextType => {
+  const context = useContext(InputContext);
+  if (!context) throw new Error('useInputContext must be used within a GlobalStateProvider');
+  return context;
+};
+
+export const useActionsContext = (): ActionsContextType => {
+  const context = useContext(ActionsContext);
+  if (!context) throw new Error('useActionsContext must be used within a GlobalStateProvider');
   return context;
 };

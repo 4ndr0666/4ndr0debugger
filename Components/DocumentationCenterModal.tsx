@@ -1,16 +1,10 @@
-
-
-
-
-
-
 import React, { useState } from 'react';
-import { useAppContext } from '../AppContext.tsx';
-import { useSessionContext } from '../contexts/SessionContext.tsx';
+import { useConfigContext, useInputContext } from '../AppContext.tsx';
+import { useSessionActionsContext } from '../contexts/SessionContext.tsx';
 import { Version } from '../types.ts';
 import { Button } from './Button.tsx';
 import { BoltIcon, DeleteIcon, ImportIcon, SaveIcon as LoadIcon } from './Icons.tsx';
-import { DOCS_INSTRUCTION, LANGUAGE_TAG_MAP } from '../constants.ts';
+import { usePersistenceContext } from '../contexts/PersistenceContext.tsx';
 
 
 interface DocumentationCenterModalProps {
@@ -26,17 +20,13 @@ type ActiveTab = 'generate' | 'saved';
 
 const timeAgo = (timestamp: number): string => {
     const seconds = Math.floor((new Date().getTime() - timestamp) / 1000);
-    let interval = seconds / 31536000;
-    if (interval > 1) return Math.floor(interval) + " years ago";
-    interval = seconds / 2592000;
-    if (interval > 1) return Math.floor(interval) + " months ago";
-    interval = seconds / 86400;
-    if (interval > 1) return Math.floor(interval) + " days ago";
-    interval = seconds / 3600;
-    if (interval > 1) return Math.floor(interval) + " hours ago";
-    interval = seconds / 60;
-    if (interval > 1) return Math.floor(interval) + " minutes ago";
-    return "just now";
+    if (seconds < 60) return "just now";
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
 }
 
 
@@ -54,8 +44,9 @@ export const DocumentationCenterModal = ({
     onLoadVersion, onDeleteVersion, onDownload,
     isLoading = false
 }: DocumentationCenterModalProps) => {
-  const { versions, userOnlyCode: currentUserCode, language } = useAppContext();
-  const { handleGenerateDocs } = useSessionContext();
+  const { userOnlyCode: currentUserCode } = useInputContext();
+  const { versions } = usePersistenceContext();
+  const { handleGenerateDocs } = useSessionActionsContext();
   const [activeTab, setActiveTab] = useState<ActiveTab>('generate');
 
   if (!isOpen) return null;
@@ -80,7 +71,7 @@ export const DocumentationCenterModal = ({
             <h4 className="text-lg font-heading mb-2">From Current Code</h4>
             <div className="p-3 bg-black/50 border border-[var(--hud-color-darkest)] flex justify-between items-center">
                 <p className="text-sm text-[var(--hud-color-darker)] truncate pr-4">Generate documentation for the code currently in the editor.</p>
-                <Button onClick={() => handleGenerate(currentUserCode)} disabled={!currentUserCode.trim() || isLoading}>Generate</Button>
+                <Button onClick={() => handleGenerate(currentUserCode)} disabled={!currentUserCode.trim()} isLoading={isLoading}>Generate</Button>
             </div>
         </div>
         <div>
@@ -93,7 +84,7 @@ export const DocumentationCenterModal = ({
                                 <p className="font-semibold text-[var(--hud-color)] uppercase tracking-wider text-sm truncate">{version.name}</p>
                                 <p className="text-xs text-[var(--hud-color-darker)]">{timeAgo(version.timestamp)}</p>
                             </div>
-                            <Button onClick={() => handleGenerate(version.userCode)} disabled={isLoading}>
+                            <Button onClick={() => handleGenerate(version.userCode)} isLoading={isLoading}>
                                 <BoltIcon className="w-4 h-4 mr-2" /> Generate
                             </Button>
                         </div>

@@ -16,6 +16,7 @@ interface HeaderProps {
     onOpenExploitStagerModal: () => void;
     onOpenThreatVectorModal: () => void;
     onOpenHelpModal: () => void;
+    onOpenFeatureFlagsModal: () => void;
     isToolsEnabled: boolean;
     onEndChatSession: () => void;
 }

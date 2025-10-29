@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Button } from './Button.tsx';
 import { SCOUT_SCRIPT_TEMPLATE } from '../constants.ts';
-import { useAppContext } from '../AppContext.tsx';
+import { useConfigContext } from '../AppContext.tsx';
 import { CheckIcon, CopyIcon } from './Icons.tsx';
 
 interface LiveReconModalProps {
@@ -10,7 +10,7 @@ interface LiveReconModalProps {
 }
 
 export const LiveReconModal: React.FC<LiveReconModalProps> = ({ isOpen, onClose }) => {
-  const { targetHostname, setTargetHostname } = useAppContext();
+  const { targetHostname, setTargetHostname } = useConfigContext();
   const [scoutScript, setScoutScript] = useState('');
   const [isCopied, setIsCopied] = useState(false);
 

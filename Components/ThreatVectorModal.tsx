@@ -1,25 +1,45 @@
 import React, { useState } from 'react';
 import { Button } from './Button.tsx';
-import { useSessionContext } from '../contexts/SessionContext.tsx';
-import { LoadingSpinner } from './LoadingSpinner.tsx';
+import { useLoadingStateContext, useOutputContext, useSessionActionsContext } from '../contexts/SessionContext.tsx';
 import { MarkdownRenderer } from './MarkdownRenderer.tsx';
+import { CheckIcon, CopyIcon } from './Icons.tsx';
+import { AnalysisProgress } from './AnalysisProgress.tsx';
 
 interface ThreatVectorModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
+const analysisSteps = [
+    "Inferring Technology Stack...",
+    "Cross-referencing CVE databases...",
+    "Identifying common misconfigurations...",
+    "Generating actionable command plan...",
+];
+
 export const ThreatVectorModal: React.FC<ThreatVectorModalProps> = ({ isOpen, onClose }) => {
-  const { 
-    isGeneratingThreatVector, 
-    threatVectorReport, 
-    handleThreatVectorAnalysis,
-    setThreatVectorReport 
-  } = useSessionContext();
+  const { isGeneratingThreatVector } = useLoadingStateContext();
+  const { threatVectorReport } = useOutputContext();
+  const { handleThreatVectorAnalysis, setThreatVectorReport } = useSessionActionsContext();
+  
   const [targetUrl, setTargetUrl] = useState('');
+  const [urlError, setUrlError] = useState('');
+  const [isCopied, setIsCopied] = useState(false);
 
   const handleScan = () => {
-    if (!targetUrl) return;
+    setUrlError('');
+    setIsCopied(false);
+    let url;
+    try {
+        url = new URL(targetUrl);
+        if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+            throw new Error('Protocol must be http or https.');
+        }
+    } catch (e) {
+        setUrlError('Please enter a valid URL including http:// or https://');
+        return;
+    }
+
     handleThreatVectorAnalysis(targetUrl);
   };
   
@@ -27,6 +47,14 @@ export const ThreatVectorModal: React.FC<ThreatVectorModalProps> = ({ isOpen, on
     setThreatVectorReport(null);
     onClose();
   }
+  
+  const handleCopyReport = () => {
+    if (!threatVectorReport) return;
+    navigator.clipboard.writeText(threatVectorReport).then(() => {
+        setIsCopied(true);
+        setTimeout(() => setIsCopied(false), 2500);
+    });
+  };
 
   if (!isOpen) return null;
 
@@ -70,11 +98,16 @@ export const ThreatVectorModal: React.FC<ThreatVectorModalProps> = ({ isOpen, on
                     id="target-url-threat"
                     type="url"
                     value={targetUrl}
-                    onChange={(e) => setTargetUrl(e.target.value)}
-                    className="block w-full p-2.5 font-mono text-sm text-[var(--hud-color)] bg-black border border-[var(--hud-color-darkest)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-black focus:ring-[var(--bright-cyan)] placeholder:text-[var(--hud-color-darker)] transition-all duration-150"
+                    onChange={(e) => {
+                        setTargetUrl(e.target.value);
+                        if(urlError) setUrlError('');
+                    }}
+                    className={`block w-full p-2.5 font-mono text-sm text-[var(--hud-color)] bg-black border ${urlError ? 'border-[var(--red-color)]' : 'border-[var(--hud-color-darkest)]'} focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-black focus:ring-[var(--bright-cyan)] placeholder:text-[var(--hud-color-darker)] transition-all duration-150`}
                     placeholder="https://example.com"
                     disabled={isGeneratingThreatVector}
+                    aria-invalid={!!urlError}
                 />
+                {urlError && <p className="text-xs text-red-400 mt-1 animate-fade-in">{urlError}</p>}
               </div>
               <Button onClick={handleScan} disabled={!targetUrl || isGeneratingThreatVector} isLoading={isGeneratingThreatVector}>
                 Scan
@@ -84,15 +117,20 @@ export const ThreatVectorModal: React.FC<ThreatVectorModalProps> = ({ isOpen, on
           <div className="flex-grow flex flex-col min-h-0">
             <div className="flex-grow overflow-y-auto pr-2 border border-[var(--hud-color-darkest)] p-3 bg-black/30">
                 {isGeneratingThreatVector && !threatVectorReport ? (
-                    <div className="flex flex-col items-center justify-center h-full">
-                        <LoadingSpinner size="w-10 h-10" />
-                        <p className="mt-4 text-sm uppercase tracking-wider">Analyzing Target...</p>
-                    </div>
+                    <AnalysisProgress steps={analysisSteps} />
                 ) : (
                     <MarkdownRenderer markdown={threatVectorReport || ''} />
                 )}
             </div>
           </div>
+        </div>
+        <div className="flex-shrink-0 mt-4">
+            {threatVectorReport && !isGeneratingThreatVector && (
+                <Button onClick={handleCopyReport} variant="secondary" className="w-full animate-fade-in">
+                    {isCopied ? <CheckIcon className="w-4 h-4 mr-2" /> : <CopyIcon className="w-4 h-4 mr-2" />}
+                    {isCopied ? 'Report Copied' : 'Copy Report Markdown'}
+                </Button>
+            )}
         </div>
       </div>
     </div>

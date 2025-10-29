@@ -44,7 +44,7 @@ export const VersionHistory = ({ versions, onLoadVersion, onDeleteVersion, onSta
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0">
       <h3 className="text-lg text-center mb-4 flex-shrink-0">Saved Versions</h3>
       <div className="flex-grow overflow-y-auto space-y-3 pr-2">
         {versions.map(version => (

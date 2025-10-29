@@ -1,8 +1,8 @@
 import React, { useRef } from 'react';
-import { useAppContext } from '../AppContext.tsx';
 import { ImportedSession } from '../types.ts';
 import { Button } from './Button.tsx';
 import { DeleteIcon, ImportIcon, SaveIcon as LoadIcon } from './Icons.tsx';
+import { usePersistenceContext } from '../contexts/PersistenceContext.tsx';
 
 interface SessionManagerModalProps {
   isOpen: boolean;
@@ -25,7 +25,7 @@ const timeAgo = (timestamp: number): string => {
 }
 
 export const SessionManagerModal = ({ isOpen, onClose, onImportFile, onLoadSession, onDeleteSession, isLoading = false }: SessionManagerModalProps) => {
-    const { importedSessions } = useAppContext();
+    const { importedSessions } = usePersistenceContext();
     const importInputRef = useRef<HTMLInputElement>(null);
 
     if (!isOpen) return null;
@@ -132,5 +132,5 @@ export const SessionManagerModal = ({ isOpen, onClose, onImportFile, onLoadSessi
             </div>
           </div>
         </div>
-    );
+      );
 };

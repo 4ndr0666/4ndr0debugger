@@ -1,20 +1,17 @@
-
-
-
 import React, { useState } from 'react';
 import { AccordionItem } from './AccordionItem.tsx';
 import { CopyIcon, CheckIcon, DeleteIcon, LoadIntoEditorIcon } from './Icons.tsx';
 import { EditableTitle } from './EditableTitle.tsx';
 import { MarkdownRenderer } from './MarkdownRenderer.tsx';
-import { useAppContext } from '../AppContext.tsx';
-import { useSessionContext } from '../contexts/SessionContext.tsx';
+import { useInputContext } from '../AppContext.tsx';
+import { useOutputContext, useChatStateContext, useSessionActionsContext } from '../contexts/SessionContext.tsx';
 
 interface ClickableCodeBlockProps {
   code: string;
 }
 
 const ClickableCodeBlock: React.FC<ClickableCodeBlockProps> = ({ code }) => {
-    const { setChatInputValue } = useSessionContext();
+    const { setChatInputValue } = useChatStateContext();
     const [isCopied, setIsCopied] = useState(false);
     if (!code) return null;
     const lines = code.split('\n');
@@ -70,12 +67,13 @@ const FileDisplay: React.FC<{ content: string }> = ({ content }) => {
 };
 
 export const ChatTableOfContents = () => {
-    const { codeB } = useAppContext();
+    const { codeB } = useInputContext();
+    const { reviewedCode, revisedCode } = useOutputContext();
+    const { chatRevisions, chatFiles } = useChatStateContext();
     const {
-        reviewedCode, revisedCode, chatRevisions, chatFiles,
         onClearChatRevisions, onRenameChatRevision, onDeleteChatRevision,
         handleLoadRevisionIntoEditor, onClearChatFiles, onRenameChatFile, onDeleteChatFile
-    } = useSessionContext();
+    } = useSessionActionsContext();
 
   const handleClearRevisions = () => {
     if (window.confirm('Are you sure you want to clear all code revisions from this chat? This cannot be undone.')) {

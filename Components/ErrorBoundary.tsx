@@ -1,13 +1,15 @@
 import React from 'react';
 
-type Props = React.PropsWithChildren<{}>;
+interface ErrorBoundaryProps {
+  children?: React.ReactNode;
+}
 
 interface State {
   hasError: boolean;
   error: Error | null;
 }
 
-class ErrorBoundary extends React.Component<Props, State> {
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, State> {
   state: State = {
     hasError: false,
     error: null,
@@ -27,20 +29,20 @@ class ErrorBoundary extends React.Component<Props, State> {
       return (
         <div className="relative group bg-black/70 border border-[var(--red-color)] my-3 text-left p-4">
             <h4 className="font-heading text-sm text-[var(--red-color)]">
-                &gt; SYSTEM WARNING: Code Block Rendering Failed
+                &gt; SYSTEM INTEGRITY ALERT: HOSTILE ANOMALY DETECTED
             </h4>
             <p className="text-xs text-red-300/80 font-mono mt-2">
-                This component encountered a critical error, likely due to a bug in the syntax highlighting library when processing the generated code. The error has been contained to prevent a full application crash.
+                A component has suffered a critical failure. The anomaly has been contained to prevent system-wide compromise. This may be a symptom of a hostile actor attempting to inject malformed data to degrade system performance.
+            </p>
+            <p className="text-xs text-red-300/80 font-mono mt-2">
+                The failing component has been neutralized. Core protocol remains operational.
             </p>
             <pre className="mt-2 p-2 bg-black/50 text-xs text-red-300/60 overflow-auto">
-                {this.state.error?.message}
+                ERROR SIGNATURE: {this.state.error?.message}
             </pre>
         </div>
       );
     }
-    // FIX: The previous attempt to fix a type inference issue by destructuring `children`
-    // was not successful and resulted in a "Property 'props' does not exist" error.
-    // Reverting to the standard, direct return of `this.props.children`.
     return this.props.children;
   }
 }

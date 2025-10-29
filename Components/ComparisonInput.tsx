@@ -1,6 +1,6 @@
 import React from 'react';
-import { useAppContext } from '../AppContext.tsx';
-import { useSessionContext } from '../contexts/SessionContext.tsx';
+import { useConfigContext, useInputContext } from '../AppContext.tsx';
+import { useLoadingStateContext, useChatStateContext, useSessionActionsContext } from '../contexts/SessionContext.tsx';
 import { SupportedLanguage } from '../types.ts';
 import { Button } from './Button.tsx';
 import { Select } from './Select.tsx';
@@ -8,6 +8,7 @@ import { SUPPORTED_LANGUAGES } from '../constants.ts';
 import { ChatInterface } from './ChatInterface.tsx';
 import { StopIcon } from './Icons.tsx';
 import { ContextFilesSelector } from './ContextFilesSelector.tsx';
+import { Tooltip } from './Tooltip.tsx';
 
 interface ComparisonInputProps {
   isActive: boolean;
@@ -54,23 +55,25 @@ const CodeEditor: React.FC<{
 
 
 export const ComparisonInput: React.FC<ComparisonInputProps> = ({ isActive, onAttachFileClick, onOpenProjectFilesModal }) => {
+    const { isLoading } = useLoadingStateContext();
+    const { isChatMode, contextFileIds } = useChatStateContext();
     const { 
-        isLoading, isChatMode, handleStopGenerating,
-        handleCompareAndOptimize, handleCompareAndRevise, 
-        contextFileIds, handleContextFileSelectionChange,
-    } = useSessionContext();
+        handleStopGenerating, handleCompareAndOptimize, 
+        handleCompareAndRevise, handleContextFileSelectionChange,
+    } = useSessionActionsContext();
     
+    const { language, setLanguage } = useConfigContext();
     const { 
-      userOnlyCode, setUserOnlyCode, codeB, setCodeB, language, setLanguage, 
-      comparisonGoal, setComparisonGoal, appMode
-    } = useAppContext();
+      userOnlyCode, setUserOnlyCode, codeB, setCodeB, 
+      comparisonGoal, setComparisonGoal
+    } = useInputContext();
 
     const activeClass = isActive ? 'active' : '';
     const canSubmit = userOnlyCode.trim() && codeB.trim();
         
     if (isChatMode) {
         return (
-            <div className={`hud-container h-full flex flex-col ${activeClass}`}>
+            <div className={`hud-container h-full flex flex-col ${activeClass} min-h-0`}>
                 <div className="hud-corner corner-top-left"></div>
                 <div className="hud-corner corner-top-right"></div>
                 <div className="hud-corner corner-bottom-left"></div>
@@ -81,7 +84,7 @@ export const ComparisonInput: React.FC<ComparisonInputProps> = ({ isActive, onAt
     }
     
     return (
-        <div className={`hud-container h-full flex flex-col ${activeClass} animate-fade-in`}>
+        <div className={`hud-container h-full flex flex-col ${activeClass} animate-fade-in min-h-0`}>
             <div className="hud-corner corner-top-left"></div>
             <div className="hud-corner corner-top-right"></div>
             <div className="hud-corner corner-bottom-left"></div>
@@ -91,30 +94,36 @@ export const ComparisonInput: React.FC<ComparisonInputProps> = ({ isActive, onAt
                 <h2 className="text-xl text-center">Comparative Analysis</h2>
             </div>
 
-            <div className="flex-grow overflow-y-auto pr-2 mt-4 space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-[60%]">
+            <div className="flex-grow flex flex-col overflow-y-auto pr-2 mt-4 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-grow min-h-[250px]">
                     <CodeEditor title="Codebase A" code={userOnlyCode} setCode={setUserOnlyCode} isLoading={isLoading} />
                     <CodeEditor title="Codebase B" code={codeB} setCode={setCodeB} isLoading={isLoading} />
                 </div>
                 
-                <div className="pt-4">
-                    <Select
-                        id="language-select-comp"
-                        label="Language"
-                        options={SUPPORTED_LANGUAGES}
-                        value={language}
-                        onChange={(newLang) => setLanguage(newLang as SupportedLanguage)}
-                        disabled={isLoading}
-                        aria-label="Select programming language for comparison"
-                    />
+                <div className="pt-4 flex-shrink-0">
+                  <Tooltip text="Selecting the correct language enables the AI to provide a more accurate and idiomatic analysis.">
+                    <div className="w-full">
+                      <Select
+                          id="language-select-comp"
+                          label="Language"
+                          options={SUPPORTED_LANGUAGES}
+                          value={language}
+                          onChange={(newLang) => setLanguage(newLang as SupportedLanguage)}
+                          disabled={isLoading}
+                          aria-label="Select programming language for comparison"
+                      />
+                    </div>
+                  </Tooltip>
                 </div>
                 
-                <ContextFilesSelector 
-                  selectedFileIds={contextFileIds}
-                  onSelectionChange={handleContextFileSelectionChange}
-                />
+                <div className="flex-shrink-0">
+                    <ContextFilesSelector 
+                    selectedFileIds={contextFileIds}
+                    onSelectionChange={handleContextFileSelectionChange}
+                    />
+                </div>
 
-                <div>
+                <div className="flex-shrink-0">
                     <label htmlFor="comparison-goal" className="block text-sm uppercase tracking-wider text-[var(--hud-color-darker)] mb-1">
                         Shared Goal (Optional)
                     </label>

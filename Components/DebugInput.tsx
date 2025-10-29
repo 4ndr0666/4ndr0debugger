@@ -4,13 +4,13 @@ import { useLoadingStateContext, useChatStateContext, useSessionActionsContext }
 import { SupportedLanguage, ReviewProfile } from '../types.ts';
 import { Button } from './Button.tsx';
 import { Select } from './Select.tsx';
-import { SUPPORTED_LANGUAGES, generateReviewerTemplate, PLACEHOLDER_MARKER, REVIEW_PROFILES } from '../constants.ts';
+import { SUPPORTED_LANGUAGES, generateDebuggerTemplate, REVIEW_PROFILES } from '../constants.ts';
 import { ChatInterface } from './ChatInterface.tsx';
 import { StopIcon } from './Icons.tsx';
 import { ContextFilesSelector } from './ContextFilesSelector.tsx';
 import { Tooltip } from './Tooltip.tsx';
 
-interface CodeInputProps {
+interface DebugInputProps {
   isActive: boolean;
   onOpenSaveModal: () => void;
   onSaveChatSession: () => void;
@@ -18,7 +18,7 @@ interface CodeInputProps {
   onOpenProjectFilesModal: () => void;
 }
 
-export const CodeInput: React.FC<CodeInputProps> = (props) => {
+export const DebugInput: React.FC<DebugInputProps> = (props) => {
   const { isActive, onSaveChatSession, onAttachFileClick, onOpenProjectFilesModal } = props;
   const { isLoading, loadingAction } = useLoadingStateContext();
   const { isChatMode, contextFileIds } = useChatStateContext();
@@ -29,9 +29,11 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
   
   const {
     language, setLanguage, reviewProfile, setReviewProfile,
-    customReviewProfile, setCustomReviewProfile,
+    customReviewProfile, setCustomReviewProfile
   } = useConfigContext();
-  const { userOnlyCode, setUserOnlyCode } = useInputContext();
+  const { 
+    userOnlyCode, setUserOnlyCode, errorMessage, setErrorMessage
+  } = useInputContext();
   const { resetAndSetMode } = useActionsContext();
 
   const [selectedText, setSelectedText] = useState('');
@@ -45,8 +47,7 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
 
   const handleSubmit = () => {
     if (userOnlyCode.trim()) {
-      const template = generateReviewerTemplate(language);
-      const fullCode = template.replace(PLACEHOLDER_MARKER, userOnlyCode);
+      const fullCode = generateDebuggerTemplate(language, userOnlyCode, errorMessage);
       handleReviewSubmit(fullCode);
     }
   };
@@ -76,7 +77,7 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
     );
   }
 
-  const title = 'Single Review';
+  const title = 'Debugger';
 
   return (
     <div className={`hud-container h-full flex flex-col ${activeClass} animate-fade-in min-h-0`}>
@@ -98,7 +99,7 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
               <Tooltip text="Selecting the correct language enables the AI to provide a more accurate and idiomatic analysis.">
                 <div className="w-full">
                   <Select
-                    id="language-select"
+                    id="language-select-debug"
                     label="Language"
                     options={SUPPORTED_LANGUAGES}
                     value={language}
@@ -111,7 +112,7 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
             </div>
             <div title="Select an optional profile to focus the AI's analysis on specific criteria.">
               <Select
-                id="review-profile-select"
+                id="review-profile-select-debug"
                 label="Profile"
                 options={[{ value: 'none', label: 'Standard' }, ...REVIEW_PROFILES]}
                 value={reviewProfile}
@@ -124,11 +125,11 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
 
           {reviewProfile === ReviewProfile.CUSTOM && (
             <div className="mt-2 animate-fade-in">
-              <label htmlFor="custom-profile-input" className="block text-sm uppercase tracking-wider text-[var(--hud-color-darker)] mb-1">
+              <label htmlFor="custom-profile-input-debug" className="block text-sm uppercase tracking-wider text-[var(--hud-color-darker)] mb-1">
                 Custom Instructions
               </label>
               <textarea
-                id="custom-profile-input"
+                id="custom-profile-input-debug"
                 className={`${textareaClasses.replace('h-full', '')}`}
                 value={customReviewProfile}
                 onChange={(e) => setCustomReviewProfile(e.target.value)}
@@ -143,11 +144,26 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
             selectedFileIds={contextFileIds}
             onSelectionChange={handleContextFileSelectionChange}
           />
+
+          <div className="mt-2 animate-fade-in">
+            <label htmlFor="error-message-input" className="block text-sm uppercase tracking-wider text-[var(--hud-color-darker)] mb-1">
+              Error Message / Context
+            </label>
+            <textarea
+              id="error-message-input"
+              className={`${textareaClasses.replace('h-full', '')}`}
+              value={errorMessage}
+              onChange={(e) => setErrorMessage(e.target.value)}
+              disabled={isLoading}
+              placeholder="e.g., Paste console logs or error stack trace here."
+              aria-label="Error message input"
+            />
+          </div>
           
           <div className="relative flex-grow min-h-0">
             <textarea
               ref={textareaRef}
-              id="code-input"
+              id="code-input-debug"
               className={textareaClasses}
               value={userOnlyCode}
               onChange={(e) => setUserOnlyCode(e.target.value)}
@@ -167,7 +183,7 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
             )}
             {userOnlyCode && !isLoading && (
               <button
-                onClick={(e) => { e.preventDefault(); resetAndSetMode('single'); }}
+                onClick={(e) => { e.preventDefault(); resetAndSetMode('debug'); }}
                 className="absolute top-3 right-3 p-1 text-[var(--hud-color)] hover:text-white transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-transparent focus:ring-[var(--hud-color)] rounded-full"
                 aria-label="Clear and start new review"
               >
@@ -188,14 +204,14 @@ export const CodeInput: React.FC<CodeInputProps> = (props) => {
                       onClick={handleSubmit} 
                       className="w-full sm:w-auto flex-grow"
                       aria-label="Submit code for review"
-                      title="Submit your code for a standard analysis of quality, bugs, and style."
+                      title="Submit your code and error message for debugging."
                   >
-                      Review Code
+                      Debug Code
                   </Button>
               </div>
             )}
 
-            {isLoading && (loadingAction === 'review' || loadingAction === 'review-selection' || loadingAction === 'comparison') && (
+            {isLoading && (loadingAction === 'review' || loadingAction === 'review-selection') && (
               <div className="w-full flex justify-center animate-fade-in">
                   <Button 
                       onClick={handleStopGenerating} 

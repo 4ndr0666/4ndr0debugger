@@ -58,6 +58,8 @@ export const Select = ({
       document.addEventListener('mousedown', handleClickOutside);
       const currentIndex = options.findIndex(o => o.value === value);
       setHighlightedIndex(currentIndex >= 0 ? currentIndex : 0);
+      // Focus the list for keyboard navigation when it opens
+      listRef.current?.focus();
     } else {
       document.removeEventListener('mousedown', handleClickOutside);
     }

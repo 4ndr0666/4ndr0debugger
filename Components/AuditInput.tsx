@@ -1,23 +1,24 @@
 import React from 'react';
-import { useAppContext } from '../AppContext.tsx';
-import { useSessionContext } from '../contexts/SessionContext.tsx';
+import { useConfigContext, useInputContext } from '../AppContext.tsx';
+import { useLoadingStateContext, useSessionActionsContext, useChatStateContext } from '../contexts/SessionContext.tsx';
 import { SupportedLanguage } from '../types.ts';
 import { Button } from './Button.tsx';
 import { Select } from './Select.tsx';
 import { SUPPORTED_LANGUAGES } from '../constants.ts';
 import { StopIcon } from './Icons.tsx';
 import { ContextFilesSelector } from './ContextFilesSelector.tsx';
+import { Tooltip } from './Tooltip.tsx';
 
 interface AuditInputProps {
   isActive: boolean;
 }
 
 export const AuditInput: React.FC<AuditInputProps> = ({ isActive }) => {
-  const { 
-    isLoading, handleAuditSubmit, handleStopGenerating, 
-    contextFileIds, handleContextFileSelectionChange 
-  } = useSessionContext();
-  const { userOnlyCode, setUserOnlyCode, language, setLanguage } = useAppContext();
+  const { isLoading } = useLoadingStateContext();
+  const { handleAuditSubmit, handleStopGenerating, handleContextFileSelectionChange } = useSessionActionsContext();
+  const { contextFileIds } = useChatStateContext(); // contextFileIds is now in ChatStateContext
+  const { userOnlyCode, setUserOnlyCode } = useInputContext();
+  const { language, setLanguage } = useConfigContext();
   
   const activeClass = isActive ? 'active' : '';
   const canSubmit = userOnlyCode.trim() !== '';
@@ -30,7 +31,7 @@ export const AuditInput: React.FC<AuditInputProps> = ({ isActive }) => {
   `.trim().replace(/\s+/g, ' ');
 
   return (
-    <div className={`hud-container h-full flex flex-col ${activeClass} animate-fade-in`}>
+    <div className={`hud-container h-full flex flex-col ${activeClass} animate-fade-in min-h-0`}>
       <div className="hud-corner corner-top-left"></div>
       <div className="hud-corner corner-top-right"></div>
       <div className="hud-corner corner-bottom-left"></div>
@@ -46,21 +47,25 @@ export const AuditInput: React.FC<AuditInputProps> = ({ isActive }) => {
             <p className="text-sm text-center text-[var(--hud-color-darker)] mb-4">
                 Provide your code for a comprehensive security audit based on industry best practices.
             </p>
-            <Select
-                id="language-select-audit"
-                label="Language"
-                options={SUPPORTED_LANGUAGES}
-                value={language}
-                onChange={(newLang) => setLanguage(newLang as SupportedLanguage)}
-                disabled={isLoading}
-            />
+            <Tooltip text="Selecting the correct language enables the AI to provide a more accurate and idiomatic analysis.">
+              <div className="w-full">
+                <Select
+                    id="language-select-audit"
+                    label="Language"
+                    options={SUPPORTED_LANGUAGES}
+                    value={language}
+                    onChange={(newLang) => setLanguage(newLang as SupportedLanguage)}
+                    disabled={isLoading}
+                />
+              </div>
+            </Tooltip>
             
             <ContextFilesSelector 
                 selectedFileIds={contextFileIds}
                 onSelectionChange={handleContextFileSelectionChange}
             />
 
-            <div className="relative flex-grow min-h-[250px] mt-4">
+            <div className="relative flex-grow min-h-0 mt-4">
                 <textarea
                 id="code-input-audit"
                 className={textareaClasses}

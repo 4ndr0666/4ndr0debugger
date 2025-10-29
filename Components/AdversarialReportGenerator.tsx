@@ -2,7 +2,8 @@ import React, { useState, useCallback } from 'react';
 import { Button } from './Button.tsx';
 import { MarkdownRenderer } from './MarkdownRenderer.tsx';
 import { CheckIcon, CopyIcon, ImportIcon } from './Icons.tsx';
-import { LoadingSpinner } from './LoadingSpinner.tsx';
+import { AnalysisProgress } from './AnalysisProgress.tsx';
+import { useSessionActionsContext } from '../contexts/SessionContext.tsx';
 
 interface AdversarialReportGeneratorProps {
   isOpen: boolean;
@@ -11,6 +12,13 @@ interface AdversarialReportGeneratorProps {
   isLoading: boolean;
   reportContent: string | null;
 }
+
+const reportGenerationSteps = [
+  "Analyzing recon data...",
+  "Identifying potential exploit chains...",
+  "Estimating CVSS scores...",
+  "Formatting high-impact report...",
+];
 
 export const AdversarialReportGenerator: React.FC<AdversarialReportGeneratorProps> = ({
   isOpen,
@@ -196,10 +204,7 @@ export const AdversarialReportGenerator: React.FC<AdversarialReportGeneratorProp
             <div className="flex-grow flex flex-col min-h-0">
                 <div className="flex-grow overflow-y-auto pr-2 border border-[var(--hud-color-darkest)] p-3 bg-black/30">
                     {isLoading && !reportContent ? (
-                        <div className="flex flex-col items-center justify-center h-full">
-                            <LoadingSpinner size="w-10 h-10" />
-                            <p className="mt-4 text-sm uppercase tracking-wider">Generating Report...</p>
-                        </div>
+                        <AnalysisProgress steps={reportGenerationSteps} />
                     ) : (
                         <MarkdownRenderer markdown={reportContent || ''} />
                     )}

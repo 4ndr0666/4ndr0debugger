@@ -1,10 +1,8 @@
-
-
 import React, { useRef, useState } from 'react';
-import { useAppContext } from '../AppContext.tsx';
 import { ProjectFile } from '../types.ts';
 import { Button } from './Button.tsx';
 import { BoltIcon, DeleteIcon, ImportIcon, LoadIcon, PaperclipIcon } from './Icons.tsx';
+import { usePersistenceContext } from '../contexts/PersistenceContext.tsx';
 
 interface ProjectFilesModalProps {
   isOpen: boolean;
@@ -32,7 +30,7 @@ export const ProjectFilesModal = ({
     onDeleteFile, onAttachFile, onDownloadFile,
     isLoading = false
 }: ProjectFilesModalProps) => {
-  const { projectFiles } = useAppContext();
+  const { projectFiles } = usePersistenceContext();
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   

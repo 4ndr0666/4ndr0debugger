@@ -1,10 +1,7 @@
-
-
-
 import React from 'react';
 import { Feature } from '../types.ts';
 import { ChatTableOfContents } from './ChatTableOfContents.tsx';
-import { useSessionContext } from '../contexts/SessionContext.tsx';
+import { useChatStateContext, useOutputContext, useSessionActionsContext } from '../contexts/SessionContext.tsx';
 
 const getSourceChipColor = (source: Feature['source']) => {
   switch (source) {
@@ -39,7 +36,8 @@ const FeatureDiscussionContext: React.FC<{ feature: Feature }> = ({ feature }) =
 };
 
 const FinalizationContext: React.FC = () => {
-    const { finalizationSummary, featureDecisions } = useSessionContext();
+    const { finalizationSummary } = useOutputContext();
+    const { featureDecisions } = useSessionActionsContext();
     if (!finalizationSummary) return null;
 
     return (
@@ -92,7 +90,7 @@ const FinalizationContext: React.FC = () => {
 };
 
 export const ChatContext = () => {
-    const { chatContext, activeFeatureForDiscussion } = useSessionContext();
+    const { chatContext, activeFeatureForDiscussion } = useChatStateContext();
 
   if (chatContext === 'feature_discussion' && activeFeatureForDiscussion) {
       return <FeatureDiscussionContext feature={activeFeatureForDiscussion} />;

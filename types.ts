@@ -1,5 +1,3 @@
-
-
 export enum SupportedLanguage {
   JAVASCRIPT = 'JavaScript',
   TYPESCRIPT = 'TypeScript',
@@ -79,6 +77,7 @@ export interface Version {
   feedback: string;
   language: SupportedLanguage;
   timestamp: number;
+  appMode?: AppMode;
   type?: 'review' | 'docs' | 'tests' | 'commit' | 'finalization' | 'audit' | 'root-cause';
   chatHistory?: ChatMessage[];
   chatRevisions?: ChatRevision[];
@@ -114,7 +113,7 @@ export interface FeatureDecisionRecord {
 
 export type LoadingAction = 'review' | 'docs' | 'tests' | 'commit' | 'explain-selection' | 'review-selection' | 'comparison' | 'revise' | 'finalization' | 'generate-name' | 'audit' | 'root-cause' | null;
 
-export type AppMode = 'debug' | 'single' | 'comparison' | 'audit';
+export type AppMode = 'debug' | 'single' | 'comparison' | 'audit' | 'workbench';
 
 export type ChatContext = 'general' | 'feature_discussion' | 'finalization';
 
@@ -124,7 +123,6 @@ export interface FinalizationSummary {
   revised: Feature[];
 }
 
-// FIX: Added missing properties `sessionEndpoint` and `uploadEndpoint`, and reordered for consistency.
 export interface TargetProfile {
   generateEndpoint: string;
   statusEndpoint: string;
@@ -147,3 +145,27 @@ export interface ImportedSession {
   hasChatHistory: boolean;
   sessionState: any; // The full state object from the imported file
 }
+
+export interface UIActions {
+  openThreatVectorModal: () => void;
+  openReconModal: () => void;
+  openExploitStagerModal: () => void;
+  openReportGenerator: () => void;
+  generateTests: () => void;
+  openDocsModal: () => void;
+  openVersionHistory: () => void;
+  openProjectFilesModal: () => void;
+  openSessionManagerModal: () => void;
+  openHelpModal: () => void;
+  openSaveModal: (isChat: boolean) => void;
+  openDiffViewer: () => void;
+}
+
+export type FeatureFlag =
+  | 'red_team_tools'
+  | 'workbench_mode'
+  | 'code_audit_mode'
+  | 'multi_file_context'
+  | 'experimental_features';
+
+export type FeatureFlags = Record<FeatureFlag, boolean>;

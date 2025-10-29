@@ -1,6 +1,3 @@
-
-
-
 import React from 'react';
 import { CodeBlock } from './CodeBlock.tsx';
 import ErrorBoundary from './ErrorBoundary.tsx';
@@ -33,13 +30,23 @@ const parseInlineMarkdown = (text: string): React.ReactNode => {
 
 
 // This component parses a block of text line-by-line and converts it to React elements.
-// It safely handles headings, paragraphs, and unordered lists, avoiding dangerouslySetInnerHTML.
+// It safely handles headings, paragraphs, unordered lists, tables, and a safe subset of HTML.
 const TextBlock: React.FC<{ text: string }> = ({ text }) => {
   if (!text.trim()) return null;
 
-  const lines = text.split('\n');
+  // Pre-process to sanitize HTML: convert safe tags to markdown, strip others.
+  let processedText = text
+    .replace(/<b>(.*?)<\/b>/gi, '**$1**')
+    .replace(/<strong>(.*?)<\/strong>/gi, '**$1**')
+    .replace(/<i>(.*?)<\/i>/gi, '*$1*')
+    .replace(/<em>(.*?)<\/em>/gi, '*$1*')
+    .replace(/<[^>]*>/g, ''); // Strip all other tags
+
+  const lines = processedText.split('\n');
   const elements: React.ReactNode[] = [];
   let listItems: string[] = [];
+  let tableRows: string[][] = [];
+  let isParsingTable = false;
 
   const flushList = (key: string) => {
     if (listItems.length > 0) {
@@ -54,32 +61,79 @@ const TextBlock: React.FC<{ text: string }> = ({ text }) => {
     }
   };
 
+  const flushTable = (key: string) => {
+    if (tableRows.length > 1) { // Need at least a header and one body row
+      const header = tableRows[0];
+      const body = tableRows.slice(1);
+      elements.push(
+        <table key={key} className="my-4 w-full border-collapse border border-[var(--hud-color-darkest)] text-left">
+          <thead>
+            <tr className="bg-black/50">
+              {header.map((cell, i) => (
+                <th key={i} className="p-2 border border-[var(--hud-color-darkest)]">{parseInlineMarkdown(cell.trim())}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {body.map((row, i) => (
+              <tr key={i} className="even:bg-black/20">
+                {row.map((cell, j) => (
+                  <td key={j} className="p-2 border border-[var(--hud-color-darkest)]">{parseInlineMarkdown(cell.trim())}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      );
+    }
+    tableRows = [];
+  };
+
   lines.forEach((line, index) => {
     const key = `line-${index}`;
+    const isTableLine = line.trim().startsWith('|') && line.trim().endsWith('|');
 
-    if (line.startsWith('# ')) {
-      flushList(`ul-before-${key}`);
-      elements.push(<h1 key={key} className="text-2xl font-bold mt-6 mb-2 text-white">{parseInlineMarkdown(line.substring(2))}</h1>);
-    } else if (line.startsWith('## ')) {
-      flushList(`ul-before-${key}`);
-      elements.push(<h2 key={key} className="text-xl font-semibold mt-5 mb-1.5 text-white">{parseInlineMarkdown(line.substring(3))}</h2>);
-    } else if (line.startsWith('### ')) {
-      flushList(`ul-before-${key}`);
-      elements.push(<h3 key={key} className="text-lg font-semibold mt-4 mb-1 text-white">{parseInlineMarkdown(line.substring(4))}</h3>);
-    } else if (line.startsWith('#### ')) {
-      flushList(`ul-before-${key}`);
-      elements.push(<h4 key={key} className="text-base font-semibold mt-3 mb-1 text-white">{parseInlineMarkdown(line.substring(5))}</h4>);
-    } else if (line.startsWith('- ')) {
-      listItems.push(line.substring(2));
+    if (isTableLine) {
+      if (!isParsingTable) {
+        flushList(`ul-before-table-${key}`);
+        isParsingTable = true;
+      }
+      const cells = line.split('|').slice(1, -1);
+      // Ignore the separator line, e.g., |---|---|
+      if (!cells.every(cell => /^-+$/.test(cell.trim()))) {
+        tableRows.push(cells);
+      }
     } else {
-      flushList(`ul-before-${key}`);
-      if (line.trim()) {
-        elements.push(<p key={key}>{parseInlineMarkdown(line)}</p>);
+      if (isParsingTable) {
+        flushTable(`table-${key}`);
+        isParsingTable = false;
+      }
+      
+      if (line.startsWith('# ')) {
+        flushList(`ul-before-${key}`);
+        elements.push(<h1 key={key} className="text-2xl font-bold mt-6 mb-2 text-white">{parseInlineMarkdown(line.substring(2))}</h1>);
+      } else if (line.startsWith('## ')) {
+        flushList(`ul-before-${key}`);
+        elements.push(<h2 key={key} className="text-xl font-semibold mt-5 mb-1.5 text-white">{parseInlineMarkdown(line.substring(3))}</h2>);
+      } else if (line.startsWith('### ')) {
+        flushList(`ul-before-${key}`);
+        elements.push(<h3 key={key} className="text-lg font-semibold mt-4 mb-1 text-white">{parseInlineMarkdown(line.substring(4))}</h3>);
+      } else if (line.startsWith('#### ')) {
+        flushList(`ul-before-${key}`);
+        elements.push(<h4 key={key} className="text-base font-semibold mt-3 mb-1 text-white">{parseInlineMarkdown(line.substring(5))}</h4>);
+      } else if (line.startsWith('- ')) {
+        listItems.push(line.substring(2));
+      } else {
+        flushList(`ul-before-${key}`);
+        if (line.trim()) {
+          elements.push(<p key={key}>{parseInlineMarkdown(line)}</p>);
+        }
       }
     }
   });
 
   flushList(`ul-final`);
+  flushTable(`table-final`);
 
   return <>{elements}</>;
 };
@@ -87,10 +141,11 @@ const TextBlock: React.FC<{ text: string }> = ({ text }) => {
 export const MarkdownRenderer: React.FC<{ 
   markdown: string;
   onSaveGeneratedFile?: (filename: string, content: string) => void; 
-}> = ({ markdown, onSaveGeneratedFile }) => {
+  onLoadCodeIntoWorkbench?: (code: string) => void;
+}> = ({ markdown, onSaveGeneratedFile, onLoadCodeIntoWorkbench }) => {
   if (!markdown) return null;
 
-  const revisedCodeRegex = /(#+\s*(?:REVISED|UPDATED|FULL|OPTIMIZED|ENHANCED)[\s\w]*(?:CODE|REVISION))\s*\n(```(?:[a-zA-Z0-9-]*)\n[\s\S]*?\n```)/gi;
+  const revisedCodeRegex = /(#+\s*(?:REVISED|UPDATED|FULL|OPTIMIZED|ENHANCED)[\s\w]*(?:CODE|REVISION|SCRIPT))\s*\n(```(?:[a-zA-Z0-9-]*)\n[\s\S]*?\n```)/gi;
   const parts = markdown.split(revisedCodeRegex);
 
   const renderRegularPart = (part: string, key: string | number) => {
@@ -128,7 +183,7 @@ export const MarkdownRenderer: React.FC<{
 
             return (
               <ErrorBoundary key={`sub-${subIndex}`}>
-                <CodeBlock code={code.trim()} language={language} />
+                <CodeBlock code={code.trim()} language={language} onLoadCodeIntoWorkbench={onLoadCodeIntoWorkbench} />
               </ErrorBoundary>
             );
           }
@@ -155,7 +210,7 @@ export const MarkdownRenderer: React.FC<{
             return (
               <AccordionItem key={index} title={title} defaultOpen={false}>
                 <ErrorBoundary>
-                  <CodeBlock code={code.trim()} language={language} />
+                  <CodeBlock code={code.trim()} language={language} onLoadCodeIntoWorkbench={onLoadCodeIntoWorkbench} />
                 </ErrorBoundary>
               </AccordionItem>
             );

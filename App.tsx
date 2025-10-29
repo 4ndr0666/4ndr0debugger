@@ -1,10 +1,11 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { AppContextProvider, useAppContext, useToast } from './AppContext.tsx';
-import { SessionProvider, useSessionContext } from './contexts/SessionContext.tsx';
+import { useConfigContext, useInputContext, useActionsContext, useToast } from './AppContext.tsx';
+import { usePersistenceContext } from './contexts/PersistenceContext.tsx';
+import { useOutputContext, useLoadingStateContext, useChatStateContext, useSessionActionsContext } from './contexts/SessionContext.tsx';
 import { Header } from './Components/Header.tsx';
 import { CodeInput } from './Components/CodeInput.tsx';
 import { ReviewOutput } from './Components/ReviewOutput.tsx';
-import { SupportedLanguage, Version, ReviewProfile, AppMode, ImportedSession } from './types.ts';
+import { Version, UIActions, ProjectFile, ImportedSession } from './types.ts';
 import { DiffViewer } from './Components/DiffViewer.tsx';
 import { ComparisonInput } from './Components/ComparisonInput.tsx';
 import { VersionHistoryModal } from './Components/VersionHistoryModal.tsx';
@@ -19,32 +20,38 @@ import { SegmentedControl } from './Components/SegmentedControl.tsx';
 import { LiveReconModal } from './Components/LiveReconModal.tsx';
 import { ExploitStagerModal } from './Components/ExploitStagerModal.tsx';
 import { ThreatVectorModal } from './Components/ThreatVectorModal.tsx';
+import { Workbench } from './Components/Workbench.tsx';
+import { DebugInput } from './Components/DebugInput.tsx';
+import { CURRENT_SESSION_VERSION } from './constants.ts';
+import { HelpModal } from './Components/HelpModal.tsx';
 
-const AppController: React.FC = () => {
+const App: React.FC = () => {
   const { 
-    appMode, language,
-    setLanguage, setProjectFiles, setVersions,
-    setImportedSessions, resetAndSetMode,
-    userOnlyCode, setUserOnlyCode
-  } = useAppContext();
-  
+    appMode, language, reviewProfile, customReviewProfile,
+    targetHostname, setLanguage, setReviewProfile, setCustomReviewProfile, setTargetHostname,
+  } = useConfigContext();
   const {
-    isLoading, isChatLoading, loadingAction, showOutputPanel,
-    isInputPanelVisible, setIsInputPanelVisible, isChatMode,
-    handleStopGenerating, handleReviewSubmit, handleAuditSubmit,
-    handleCompareAndOptimize, handleCompareAndRevise, reviewedCode,
-    revisedCode, handleLoadRevisionIntoEditor,
+    userOnlyCode, setUserOnlyCode, codeB, errorMessage,
+    comparisonGoal, workbenchScript, setWorkbenchScript, setCodeB, setErrorMessage, setComparisonGoal,
+  } = useInputContext();
+  const { resetAndSetMode } = useActionsContext();
+  const { versions, projectFiles, setProjectFiles, setVersions, setImportedSessions } = usePersistenceContext();
+  
+  const { isLoading, isChatLoading, isGeneratingReport } = useLoadingStateContext();
+  const { isInputPanelVisible, isChatMode, chatHistory, chatRevisions, chatFiles, contextFileIds, setAttachments } = useChatStateContext();
+  const { 
+    showOutputPanel, reviewFeedback, revisedCode, reviewedCode, featureMatrix, rawFeatureMatrixJson, 
+    finalizationSummary, finalizationBriefing, adversarialReportContent, fullCodeForReview, outputType
+  } = useOutputContext();
+  const { 
     handleStartFollowUp, handleGenerateTests, handleGenerateAdversarialReport,
-    handleLoadSession,
-    ...sessionCtx
-  } = useSessionContext();
+    handleLoadSession, registerUiActions, resetForNewRequest, handleAutoGenerateVersionName,
+    featureDecisions, setAdversarialReportContent
+  } = useSessionActionsContext();
 
   const { addToast } = useToast();
   
-  // --- View & State specific to AppController ---
   const [activePanel, setActivePanel] = useState<'input' | 'output'>('input');
-
-  // --- Modal State ---
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [isDiffModalOpen, setIsDiffModalOpen] = useState(false);
   const [isVersionHistoryModalOpen, setIsVersionHistoryModalOpen] = useState(false);
@@ -55,6 +62,7 @@ const AppController: React.FC = () => {
   const [isReconModalOpen, setIsReconModalOpen] = useState(false);
   const [isExploitStagerModalOpen, setIsExploitStagerModalOpen] = useState(false);
   const [isThreatVectorModalOpen, setIsThreatVectorModalOpen] = useState(false);
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [versionName, setVersionName] = useState('');
   const [isSavingChat, setIsSavingChat] = useState(false);
   const [isGeneratingName, setIsGeneratingName] = useState<boolean>(false);
@@ -66,11 +74,17 @@ const AppController: React.FC = () => {
     if (hash) {
         try {
             const decodedState = JSON.parse(atob(hash));
-            // Only load "config" state from URL, not session state
             if (decodedState.appMode) resetAndSetMode(decodedState.appMode);
             if (decodedState.language) setLanguage(decodedState.language);
+            if (decodedState.reviewProfile) setReviewProfile(decodedState.reviewProfile);
+            if (decodedState.customReviewProfile) setCustomReviewProfile(decodedState.customReviewProfile);
+            if (decodedState.targetHostname) setTargetHostname(decodedState.targetHostname);
             if (decodedState.userOnlyCode) setUserOnlyCode(decodedState.userOnlyCode);
-            // ... load other config props from useAppContext
+            if (decodedState.codeB) setCodeB(decodedState.codeB);
+            if (decodedState.errorMessage) setErrorMessage(decodedState.errorMessage);
+            if (decodedState.comparisonGoal) setComparisonGoal(decodedState.comparisonGoal);
+            if (decodedState.workbenchScript) setWorkbenchScript(decodedState.workbenchScript);
+
             window.history.replaceState(null, '', window.location.pathname + window.location.search);
             addToast("Session loaded from URL", "info");
         } catch (e) {
@@ -80,29 +94,40 @@ const AppController: React.FC = () => {
     }
   }, []);
 
-  const handleExportSession = () => {
+  useEffect(() => {
+    if (registerUiActions) {
+        const actions: UIActions = {
+            openThreatVectorModal: () => setIsThreatVectorModalOpen(true),
+            openReconModal: () => setIsReconModalOpen(true),
+            openExploitStagerModal: () => setIsExploitStagerModalOpen(true),
+            openReportGenerator: () => setIsReportGeneratorModalOpen(true),
+            generateTests: handleGenerateTests,
+            openDocsModal: () => setIsDocsModalOpen(true),
+            openVersionHistory: () => setIsVersionHistoryModalOpen(true),
+            openProjectFilesModal: () => setIsProjectFilesModalOpen(true),
+            openSessionManagerModal: () => setIsSessionManagerModalOpen(true),
+            openHelpModal: () => setIsHelpModalOpen(true),
+            openSaveModal: (isChat: boolean) => {
+                setIsSavingChat(isChat);
+                setIsSaveModalOpen(true);
+            },
+            openDiffViewer: () => setIsDiffModalOpen(true),
+        };
+        registerUiActions(actions);
+    }
+  }, [registerUiActions, handleGenerateTests]);
+
+
+  const handleExportSession = useCallback(() => {
     try {
-        const { appMode, language, reviewProfile, customReviewProfile, userOnlyCode, codeB, errorMessage, comparisonGoal, versions, projectFiles, targetHostname } = useAppContext();
         const sessionState = {
-            version: "2.0.0", // New version for refactored state
-            // Global Config State
-            appMode, language, reviewProfile, 
-            customReviewProfile,
-            userOnlyCode, codeB, 
-            errorMessage, 
-            comparisonGoal,
-            versions, 
-            projectFiles,
-            targetHostname,
-            
-            // Operational Session State
-            reviewFeedback: sessionCtx.reviewFeedback, revisedCode: revisedCode,
-            reviewedCode: reviewedCode, chatHistory: sessionCtx.chatHistory, 
-            chatRevisions: sessionCtx.chatRevisions, chatFiles: sessionCtx.chatFiles,
-            featureMatrix: sessionCtx.featureMatrix, rawFeatureMatrixJson: sessionCtx.rawFeatureMatrixJson, 
-            featureDecisions: sessionCtx.featureDecisions,
-            finalizationSummary: sessionCtx.finalizationSummary, finalizationBriefing: sessionCtx.finalizationBriefing,
-            contextFileIds: Array.from(sessionCtx.contextFileIds),
+            version: CURRENT_SESSION_VERSION,
+            appMode, language, reviewProfile, customReviewProfile, userOnlyCode, codeB, 
+            errorMessage, comparisonGoal, versions, projectFiles, targetHostname, workbenchScript,
+            reviewFeedback, revisedCode, reviewedCode, chatHistory, chatRevisions, chatFiles,
+            featureMatrix, rawFeatureMatrixJson, featureDecisions,
+            finalizationSummary, finalizationBriefing,
+            contextFileIds: Array.from(contextFileIds),
         };
         const blob = new Blob([JSON.stringify(sessionState, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
@@ -118,13 +143,23 @@ const AppController: React.FC = () => {
         console.error("Failed to export session:", err);
         addToast("Failed to export session.", "error");
     }
-  };
+  }, [
+    appMode, language, reviewProfile, customReviewProfile, userOnlyCode, codeB, 
+    errorMessage, comparisonGoal, versions, projectFiles, targetHostname, 
+    workbenchScript, reviewFeedback, revisedCode, reviewedCode, chatHistory, chatRevisions,
+    chatFiles, featureMatrix, rawFeatureMatrixJson, featureDecisions, finalizationSummary,
+    finalizationBriefing, contextFileIds, addToast
+  ]);
 
   const processImportedSessionFile = (fileContent: string, fileName: string) => {
     try {
         const importedState = JSON.parse(fileContent);
         if (typeof importedState.appMode !== 'string' || typeof importedState.language !== 'string') {
             throw new Error("Invalid session file format.");
+        }
+        
+        if (importedState.version !== CURRENT_SESSION_VERSION) {
+            addToast(`Warning: Session version (${importedState.version || '1.0.0'}) differs from current app version (${CURRENT_SESSION_VERSION}). Some features may not work correctly.`, 'info');
         }
 
         const newSession: ImportedSession = {
@@ -167,7 +202,6 @@ const AppController: React.FC = () => {
 
   const handleShareSession = () => {
     try {
-        const { appMode, language, userOnlyCode, codeB, errorMessage, comparisonGoal, reviewProfile, customReviewProfile } = useAppContext();
         const shareableState = { appMode, language, userOnlyCode, codeB, errorMessage, comparisonGoal, reviewProfile, customReviewProfile };
         const base64State = btoa(JSON.stringify(shareableState));
         const url = new URL(window.location.href);
@@ -200,26 +234,27 @@ const AppController: React.FC = () => {
         id: `version_${Date.now()}`,
         name: versionName.trim(),
         userCode: reviewedCode || userOnlyCode,
-        fullPrompt: sessionCtx.fullCodeForReview,
-        feedback: sessionCtx.reviewFeedback || '',
+        fullPrompt: fullCodeForReview,
+        feedback: reviewFeedback || '',
         language: language,
         timestamp: Date.now(),
+        appMode: appMode,
         type: 'review',
-        rawFeatureMatrixJson: sessionCtx.rawFeatureMatrixJson,
-        reviewProfile: useAppContext().reviewProfile,
-        customReviewProfile: useAppContext().customReviewProfile,
-        comparisonGoal: useAppContext().comparisonGoal,
-        contextFileIds: Array.from(sessionCtx.contextFileIds),
+        rawFeatureMatrixJson: rawFeatureMatrixJson,
+        reviewProfile: reviewProfile,
+        customReviewProfile: customReviewProfile,
+        comparisonGoal: comparisonGoal,
+        contextFileIds: Array.from(contextFileIds),
     };
 
     if (isSavingChat) {
-        newVersion.chatHistory = sessionCtx.chatHistory;
-        newVersion.feedback = sessionCtx.chatHistory.map(msg => `**${msg.role}**: ${msg.content}`).join('\n\n---\n\n');
-        newVersion.chatRevisions = sessionCtx.chatRevisions;
-        newVersion.chatFiles = sessionCtx.chatFiles;
-    } else if (sessionCtx.outputType) {
+        newVersion.chatHistory = chatHistory;
+        newVersion.feedback = chatHistory.map(msg => `**${msg.role}**: ${msg.content}`).join('\n\n---\n\n');
+        newVersion.chatRevisions = chatRevisions;
+        newVersion.chatFiles = chatFiles;
+    } else if (outputType) {
         const typeMap = { 'docs': 'docs', 'tests': 'tests', 'commit': 'commit', 'finalization': 'finalization', 'audit': 'audit', 'root-cause': 'root-cause' };
-        if (typeMap[sessionCtx.outputType]) newVersion.type = typeMap[sessionCtx.outputType] as Version['type'];
+        if (typeMap[outputType]) newVersion.type = typeMap[outputType] as Version['type'];
     }
     
     setVersions(prev => [newVersion, ...prev]);
@@ -229,13 +264,13 @@ const AppController: React.FC = () => {
     
     if (isSavingChat) {
         setIsSavingChat(false);
-        sessionCtx.resetForNewRequest();
+        resetForNewRequest();
     }
-  }, [versionName, isSavingChat, language, addToast, setVersions, sessionCtx, userOnlyCode, reviewedCode, useAppContext]);
+  }, [versionName, isSavingChat, language, addToast, setVersions, userOnlyCode, reviewedCode, reviewProfile, customReviewProfile, comparisonGoal, appMode, fullCodeForReview, reviewFeedback, rawFeatureMatrixJson, contextFileIds, chatHistory, chatRevisions, chatFiles, outputType, resetForNewRequest]);
   
   const handleLoadVersion = (version: Version) => {
     addToast(`Loading version "${version.name}"...`, "info");
-    handleLoadSession(version); // Use the logic from the context
+    handleLoadSession(version);
     setIsVersionHistoryModalOpen(false);
   };
 
@@ -244,14 +279,11 @@ const AppController: React.FC = () => {
       addToast("Version deleted.", "info");
   };
 
-  const handleRenameVersion = (versionId: string, newName:string) => {
+  const handleRenameVersion = (versionId: string, newName: string) => {
       setVersions(prev => prev.map(v => v.id === versionId ? { ...v, name: newName } : v));
       addToast("Version renamed.", "success");
   };
 
-  // ... other top-level handlers like file uploads ...
-  
-    // --- Project File Handlers ---
     const fileToContent = (file: File): Promise<{ content: string; mimeType: string }> => {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -279,7 +311,7 @@ const AppController: React.FC = () => {
                     return { file, content, mimeType };
                 })
             );
-            sessionCtx.setAttachments(prev => [...prev, ...newAttachments]);
+            setAttachments(prev => [...prev, ...newAttachments]);
             addToast(`${newAttachments.length} file(s) attached to chat.`, "info");
         } catch (error) {
             console.error("Failed to read attachments:", error);
@@ -326,7 +358,7 @@ const AppController: React.FC = () => {
         }
     };
 
-    const handleAttachProjectFileToChat = async (projectFile: any) => {
+    const handleAttachProjectFileToChat = async (projectFile: ProjectFile) => {
         try {
             let blob: Blob;
             if (projectFile.mimeType.startsWith('image/')) {
@@ -336,7 +368,7 @@ const AppController: React.FC = () => {
                 blob = new Blob([projectFile.content], { type: projectFile.mimeType });
             }
             const file = new File([blob], projectFile.name, { type: projectFile.mimeType });
-            sessionCtx.setAttachments(prev => [...prev, { file: file, content: projectFile.content, mimeType: projectFile.mimeType }]);
+            setAttachments(prev => [...prev, { file: file, content: projectFile.content, mimeType: projectFile.mimeType }]);
             addToast(`Attached "${projectFile.name}" to chat.`, "success");
             setIsProjectFilesModalOpen(false);
         } catch (error) {
@@ -360,7 +392,6 @@ const AppController: React.FC = () => {
     };
 
   const renderInputComponent = () => {
-    // These components now get their state from context, so we don't pass many props
     const commonProps = {
       isActive: activePanel === 'input',
     };
@@ -372,18 +403,11 @@ const AppController: React.FC = () => {
 
     switch(appMode) {
       case 'single':
+        return <CodeInput {...commonProps} {...chatHandlers} onOpenSaveModal={() => setIsSaveModalOpen(true)} onSaveChatSession={handleSaveChatSession} />;
       case 'debug':
-        return <CodeInput 
-          {...commonProps}
-          {...chatHandlers}
-          onOpenSaveModal={() => setIsSaveModalOpen(true)}
-          onSaveChatSession={handleSaveChatSession}
-        />;
+        return <DebugInput {...commonProps} {...chatHandlers} onOpenSaveModal={() => setIsSaveModalOpen(true)} onSaveChatSession={handleSaveChatSession} />;
       case 'comparison':
-        return <ComparisonInput 
-          {...commonProps}
-          {...chatHandlers}
-        />;
+        return <ComparisonInput {...commonProps} {...chatHandlers} />;
       case 'audit':
         return <AuditInput {...commonProps} />;
       default:
@@ -411,6 +435,7 @@ const AppController: React.FC = () => {
         onImportClick={() => setIsSessionManagerModalOpen(true)}
         onShare={handleShareSession}
         onEndChatSession={handleSaveChatSession}
+        onOpenHelpModal={() => setIsHelpModalOpen(true)}
       />
       <ApiKeyBanner />
       <SegmentedControl
@@ -418,21 +443,32 @@ const AppController: React.FC = () => {
         onModeChange={resetAndSetMode}
         disabled={isLoading || isChatLoading}
       />
-      <main className={`flex-grow container mx-auto px-4 pb-4 sm:px-6 sm:pb-6 lg:px-8 lg:pb-8 grid grid-cols-1 ${isInputPanelVisible && showOutputPanel && !isChatMode ? 'md:grid-cols-2' : ''} gap-6 lg:gap-8 animate-fade-in overflow-hidden`}>
-          {isInputPanelVisible && (
-            <div className={`min-h-0 ${isChatMode ? 'md:col-span-2' : ''}`} onClick={() => !isChatMode && setActivePanel('input')}>
-              {renderInputComponent()}
-            </div>
-          )}
-          
-          {showOutputPanel && !isChatMode && (
-            <div className="min-h-0" onClick={() => setActivePanel('output')}>
-                <ReviewOutput
-                  onSaveVersion={() => setIsSaveModalOpen(true)}
-                  onShowDiff={() => setIsDiffModalOpen(true)}
-                  isActive={activePanel === 'output'}
-                />
-            </div>
+      <main className={`flex-grow min-h-0 container mx-auto px-4 pb-4 sm:px-6 sm:pb-6 lg:px-8 lg:pb-8 grid grid-cols-1 ${isInputPanelVisible && showOutputPanel && !isChatMode && appMode !== 'workbench' ? 'md:grid-cols-[2fr_3fr]' : ''} gap-6 lg:gap-8 animate-fade-in overflow-hidden`}>
+          {appMode === 'workbench' ? (
+              <Workbench 
+                  onAttachFileClick={() => attachFileInputRef.current?.click()}
+                  onOpenProjectFilesModal={() => setIsProjectFilesModalOpen(true)}
+                  onSaveChatSession={handleSaveChatSession}
+                  onLoadCodeIntoWorkbench={setWorkbenchScript}
+              />
+          ) : (
+            <>
+              {isInputPanelVisible && (
+                <div className={`min-h-0 ${isChatMode ? 'md:col-span-2' : ''}`} onClick={() => !isChatMode && setActivePanel('input')}>
+                  {renderInputComponent()}
+                </div>
+              )}
+              
+              {showOutputPanel && !isChatMode && (
+                <div className="min-h-0" onClick={() => setActivePanel('output')}>
+                    <ReviewOutput
+                      onSaveVersion={() => setIsSaveModalOpen(true)}
+                      onShowDiff={() => setIsDiffModalOpen(true)}
+                      isActive={activePanel === 'output'}
+                    />
+                </div>
+              )}
+            </>
           )}
       </main>
       <footer className="py-4 text-center">
@@ -458,11 +494,11 @@ const AppController: React.FC = () => {
               setVersionName={setVersionName}
               onAutoGenerate={async () => {
                 setIsGeneratingName(true);
-                await sessionCtx.handleAutoGenerateVersionName(isSavingChat, setVersionName);
+                await handleAutoGenerateVersionName(isSavingChat, setVersionName);
                 setIsGeneratingName(false);
               }}
               isGeneratingName={isGeneratingName}
-              outputType={sessionCtx.outputType}
+              outputType={outputType}
               isSavingChat={isSavingChat}
               disabled={isLoading}
           />
@@ -505,11 +541,11 @@ const AppController: React.FC = () => {
         isOpen={isReportGeneratorModalOpen}
         onClose={() => {
             setIsReportGeneratorModalOpen(false);
-            sessionCtx.setAdversarialReportContent(null);
+            setAdversarialReportContent(null);
         }}
         onGenerate={handleGenerateAdversarialReport}
-        isLoading={sessionCtx.isGeneratingReport || isLoading}
-        reportContent={sessionCtx.adversarialReportContent}
+        isLoading={isGeneratingReport || isLoading}
+        reportContent={adversarialReportContent}
       />
       <LiveReconModal
         isOpen={isReconModalOpen}
@@ -523,23 +559,11 @@ const AppController: React.FC = () => {
         isOpen={isThreatVectorModalOpen}
         onClose={() => setIsThreatVectorModalOpen(false)}
       />
+      <HelpModal
+        isOpen={isHelpModalOpen}
+        onClose={() => setIsHelpModalOpen(false)}
+      />
     </div>
-  );
-};
-
-// The main App component now simply provides the context and renders the controller.
-const App: React.FC = () => {
-  const [resetCount, setResetCount] = useState(0);
-  const handleReset = () => {
-    setResetCount(c => c + 1);
-  };
-
-  return (
-    <AppContextProvider onReset={handleReset}>
-      <SessionProvider key={resetCount}>
-        <AppController />
-      </SessionProvider>
-    </AppContextProvider>
   );
 };
 

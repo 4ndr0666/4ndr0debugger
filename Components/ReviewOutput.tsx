@@ -1,13 +1,13 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react';
-import { useAppContext } from '../AppContext.tsx';
-import { useSessionContext } from '../contexts/SessionContext.tsx';
+import { useConfigContext, useInputContext } from '../AppContext.tsx';
+import { useOutputContext, useLoadingStateContext, useSessionActionsContext } from '../contexts/SessionContext.tsx';
 import { MarkdownRenderer } from './MarkdownRenderer.tsx';
 import { AppMode, ReviewProfile } from '../types.ts';
-import { SaveIcon, CopyIcon, CheckIcon, CompareIcon, ChatIcon, CommitIcon, BugIcon, BoltIcon, ImportIcon, RootCauseIcon, PayloadIcon } from './Icons.tsx';
+import { SaveIcon, CopyIcon, CheckIcon, CompareIcon, ChatIcon, CommitIcon, BugIcon, BoltIcon, ImportIcon, RootCauseIcon } from './Icons.tsx';
 import { LoadingSpinner } from './LoadingSpinner.tsx';
 import { Button } from './Button.tsx';
 import { FeatureMatrix } from './FeatureMatrix.tsx';
-import { PayloadSynthesizer } from './PayloadSynthesizer.tsx';
+import { Tooltip } from './Tooltip.tsx';
 
 interface ReviewOutputProps {
   onSaveVersion: () => void;
@@ -58,17 +58,19 @@ const AnalysisLoader: React.FC = () => {
 export const ReviewOutput = ({ 
     onSaveVersion, isActive, onShowDiff
 }: ReviewOutputProps) => {
-  const { appMode, reviewProfile, userOnlyCode, errorMessage } = useAppContext();
-  const {
-      reviewFeedback: feedback, revisedCode, isLoading, isChatLoading, loadingAction,
-      error, handleStartFollowUp, handleGenerateCommitMessage, reviewAvailable,
-      featureMatrix, featureDecisions, setFeatureDecisions, allFeaturesDecided,
-      handleFinalizeComparison, handleDownloadOutput, onSaveGeneratedFile, handleAnalyzeRootCause,
-      outputType, commitMessageAvailable
-  } = useSessionContext();
+  const { appMode } = useConfigContext();
+  const { 
+      reviewFeedback: feedback, error, featureMatrix, outputType, 
+      reviewAvailable, commitMessageAvailable
+  } = useOutputContext();
+  const { isLoading, isChatLoading, loadingAction } = useLoadingStateContext();
+  const { 
+      handleStartFollowUp, handleGenerateCommitMessage, setFeatureDecisions, 
+      allFeaturesDecided, handleFinalizeComparison, handleDownloadOutput, 
+      onSaveGeneratedFile, handleAnalyzeRootCause, featureDecisions
+  } = useSessionActionsContext();
 
   const [copied, setCopied] = useState(false);
-  const [showSynthesizer, setShowSynthesizer] = useState(false);
   const showLoading = isLoading || isChatLoading;
   const canCopy = !showLoading && !error && feedback;
 
@@ -106,10 +108,6 @@ export const ReviewOutput = ({
     }
   }, [showLoading, loadingAction, outputType, appMode]);
   
-  useEffect(() => {
-    setShowSynthesizer(false);
-  }, [feedback]);
-
 
   useEffect(() => {
     const contentElement = contentRef.current;
@@ -129,7 +127,7 @@ export const ReviewOutput = ({
   const loadingPulseClass = isLoading && feedback ? 'is-loading-streaming' : '';
 
   return (
-    <div className={`hud-container min-h-[200px] flex flex-col h-full ${activeClass} ${loadingPulseClass} animate-fade-in ${showLoadingPlaceholder ? 'border-transparent bg-transparent shadow-none' : ''}`}>
+    <div className={`hud-container flex flex-col h-full min-h-0 ${activeClass} ${loadingPulseClass} animate-fade-in ${showLoadingPlaceholder ? 'border-transparent bg-transparent shadow-none' : ''}`}>
       {!showLoadingPlaceholder && (
         <>
             <div className="hud-corner corner-top-left"></div>
@@ -144,14 +142,15 @@ export const ReviewOutput = ({
         </h2>
         <div className="absolute right-0 flex items-center space-x-1">
           {canCopy && (
-            <button
-              onClick={handleCopy}
-              className="p-2 text-[var(--hud-color)] rounded-full transition-all duration-200 hover:bg-[var(--hud-color)]/30 hover:text-white focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)]"
-              aria-label={copied ? "Copied!" : "Copy Full Output"}
-              title={copied ? "Copied!" : "Copy Full Output"}
-            >
-              {copied ? <CheckIcon className="w-5 h-5 text-green-400" /> : <CopyIcon className="w-5 h-5" />}
-            </button>
+            <Tooltip text={copied ? "Copied!" : "Copy Full Output"}>
+                <button
+                onClick={handleCopy}
+                className="p-2 text-[var(--hud-color)] rounded-full transition-all duration-200 hover:bg-[var(--hud-color)]/30 hover:text-white focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)]"
+                aria-label={copied ? "Copied!" : "Copy Full Output"}
+                >
+                {copied ? <CheckIcon className="w-5 h-5 text-green-400" /> : <CopyIcon className="w-5 h-5" />}
+                </button>
+            </Tooltip>
           )}
         </div>
       </div>
@@ -172,9 +171,7 @@ export const ReviewOutput = ({
             ref={contentRef}
             className="overflow-auto h-full pr-2 text-[var(--hud-color-darker)] leading-relaxed"
             >
-            {showSynthesizer ? (
-              <PayloadSynthesizer initialCode={revisedCode || userOnlyCode} onClose={() => setShowSynthesizer(false)} />
-            ) : outputType === 'revise' && featureMatrix ? (
+            {outputType === 'revise' && featureMatrix ? (
               <FeatureMatrix features={featureMatrix} decisions={featureDecisions} onDecision={(feature, decision) => setFeatureDecisions(prev => ({ ...prev, [feature.name]: { decision } }))} />
             ) : (
               feedback && <div className="space-y-4"><MarkdownRenderer markdown={feedback} onSaveGeneratedFile={onSaveGeneratedFile} />{isLoading && <span className="animate-blink inline-block">_</span>}</div>
@@ -183,15 +180,17 @@ export const ReviewOutput = ({
         )}
       </div>
 
-      {!isLoading && !error && reviewAvailable && !showSynthesizer && (
+      {!isLoading && !error && reviewAvailable && (
         <div className="flex-shrink-0 pt-4 mt-4 border-t border-[var(--hud-color-darker)] flex flex-wrap justify-center items-center gap-3 animate-fade-in">
             {outputType === 'revise' ? (
               <>
                 {allFeaturesDecided ? (
-                    <Button onClick={handleFinalizeComparison} variant="primary" className="post-review-button w-full">
-                        <BoltIcon className="w-4 h-4 mr-2" />
-                        Finalize Revision
-                    </Button>
+                    <Tooltip text="Instruct the AI to generate a final, unified codebase based on your decisions.">
+                        <Button onClick={handleFinalizeComparison} variant="primary" className="post-review-button w-full">
+                            <BoltIcon className="w-4 h-4 mr-2" />
+                            Finalize Revision
+                        </Button>
+                    </Tooltip>
                 ) : (
                   <p className="text-xs text-center text-[var(--hud-color-darker)] animate-fade-in">
                       Make a decision for each feature to proceed.
@@ -200,47 +199,55 @@ export const ReviewOutput = ({
               </>
             ) : (
               <>
-                {reviewProfile === ReviewProfile.REDTEAM && (
-                  <Button onClick={() => setShowSynthesizer(true)} variant="danger" className="post-review-button">
-                    <PayloadIcon className="w-4 h-4 mr-2" />
-                    Synthesize Payload
-                  </Button>
-                )}
                 {outputType === 'docs' && (
-                  <Button onClick={handleDownloadOutput} variant="primary" className="post-review-button">
-                    <ImportIcon className="w-4 h-4 mr-2" />
-                    Download .md
-                  </Button>
+                  <Tooltip text="Download the generated documentation as a Markdown file.">
+                    <Button onClick={handleDownloadOutput} variant="primary" className="post-review-button">
+                        <ImportIcon className="w-4 h-4 mr-2" />
+                        Download .md
+                    </Button>
+                  </Tooltip>
                 )}
-                {appMode === 'debug' && reviewAvailable && revisedCode && (
-                  <Button onClick={handleAnalyzeRootCause} variant="primary" className="post-review-button">
-                      <RootCauseIcon className="w-4 h-4 mr-2"/>
-                      Analyze Root Cause
-                  </Button>
+                {appMode === 'debug' && reviewAvailable && (
+                  <Tooltip text="Ask the AI to analyze the underlying architectural or logical flaw that caused the bug.">
+                    <Button onClick={handleAnalyzeRootCause} variant="primary" className="post-review-button">
+                        <RootCauseIcon className="w-4 h-4 mr-2"/>
+                        Analyze Root Cause
+                    </Button>
+                  </Tooltip>
                 )}
                 {appMode === 'single' ? (
-                  <Button onClick={() => handleStartFollowUp()} disabled={!reviewAvailable} variant="primary" className="post-review-button">
-                      <BugIcon className="w-4 h-4 mr-2"/>
-                      Debugger
-                  </Button>
+                  <Tooltip text="Move the code and analysis to the Debugger for further iteration.">
+                    <Button onClick={() => handleStartFollowUp()} disabled={!reviewAvailable} variant="primary" className="post-review-button">
+                        <BugIcon className="w-4 h-4 mr-2"/>
+                        Debugger
+                    </Button>
+                  </Tooltip>
                 ) : (
-                  <Button onClick={onShowDiff} disabled={!commitMessageAvailable} variant="primary" className="post-review-button">
-                      <CompareIcon className="w-4 h-4 mr-2"/>
-                      Show Diff
-                  </Button>
+                  <Tooltip text="Show a side-by-side comparison of the original and revised code.">
+                    <Button onClick={onShowDiff} disabled={!commitMessageAvailable} variant="primary" className="post-review-button">
+                        <CompareIcon className="w-4 h-4 mr-2"/>
+                        Show Diff
+                    </Button>
+                  </Tooltip>
                 )}
-                <Button onClick={handleGenerateCommitMessage} disabled={!commitMessageAvailable} variant="primary" className="post-review-button">
-                    <CommitIcon className="w-4 h-4 mr-2" />
-                    Generate Commit
-                </Button>
-                <Button onClick={() => handleStartFollowUp()} variant="primary" className="post-review-button">
-                    <ChatIcon className="w-4 h-4 mr-2" />
-                    {followUpButtonText}
-                </Button>
-                <Button onClick={onSaveVersion} variant="primary" className="post-review-button">
-                    <SaveIcon className="w-4 h-4 mr-2" />
-                    Save Version
-                </Button>
+                <Tooltip text="Generate a conventional commit message based on the code changes.">
+                    <Button onClick={handleGenerateCommitMessage} disabled={!commitMessageAvailable} variant="primary" className="post-review-button">
+                        <CommitIcon className="w-4 h-4 mr-2" />
+                        Generate Commit
+                    </Button>
+                </Tooltip>
+                <Tooltip text="Start an interactive chat session to ask questions or request modifications.">
+                    <Button onClick={() => handleStartFollowUp()} variant="primary" className="post-review-button">
+                        <ChatIcon className="w-4 h-4 mr-2" />
+                        {followUpButtonText}
+                    </Button>
+                </Tooltip>
+                <Tooltip text="Save this entire review session as a named version to load later.">
+                    <Button onClick={onSaveVersion} variant="primary" className="post-review-button">
+                        <SaveIcon className="w-4 h-4 mr-2" />
+                        Save Version
+                    </Button>
+                </Tooltip>
               </>
             )}
         </div>
