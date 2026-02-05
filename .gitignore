@@ -28,3 +28,4 @@ dist-ssr
 .env*
 0-tests/*
 CHANGELOG.md
+text_versions
