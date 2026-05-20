@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { GEMINI_MODELS } from './constants.ts';
 import { ProjectFile } from './types.ts';
@@ -51,33 +50,69 @@ class GeminiService {
   }
 
   async streamRequest(
-    { contents, systemInstruction, model, abortSignal, onChunk }: 
-    { contents: string | { parts: any[] }; systemInstruction: string; model: string; abortSignal: AbortSignal; onChunk: (chunkText: string) => void }
+    { contents, systemInstruction, model, abortSignal, onChunk, tools }: 
+    { 
+        contents: string | { parts: any[] }; 
+        systemInstruction: string; 
+        model: string; 
+        abortSignal: AbortSignal; 
+        onChunk: (chunkText: string) => void;
+        tools?: any[];
+    }
   ): Promise<string> {
     if (!this.ai) {
       throw new Error("API Key not configured.");
     }
     
+    const config: any = {
+        systemInstruction: systemInstruction,
+        temperature: 0.7,
+        maxOutputTokens: 8192,
+    };
+    
+    if (tools) {
+        config.tools = tools;
+    }
+
     const responseStream = await this.ai.models.generateContentStream({
       model: model,
       contents: contents,
-      config: {
-        systemInstruction: systemInstruction,
-        temperature: 0.3,
-        maxOutputTokens: 8192,
-      },
+      config: config,
     });
 
     let fullResponse = "";
+    let groundingUrls: Set<string> = new Set();
+
     for await (const chunk of responseStream) {
       if (abortSignal.aborted) {
         console.log("Stream aborted by user.");
         throw new Error("STREAM_ABORTED");
       }
       const chunkText = chunk.text;
-      fullResponse += chunkText;
-      onChunk(chunkText);
+      if (chunkText) {
+          fullResponse += chunkText;
+          onChunk(chunkText);
+      }
+      
+      // Extract grounding metadata to provide sources
+      if (chunk.candidates?.[0]?.groundingMetadata?.groundingChunks) {
+          chunk.candidates[0].groundingMetadata.groundingChunks.forEach((c: any) => {
+              if (c.web?.uri) {
+                  groundingUrls.add(c.web.uri);
+              }
+          });
+      }
     }
+    
+    // Append unique sources to the end of the response if found
+    if (groundingUrls.size > 0) {
+        const sourcesHeader = "\n\n### Sources\n";
+        const sourcesList = Array.from(groundingUrls).map(url => `- ${url}`).join('\n');
+        const sourcesText = sourcesHeader + sourcesList;
+        fullResponse += sourcesText;
+        onChunk(sourcesText);
+    }
+
     return fullResponse;
   }
   

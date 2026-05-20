@@ -2,6 +2,7 @@ import React, { createContext, useState, useContext, useMemo, useCallback } from
 import { AppMode, SupportedLanguage, Toast, ReviewProfile } from './types.ts';
 import { SUPPORTED_LANGUAGES } from './constants.ts';
 import { ToastContainer } from './Components/ToastContainer.tsx';
+import { usePersistentState } from './contexts/PersistenceContext.tsx';
 
 // --- Toast Context ---
 interface ToastContextType {
@@ -64,12 +65,10 @@ export interface InputContextType {
   codeB: string;
   errorMessage: string;
   comparisonGoal: string;
-  workbenchScript: string;
   setUserOnlyCode: React.Dispatch<React.SetStateAction<string>>;
   setCodeB: React.Dispatch<React.SetStateAction<string>>;
   setErrorMessage: React.Dispatch<React.SetStateAction<string>>;
   setComparisonGoal: React.Dispatch<React.SetStateAction<string>>;
-  setWorkbenchScript: React.Dispatch<React.SetStateAction<string>>;
 }
 const InputContext = createContext<InputContextType | undefined>(undefined);
 
@@ -79,21 +78,55 @@ export interface ActionsContextType {
 }
 const ActionsContext = createContext<ActionsContextType | undefined>(undefined);
 
+// These keys represent session-specific state that should be cleared when changing modes.
+const SESSION_STATE_KEYS_TO_CLEAR = [
+    // from InputContext
+    'input_userOnlyCode',
+    'input_codeB',
+    'input_errorMessage',
+    'input_comparisonGoal',
+    // from SessionContext
+    'session_reviewFeedback',
+    'session_revisedCode',
+    'session_reviewedCode',
+    'session_fullCodeForReview',
+    'session_featureMatrix',
+    'session_rawFeatureMatrixJson',
+    'session_featureDecisions',
+    'session_finalizationSummary',
+    'session_finalizationBriefing',
+    'session_isInputPanelVisible',
+    'session_isChatMode',
+    'session_chatHistory',
+    'session_chatInputValue',
+    'session_chatRevisions',
+    'session_chatFiles',
+    'session_chatContext',
+    'session_activeFeatureForDiscussion',
+    'session_adversarialReportContent',
+    'session_threatVectorReport',
+    'session_contextFileIds',
+    'session_outputType',
+];
+
 
 // --- Combined Provider ---
 export const GlobalStateProvider: React.FC<React.PropsWithChildren<{ onReset: () => void }>> = ({ children, onReset }) => {
-  const [appMode, setAppMode] = useState<AppMode>('debug');
-  const [language, setLanguage] = useState<SupportedLanguage>(SUPPORTED_LANGUAGES[0].value);
-  const [reviewProfile, setReviewProfile] = useState<ReviewProfile | 'none'>('none');
-  const [customReviewProfile, setCustomReviewProfile] = useState<string>('');
-  const [userOnlyCode, setUserOnlyCode] = useState<string>(''); // Code A
-  const [codeB, setCodeB] = useState<string>('');
-  const [errorMessage, setErrorMessage] = useState<string>('');
-  const [comparisonGoal, setComparisonGoal] = useState<string>('');
-  const [targetHostname, setTargetHostname] = useState<string>('');
-  const [workbenchScript, setWorkbenchScript] = useState<string>('// Paste your script here to begin analysis...');
+  const [appMode, setAppMode] = usePersistentState<AppMode>('config_appMode', 'debug');
+  const [language, setLanguage] = usePersistentState<SupportedLanguage>('config_language', SUPPORTED_LANGUAGES[0].value);
+  const [reviewProfile, setReviewProfile] = usePersistentState<ReviewProfile | 'none'>('config_reviewProfile', 'none');
+  const [customReviewProfile, setCustomReviewProfile] = usePersistentState<string>('config_customReviewProfile', '');
+  const [userOnlyCode, setUserOnlyCode] = usePersistentState<string>('input_userOnlyCode', ''); // Code A
+  const [codeB, setCodeB] = usePersistentState<string>('input_codeB', '');
+  const [errorMessage, setErrorMessage] = usePersistentState<string>('input_errorMessage', '');
+  const [comparisonGoal, setComparisonGoal] = usePersistentState<string>('input_comparisonGoal', '');
+  const [targetHostname, setTargetHostname] = usePersistentState<string>('config_targetHostname', '');
   
   const resetAndSetMode = useCallback((mode: AppMode) => {
+    // Phase 1: Atomically purge all session-related keys from physical storage
+    SESSION_STATE_KEYS_TO_CLEAR.forEach(key => window.localStorage.removeItem(key));
+
+    // Phase 2: Force global state update to reset in-memory buffers
     setAppMode(mode);
     setReviewProfile('none');
     setCustomReviewProfile('');
@@ -101,9 +134,11 @@ export const GlobalStateProvider: React.FC<React.PropsWithChildren<{ onReset: ()
     setCodeB('');
     setErrorMessage('');
     setComparisonGoal('');
-    setWorkbenchScript('// Paste your script here to begin analysis...');
+    
+    // Phase 3: Trigger the remount of SessionProvider via parent resetCount
+    // This ensures all hooks and local state in children are re-initialized
     onReset();
-  }, [onReset]);
+  }, [onReset, setAppMode, setReviewProfile, setCustomReviewProfile, setUserOnlyCode, setCodeB, setErrorMessage, setComparisonGoal]);
 
   const configValue: ConfigContextType = useMemo(() => ({
     appMode, setAppMode,
@@ -111,15 +146,14 @@ export const GlobalStateProvider: React.FC<React.PropsWithChildren<{ onReset: ()
     reviewProfile, setReviewProfile,
     customReviewProfile, setCustomReviewProfile,
     targetHostname, setTargetHostname,
-  }), [appMode, language, reviewProfile, customReviewProfile, targetHostname]);
+  }), [appMode, language, reviewProfile, customReviewProfile, targetHostname, setAppMode, setLanguage, setReviewProfile, setCustomReviewProfile, setTargetHostname]);
 
   const inputValue: InputContextType = useMemo(() => ({
     userOnlyCode, setUserOnlyCode,
     codeB, setCodeB,
     errorMessage, setErrorMessage,
     comparisonGoal, setComparisonGoal,
-    workbenchScript, setWorkbenchScript,
-  }), [userOnlyCode, codeB, errorMessage, comparisonGoal, workbenchScript]);
+  }), [userOnlyCode, codeB, errorMessage, comparisonGoal, setUserOnlyCode, setCodeB, setErrorMessage, setComparisonGoal]);
 
   const actionsValue: ActionsContextType = useMemo(() => ({
     resetAndSetMode,

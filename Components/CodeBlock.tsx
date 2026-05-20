@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { CopyIcon, CheckIcon, LoadIntoEditorIcon } from './Icons.tsx';
+import { LANGUAGE_TAG_MAP } from '../constants.ts';
 
 // Informs TypeScript that `hljs` is available on the global window object
-// because it's loaded from a <script> tag in index.html.
 declare const hljs: any;
 
 interface CodeBlockProps {
@@ -21,24 +21,45 @@ const escapeHtml = (unsafe: string): string => {
          .replace(/'/g, "&#039;");
 };
 
-// This component now uses a React-idiomatic approach by setting innerHTML.
-// It's wrapped in an ErrorBoundary in MarkdownRenderer to catch potential
-// errors from highlight.js, preventing app crashes.
+// Helper to normalize language strings to valid highlight.js tags
+const normalizeLanguage = (lang: string): string => {
+    if (!lang) return 'plaintext';
+    const lowerLang = lang.toLowerCase().trim();
+    
+    // Check if it's a direct match or an alias in hljs
+    if (hljs.getLanguage(lowerLang)) return lowerLang;
+
+    // Check our internal map (Values -> Keys -> Tag)
+    // This handles cases where 'JavaScript' (Enum Value) is passed instead of 'javascript' (Tag)
+    const entry = Object.entries(LANGUAGE_TAG_MAP).find(([key, tag]) => {
+        return key.toLowerCase() === lowerLang || tag === lowerLang;
+    });
+
+    if (entry) return entry[1];
+
+    // Common manual overrides if not in map
+    if (lowerLang === 'c++') return 'cpp';
+    if (lowerLang === 'c#') return 'csharp';
+    if (lowerLang === 'js') return 'javascript';
+    if (lowerLang === 'ts') return 'typescript';
+    if (lowerLang === 'py') return 'python';
+    if (lowerLang === 'sh') return 'bash';
+    if (lowerLang === 'yml') return 'yaml';
+
+    return 'plaintext';
+};
+
 export const CodeBlock = ({ code, language, onLoadCodeIntoWorkbench }: CodeBlockProps) => {
   const [isCopied, setIsCopied] = useState(false);
 
   // useMemo hook to perform the highlighting only when code or language changes.
-  // This is more performant than doing it on every render.
   const highlightedCode = useMemo(() => {
     try {
-      // Check if the language is supported by highlight.js
-      const validLang = language && hljs.getLanguage(language) ? language : 'plaintext';
+      const normalizedLang = normalizeLanguage(language);
       // Use highlight.js to get the HTML string with syntax highlighting
-      return hljs.highlight(code, { language: validLang, ignoreIllegals: true }).value;
+      return hljs.highlight(code, { language: normalizedLang, ignoreIllegals: true }).value;
     } catch (error) {
-      // Log the error with context for easier debugging.
       console.error("Highlight.js error:", error, { language, codeSnippet: code.substring(0, 100) });
-      // Fallback to plain, fully-escaped text on error. This is a critical security measure.
       return escapeHtml(code);
     }
   }, [code, language]);
@@ -52,39 +73,37 @@ export const CodeBlock = ({ code, language, onLoadCodeIntoWorkbench }: CodeBlock
     });
   };
   
-  const langClass = `language-${language || 'plaintext'}`;
+  const normalizedLang = normalizeLanguage(language);
+  const langClass = `language-${normalizedLang}`;
 
   return (
-    <div className="relative group text-left my-4">
-      <div className="absolute top-2 right-2 z-10 flex items-center space-x-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-200">
-        {onLoadCodeIntoWorkbench && (
+    <div className="relative group text-left my-4 bg-[#1e1e1e] rounded-md border border-[var(--hud-color-darkest)]">
+        <div className="absolute top-0 right-0 p-2 z-10 flex items-center space-x-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-200">
+            <span className="text-[10px] text-[var(--hud-color-darker)] mr-2 uppercase font-mono select-none">{normalizedLang}</span>
+            {onLoadCodeIntoWorkbench && (
+                <button
+                    onClick={() => onLoadCodeIntoWorkbench(code)}
+                    className="p-1.5 bg-black/50 text-[var(--hud-color)] hover:bg-[var(--hud-color)] hover:text-black focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)] flex items-center gap-1.5 text-xs font-mono rounded"
+                    title="Load into Editor"
+                    aria-label="Load code into editor"
+                >
+                    <LoadIntoEditorIcon className="h-4 w-4" />
+                </button>
+            )}
             <button
-                onClick={() => onLoadCodeIntoWorkbench(code)}
-                className="p-1.5 bg-black/50 text-[var(--hud-color)] hover:bg-[var(--hud-color)] hover:text-black focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)]"
-                title="Load into Workbench Editor"
-                aria-label="Load code into workbench editor"
+                onClick={handleCopy}
+                className="p-1.5 bg-black/50 text-[var(--hud-color)] hover:bg-[var(--hud-color)] hover:text-black focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)] rounded"
+                aria-label={isCopied ? "Copied" : "Copy code"}
             >
-                <LoadIntoEditorIcon className="h-5 w-5" />
+                {isCopied ? <CheckIcon className="h-4 w-4" /> : <CopyIcon className="h-4 w-4" />}
             </button>
-        )}
-        <button
-            onClick={handleCopy}
-            className="p-1.5 bg-black/50 text-[var(--hud-color)] hover:bg-[var(--hud-color)] hover:text-black focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)]"
-            aria-label={isCopied ? "Copied" : "Copy code"}
-        >
-            {isCopied ? <CheckIcon className="h-5 w-5" /> : <CopyIcon className="h-5 w-5" />}
-        </button>
-      </div>
-      <pre className="overflow-x-auto">
-        {/* The dangerouslySetInnerHTML prop is used to render the HTML
-            generated by highlight.js. This is an acceptable risk as the content
-            originates from user/AI input and is either processed by a trusted library
-            or, in case of failure, is rigorously escaped to prevent XSS. */}
-        <code
-          className={langClass}
-          dangerouslySetInnerHTML={{ __html: highlightedCode }}
-        />
-      </pre>
+        </div>
+        <pre className="overflow-x-auto p-4 custom-scrollbar">
+            <code
+            className={langClass}
+            dangerouslySetInnerHTML={{ __html: highlightedCode }}
+            />
+        </pre>
     </div>
   );
 };

@@ -56,6 +56,11 @@
       text-transform: uppercase;
       letter-spacing: 0.1em;
       text-shadow: 0 0 5px var(--glow-color);
+      transition: all 0.3s ease;
+    }
+    h1:hover, h2:hover, h3:hover, h4:hover, h5:hover, h6:hover, .font-heading:hover {
+      color: var(--bright-cyan);
+      text-shadow: 0 0 10px var(--glow-color), 0 0 15px var(--shadow-cyan-heavy); /* Enhanced glow */
     }
 
     /* Custom scrollbar for webkit browsers */
@@ -131,9 +136,14 @@
     }
 
     @keyframes cyan-text-pulse {
-      0% { text-shadow: 0 0 3px var(--glow-color), 0 0 5px var(--glow-color); }
-      50% { text-shadow: 0 0 8px var(--glow-color), 0 0 12px var(--glow-color); }
-      100% { text-shadow: 0 0 3px var(--glow-color), 0 0 5px var(--glow-color); }
+      0%, 100% { 
+        text-shadow: 0 0 3px var(--glow-color), 0 0 5px var(--glow-color); 
+        color: var(--hud-color); 
+      }
+      50% { 
+        text-shadow: 0 0 10px var(--shadow-cyan-heavy), 0 0 15px var(--shadow-cyan-heavy); 
+        color: var(--bright-cyan); 
+      }
     }
     .animate-cyan-pulse {
         animation: cyan-text-pulse 1.5s infinite ease-in-out;
@@ -159,6 +169,11 @@
       /* Frosted Glass Effect */
       backdrop-filter: blur(8px);
       -webkit-backdrop-filter: blur(8px);
+    }
+    
+    .hud-container:not(.active):hover {
+      border-color: var(--hud-color);
+      box-shadow: inset 0 0 20px rgba(0, 60, 60, 0.6), 0 0 10px var(--shadow-cyan-light);
     }
     
     .hud-container.active {
@@ -190,12 +205,18 @@
       from, to { opacity: 1; }
       50% { opacity: 0; }
     }
+    
+    @keyframes glow-pulse {
+        0%, 100% { text-shadow: 0 0 5px var(--glow-color); }
+        50% { text-shadow: 0 0 10px var(--glow-color), 0 0 15px var(--glow-color); }
+    }
+
     .animate-blink {
       animation: blink-caret 1.2s step-end infinite;
     }
     .blinking-prompt::after {
       content: '_';
-      animation: blink-caret 1s step-end infinite;
+      animation: blink-caret 1s step-end infinite, glow-pulse 2.2s ease-in-out infinite;
     }
     
     /* --- Radial Command Palette --- */
@@ -240,8 +261,13 @@
       filter: drop-shadow(0 0 8px var(--glow-color));
     }
     .radial-menu-center:hover {
-      transform: scale(1.1);
+      transform: scale(1.1) rotate(15deg);
       filter: drop-shadow(0 0 15px var(--glow-color));
+    }
+    .radial-menu-center:active {
+        transform: scale(1.0) rotate(0deg);
+        filter: drop-shadow(0 0 10px var(--glow-color)) brightness(1.5);
+        transition-duration: 0.1s;
     }
     
     .radial-menu-item-wrapper {
@@ -279,8 +305,16 @@
     
     .radial-menu-item:hover:not(:disabled) .radial-menu-item-icon {
         color: var(--primary-text);
-        transform: scale(1.2);
+        transform: scale(1.2) translateY(-2px);
         filter: drop-shadow(0 0 8px var(--glow-color));
+    }
+    .radial-menu-item:hover:not(:disabled) .radial-menu-item-label {
+        transform: translateY(-2px);
+        color: var(--bright-cyan);
+    }
+    .radial-menu-item:active:not(:disabled) {
+        transform: translate(-50%, -50%) scale(0.9);
+        transition-duration: 0.1s;
     }
 
      .radial-menu-item:disabled {
@@ -330,6 +364,21 @@
     .arc-rotate-outer { animation: rotate-cw 10s linear infinite; }
     .arc-rotate-inner { animation: rotate-ccw 8s linear infinite; }
 
+    /* --- DIRECTIVE: VIEWPORT CALIBRATION --- */
+    .council-container {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      overflow: hidden;
+    }
+    .message-log {
+      flex-grow: 1;
+      min-height: 0; /* Prevents flexbox overflow */
+      overflow-y: auto;
+    }
+    .input-area {
+      flex-shrink: 0;
+    }
 
     /* Post Review Action Button Style */
     .post-review-button {
@@ -341,6 +390,7 @@
       position: relative;
       z-index: 1;
       text-shadow: 0 0 4px var(--glow-color);
+      transition: all 0.2s ease-out;
     }
     .post-review-button::before {
         content: '';
@@ -355,7 +405,13 @@
     }
      .post-review-button:hover:not(:disabled) {
       box-shadow: 0 0 10px var(--glow-color), inset 0 0 10px var(--glow-color);
+      transform: translateY(-2px);
      }
+    .post-review-button:active:not(:disabled) {
+        transform: translateY(0);
+        box-shadow: inset 0 0 15px var(--glow-color);
+        background-color: var(--shadow-cyan-heavy);
+    }
 
 
     /* --- Syntax Highlighting Theme (Okaidia for highlight.js) --- */

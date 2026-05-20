@@ -4,7 +4,6 @@ import App from './App.tsx';
 import { GlobalStateProvider, ToastProvider } from './AppContext.tsx';
 import { SessionProvider } from './contexts/SessionContext.tsx';
 import { PersistenceProvider } from './contexts/PersistenceContext.tsx';
-import { FeatureFlagsProvider } from './contexts/FeatureFlagsContext.tsx';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -20,13 +19,11 @@ const AppWithProviders = () => {
   return (
     <ToastProvider>
       <PersistenceProvider>
-        <FeatureFlagsProvider>
-          <GlobalStateProvider onReset={handleReset}>
-            <SessionProvider key={resetCount}>
-              <App />
-            </SessionProvider>
-          </GlobalStateProvider>
-        </FeatureFlagsProvider>
+        <GlobalStateProvider onReset={handleReset}>
+          <SessionProvider key={resetCount}>
+            <App />
+          </SessionProvider>
+        </GlobalStateProvider>
       </PersistenceProvider>
     </ToastProvider>
   );

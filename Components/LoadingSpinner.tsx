@@ -6,7 +6,7 @@ interface LoadingSpinnerProps {
   className?: string; // Allow passing additional classes
 }
 
-const spinnerChars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+const spinnerChars = ['●○○○○○○○○○', '○●○○○○○○○○', '○○●○○○○○○○', '○○○●○○○○○○', '○○○○●○○○○○', '○○○○○●○○○○', '○○○○○○●○○○', '○○○○○○○●○○', '○○○○○○○○●○', '○○○○○○○○○●'];
 
 export const LoadingSpinner = ({ size = 'w-8 h-8', color = 'text-[#15fafa]', className = '' }: LoadingSpinnerProps) => {
   const [charIndex, setCharIndex] = useState(0);

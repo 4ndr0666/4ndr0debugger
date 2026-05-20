@@ -1,14 +1,15 @@
 import React, { useRef, useState } from 'react';
 import { ProjectFile } from '../types.ts';
 import { Button } from './Button.tsx';
-import { BoltIcon, DeleteIcon, ImportIcon, LoadIcon, PaperclipIcon } from './Icons.tsx';
+import { DeleteIcon, ImportIcon, PaperclipIcon, ImageIcon, JsonIcon, TextFileIcon, DocsIcon } from './Icons.tsx';
 import { usePersistenceContext } from '../contexts/PersistenceContext.tsx';
 
 interface ProjectFilesModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onUploadFile: (file: File) => void;
+  onUploadFiles: (files: File[]) => void;
   onDeleteFile: (fileId: string) => void;
+  onDeleteAllFiles: () => void;
   onAttachFile: (file: ProjectFile) => void;
   onDownloadFile: (content: string, filename: string, mimeType: string) => void;
   isLoading?: boolean;
@@ -25,9 +26,18 @@ const timeAgo = (timestamp: number): string => {
     return `${days}d ago`;
 }
 
+const getFileIcon = (mimeType: string) => {
+    const iconProps = { className: "w-5 h-5 text-[var(--hud-color-darker)] flex-shrink-0" };
+    if (mimeType.startsWith('image/')) return <ImageIcon {...iconProps} />;
+    if (mimeType === 'application/json') return <JsonIcon {...iconProps} />;
+    if (mimeType === 'text/markdown') return <DocsIcon {...iconProps} />;
+    if (mimeType.startsWith('text/')) return <TextFileIcon {...iconProps} />;
+    return <PaperclipIcon {...iconProps} />; // Generic fallback
+};
+
 export const ProjectFilesModal = ({ 
-    isOpen, onClose, onUploadFile, 
-    onDeleteFile, onAttachFile, onDownloadFile,
+    isOpen, onClose, onUploadFiles, 
+    onDeleteFile, onDeleteAllFiles, onAttachFile, onDownloadFile,
     isLoading = false
 }: ProjectFilesModalProps) => {
   const { projectFiles } = usePersistenceContext();
@@ -42,8 +52,8 @@ export const ProjectFilesModal = ({
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
-    if (files) {
-      Array.from(files).forEach((file: File) => onUploadFile(file));
+    if (files && files.length > 0) {
+      onUploadFiles(Array.from(files));
     }
     // Reset file input to allow uploading the same file again
     if (event.target) {
@@ -51,10 +61,18 @@ export const ProjectFilesModal = ({
     }
   };
 
-  const handleDeleteClick = (fileId: string, fileName: string) => {
+  const handleDeleteClick = (e: React.MouseEvent, fileId: string, fileName: string) => {
+    e.stopPropagation();
     if (window.confirm(`Are you sure you want to permanently delete the file "${fileName}"? This cannot be undone.`)) {
         onDeleteFile(fileId);
     }
+  };
+
+  const handleDeleteAll = () => {
+      if (window.confirm(`Are you sure you want to delete ALL ${projectFiles.length} project files? This action cannot be undone.`)) {
+          onDeleteAllFiles();
+          setSelectedFiles(new Set());
+      }
   };
 
   const handleFileSelect = (fileId: string) => {
@@ -110,8 +128,11 @@ export const ProjectFilesModal = ({
             </button>
         </div>
 
-        <div className="flex-shrink-0 my-4">
-            <Button onClick={handleUploadClick} className="w-full" disabled={isLoading}>Upload New File(s)</Button>
+        <div className="flex-shrink-0 my-4 flex gap-2">
+            <Button onClick={handleUploadClick} className="flex-grow" disabled={isLoading}>Upload New File(s)</Button>
+            {projectFiles.length > 0 && (
+                <Button onClick={handleDeleteAll} variant="danger" disabled={isLoading} title="Delete all project files">Delete All</Button>
+            )}
             <input 
               type="file"
               ref={uploadInputRef}
@@ -122,33 +143,34 @@ export const ProjectFilesModal = ({
             />
         </div>
 
-        <div className="flex-grow overflow-y-auto pr-2">
+        <div className="flex-grow min-h-0 overflow-y-auto pr-2">
             {projectFiles.length > 0 ? (
                 <div className="space-y-2">
                     {projectFiles.slice().sort((a,b) => b.timestamp - a.timestamp).map(file => (
-                        <div key={file.id} className="p-3 bg-black/50 border border-[var(--hud-color-darkest)] flex justify-between items-center gap-4">
+                        <div key={file.id} className="p-3 bg-black/50 border border-[var(--hud-color-darkest)] flex justify-between items-center gap-4 hover:bg-[var(--hud-color)]/5 transition-colors">
                             <div className="flex items-center gap-3 flex-grow overflow-hidden">
                                 <input
                                     type="checkbox"
                                     id={`file-checkbox-${file.id}`}
                                     checked={selectedFiles.has(file.id)}
                                     onChange={() => handleFileSelect(file.id)}
-                                    className="form-checkbox h-4 w-4 bg-black/50 border-[var(--hud-color-darkest)] text-[var(--hud-color)] focus:ring-[var(--hud-color)] flex-shrink-0"
+                                    className="form-checkbox h-4 w-4 bg-black/50 border-[var(--hud-color-darkest)] text-[var(--hud-color)] focus:ring-[var(--hud-color)] flex-shrink-0 cursor-pointer"
                                     disabled={isLoading}
                                 />
-                                <label htmlFor={`file-checkbox-${file.id}`} className={`cursor-pointer overflow-hidden ${isLoading ? 'cursor-not-allowed' : ''}`}>
+                                {getFileIcon(file.mimeType)}
+                                <label htmlFor={`file-checkbox-${file.id}`} className={`cursor-pointer overflow-hidden flex-grow ${isLoading ? 'cursor-not-allowed' : ''}`}>
                                     <p className="font-semibold text-[var(--hud-color)] uppercase tracking-wider text-sm truncate" title={file.name}>{file.name}</p>
                                     <p className="text-xs text-[var(--hud-color-darker)]">{timeAgo(file.timestamp)}</p>
                                 </label>
                             </div>
                             <div className="flex items-center space-x-1 flex-shrink-0">
-                                <button onClick={() => onAttachFile(file)} title="Attach to Chat" className="p-1.5 text-[var(--hud-color)] rounded-full hover:bg-[var(--hud-color)]/20 focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)] disabled:opacity-50 disabled:cursor-not-allowed" disabled={isLoading}>
+                                <button onClick={(e) => { e.stopPropagation(); onAttachFile(file); }} title="Attach to Chat" className="p-1.5 text-[var(--hud-color)] rounded-full hover:bg-[var(--hud-color)]/20 focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)] disabled:opacity-50 disabled:cursor-not-allowed" disabled={isLoading}>
                                     <PaperclipIcon className="w-4 h-4" />
                                 </button>
-                                <button onClick={() => onDownloadFile(file.content, file.name, file.mimeType)} title="Download File" className="p-1.5 text-[var(--hud-color)] rounded-full hover:bg-[var(--hud-color)]/20 focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)] disabled:opacity-50 disabled:cursor-not-allowed" disabled={isLoading}>
+                                <button onClick={(e) => { e.stopPropagation(); onDownloadFile(file.content, file.name, file.mimeType); }} title="Download File" className="p-1.5 text-[var(--hud-color)] rounded-full hover:bg-[var(--hud-color)]/20 focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)] disabled:opacity-50 disabled:cursor-not-allowed" disabled={isLoading}>
                                     <ImportIcon className="w-4 h-4" />
                                 </button>
-                                <button onClick={() => handleDeleteClick(file.id, file.name)} title="Delete File" className="p-1.5 text-[var(--red-color)]/70 rounded-full hover:bg-red-500/30 hover:text-[var(--red-color)] focus:outline-none focus:ring-1 focus:ring-[var(--red-color)] disabled:opacity-50 disabled:cursor-not-allowed" disabled={isLoading}>
+                                <button onClick={(e) => handleDeleteClick(e, file.id, file.name)} title="Delete File" className="p-1.5 text-[var(--red-color)]/70 rounded-full hover:bg-red-500/30 hover:text-[var(--red-color)] focus:outline-none focus:ring-1 focus:ring-[var(--red-color)] disabled:opacity-50 disabled:cursor-not-allowed" disabled={isLoading}>
                                     <DeleteIcon className="w-4 h-4" />
                                 </button>
                             </div>

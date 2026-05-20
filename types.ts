@@ -1,3 +1,5 @@
+import React from 'react';
+
 export enum SupportedLanguage {
   JAVASCRIPT = 'JavaScript',
   TYPESCRIPT = 'TypeScript',
@@ -78,7 +80,7 @@ export interface Version {
   language: SupportedLanguage;
   timestamp: number;
   appMode?: AppMode;
-  type?: 'review' | 'docs' | 'tests' | 'commit' | 'finalization' | 'audit' | 'root-cause';
+  type?: 'review' | 'docs' | 'tests' | 'commit' | 'finalization' | 'root-cause';
   chatHistory?: ChatMessage[];
   chatRevisions?: ChatRevision[];
   rawFeatureMatrixJson?: string | null;
@@ -111,9 +113,9 @@ export interface FeatureDecisionRecord {
   revisedSnippet?: string;
 }
 
-export type LoadingAction = 'review' | 'docs' | 'tests' | 'commit' | 'explain-selection' | 'review-selection' | 'comparison' | 'revise' | 'finalization' | 'generate-name' | 'audit' | 'root-cause' | null;
+export type LoadingAction = 'review' | 'docs' | 'tests' | 'commit' | 'explain-selection' | 'review-selection' | 'comparison' | 'revise' | 'finalization' | 'generate-name' | 'root-cause' | null;
 
-export type AppMode = 'debug' | 'single' | 'comparison' | 'audit' | 'workbench';
+export type AppMode = 'debug' | 'single' | 'comparison';
 
 export type ChatContext = 'general' | 'feature_discussion' | 'finalization';
 
@@ -146,10 +148,18 @@ export interface ImportedSession {
   sessionState: any; // The full state object from the imported file
 }
 
+export interface ArsenalTool {
+    id: string;
+    category: string;
+    label: string;
+    description: string;
+    icon: React.FC<{ className?: string }>;
+}
+
 export interface UIActions {
   openThreatVectorModal: () => void;
   openReconModal: () => void;
-  openExploitStagerModal: () => void;
+  openPayloadCraftingModal: () => void;
   openReportGenerator: () => void;
   generateTests: () => void;
   openDocsModal: () => void;
@@ -161,11 +171,43 @@ export interface UIActions {
   openDiffViewer: () => void;
 }
 
-export type FeatureFlag =
-  | 'red_team_tools'
-  | 'workbench_mode'
-  | 'code_audit_mode'
-  | 'multi_file_context'
-  | 'experimental_features';
-
-export type FeatureFlags = Record<FeatureFlag, boolean>;
+export interface SessionActionsContextType {
+  setFeatureDecisions: React.Dispatch<React.SetStateAction<Record<string, FeatureDecisionRecord>>>;
+  setAdversarialReportContent: React.Dispatch<React.SetStateAction<string | null>>;
+  setThreatVectorReport: React.Dispatch<React.SetStateAction<string | null>>;
+  handleContextFileSelectionChange: (fileId: string, isSelected: boolean) => void;
+  resetForNewRequest: () => void;
+  registerUiActions: (actions: UIActions) => void;
+  handleStopGenerating: () => void;
+  handleAuditSubmit: () => void;
+  handleReviewSubmit: (fullCodeToSubmit: string) => void;
+  handleCompareAndOptimize: () => void;
+  handleCompareAndRevise: () => void;
+  handleAnalyzeRootCause: () => void;
+  handleStartFollowUp: (version?: Version) => Promise<void>;
+  handleFinalizeFeatureDiscussion: () => void;
+  handleGenerateTests: () => void;
+  handleGenerateDocs: (codeToDocument: string) => void;
+  onSaveGeneratedFile: (filename: string, content: string) => void;
+  handleExitChatMode: () => void;
+  handleGenerateCommitMessage: () => Promise<void>;
+  handleFinalizeComparison: () => void;
+  handleDownloadOutput: () => void;
+  handleAutoGenerateVersionName: (isSavingChat: boolean, onResult: (name: string) => void) => Promise<void>;
+  handleGenerateAdversarialReport: (reconData: string, targetHostname: string) => Promise<void>;
+  handleThreatVectorAnalysis: (targetUrl: string) => Promise<void>;
+  handleExplainSelection: (selection: string) => void;
+  handleReviewSelection: (selection: string) => void;
+  handleChatSubmit: () => Promise<void>;
+  handleLoadRevisionIntoEditor: (code: string) => void;
+  onClearChatRevisions: () => void;
+  onRenameChatRevision: (id: string, newName: string) => void;
+  onDeleteChatRevision: (id: string) => void;
+  onClearChatFiles: () => void;
+  onRenameChatFile: (id: string, newName: string) => void;
+  onDeleteChatFile: (id: string) => void;
+  handleClearChatHistory: () => void;
+  handleLoadSession: (sessionState: any) => void;
+  featureDecisions: Record<string, FeatureDecisionRecord>; // Needs to be here for the setter
+  allFeaturesDecided: boolean; // Derived state, but depends on decisions
+}

@@ -30,7 +30,7 @@ const CodeEditor: React.FC<{
     `.trim().replace(/\s+/g, ' ');
 
     return (
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col flex-grow min-h-0">
             <h3 className="text-lg text-center mb-2">{title}</h3>
             <div className="relative flex-grow">
                 <textarea
@@ -73,7 +73,7 @@ export const ComparisonInput: React.FC<ComparisonInputProps> = ({ isActive, onAt
         
     if (isChatMode) {
         return (
-            <div className={`hud-container h-full flex flex-col ${activeClass} min-h-0`}>
+            <div className={`hud-container flex flex-col flex-1 min-h-0 ${activeClass}`}>
                 <div className="hud-corner corner-top-left"></div>
                 <div className="hud-corner corner-top-right"></div>
                 <div className="hud-corner corner-bottom-left"></div>
@@ -84,7 +84,7 @@ export const ComparisonInput: React.FC<ComparisonInputProps> = ({ isActive, onAt
     }
     
     return (
-        <div className={`hud-container h-full flex flex-col ${activeClass} animate-fade-in min-h-0`}>
+        <div className={`hud-container flex flex-col flex-1 min-h-0 ${activeClass} animate-fade-in`}>
             <div className="hud-corner corner-top-left"></div>
             <div className="hud-corner corner-top-right"></div>
             <div className="hud-corner corner-bottom-left"></div>
@@ -94,7 +94,7 @@ export const ComparisonInput: React.FC<ComparisonInputProps> = ({ isActive, onAt
                 <h2 className="text-xl text-center">Comparative Analysis</h2>
             </div>
 
-            <div className="flex-grow flex flex-col overflow-y-auto pr-2 mt-4 space-y-4">
+            <div className="flex-grow flex flex-col min-h-0 overflow-y-auto pr-2 mt-4 space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-grow min-h-[250px]">
                     <CodeEditor title="Codebase A" code={userOnlyCode} setCode={setUserOnlyCode} isLoading={isLoading} />
                     <CodeEditor title="Codebase B" code={codeB} setCode={setCodeB} isLoading={isLoading} />

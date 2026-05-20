@@ -1,6 +1,5 @@
 import React from 'react';
 import { Feature } from '../types.ts';
-import { ChatTableOfContents } from './ChatTableOfContents.tsx';
 import { useChatStateContext, useOutputContext, useSessionActionsContext } from '../contexts/SessionContext.tsx';
 
 const getSourceChipColor = (source: Feature['source']) => {
@@ -103,9 +102,13 @@ export const ChatContext = () => {
   return (
     <div className="flex flex-col h-full">
         <h2 className="text-xl text-center font-heading flex-shrink-0 mb-4">
-            Session Table of Contents
+            Session Context
         </h2>
-        <ChatTableOfContents />
+        <div className="overflow-y-auto pr-2 flex-grow flex flex-col justify-center items-center min-h-0 border border-[var(--hud-color-darkest)] p-3 bg-black/30">
+            <p className="text-center text-xs text-[var(--hud-color-darker)]">
+                Context for the current discussion will appear here.
+            </p>
+        </div>
     </div>
   );
 };

@@ -75,7 +75,7 @@ export const LiveReconModal: React.FC<LiveReconModalProps> = ({ isOpen, onClose 
               />
           </div>
           <Button onClick={handleGenerate} disabled={!targetHostname}>
-            [ Generate Scout Script ]
+            [ Generate Recon Userscript ]
           </Button>
 
           {scoutScript && (
@@ -93,12 +93,12 @@ export const LiveReconModal: React.FC<LiveReconModalProps> = ({ isOpen, onClose 
                 </div>
                 <div className="flex-shrink-0 border border-[var(--hud-color-darkest)] bg-black/50 p-3 font-mono text-xs text-[var(--hud-color-darker)] space-y-2">
                     <h4 className="text-sm uppercase tracking-wider text-[var(--hud-color)]">Operator Workflow:</h4>
-                    <p>1. Copy the scout script.</p>
-                    <p>2. Execute it in the target's developer console.</p>
-                    <p>3. Interact with the target page to generate network traffic.</p>
-                    <p>4. Call <code className="text-[var(--hud-color)] bg-black px-1">dumpRecon()</code> in the console.</p>
-                    <p>5. Copy the logged JSON output.</p>
-                    <p>6. Paste JSON into the Adversarial Report Generator.</p>
+                    <p>1. Copy the generated userscript.</p>
+                    <p>2. Install it in a userscript manager (e.g., Tampermonkey, Greasemonkey).</p>
+                    <p>3. Navigate to the target site; the script will run automatically.</p>
+                    <p>4. Interact with the page to generate network traffic.</p>
+                    <p>5. Open the developer console and call <code className="text-[var(--hud-color)] bg-black px-1">dumpRecon()</code>.</p>
+                    <p>6. Copy the logged JSON output for use in the Adversarial Report Generator.</p>
                 </div>
             </div>
           )}

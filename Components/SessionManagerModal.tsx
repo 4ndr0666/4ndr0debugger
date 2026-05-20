@@ -98,7 +98,7 @@ export const SessionManagerModal = ({ isOpen, onClose, onImportFile, onLoadSessi
                 />
             </div>
 
-            <div className="flex-grow overflow-y-auto pr-2">
+            <div className="flex-grow min-h-0 overflow-y-auto pr-2">
                 {importedSessions.length > 0 ? (
                     <div className="space-y-3">
                         {importedSessions.slice().sort((a,b) => b.importedAt - a.importedAt).map(session => (

@@ -11,7 +11,7 @@ interface ThreatVectorModalProps {
 }
 
 const analysisSteps = [
-    "Inferring Technology Stack...",
+    "Fingerprinting Technology Stack...",
     "Cross-referencing CVE databases...",
     "Identifying common misconfigurations...",
     "Generating actionable command plan...",

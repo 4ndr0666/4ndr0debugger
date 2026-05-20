@@ -39,7 +39,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
             </button>
         </div>
 
-        <div className="flex-grow mt-4 overflow-y-auto pr-2 space-y-2 text-sm text-[var(--hud-color-darker)]">
+        <div className="flex-grow min-h-0 mt-4 overflow-y-auto pr-2 space-y-2 text-sm text-[var(--hud-color-darker)]">
             <AccordionItem title="Operational Modes" defaultOpen={true}>
                 <ul className="space-y-4 list-disc list-inside">
                     <li><b>Debug:</b> Provide code and an error message/context to receive a diagnosis and a corrected code snippet.
@@ -57,11 +57,6 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                             <b>Core Principle:</b> Use "Compare & Optimize" for a direct merge, or "Compare & Revise" to discuss each identified feature before finalizing.
                         </blockquote>
                     </li>
-                    <li><b>Audit:</b> Perform a comprehensive security audit on a piece of code based on industry best practices and frameworks.
-                        <blockquote className="mt-1 pl-2 border-l-2 border-[var(--hud-color-darkest)] text-xs">
-                            <b>Getting Started:</b> This mode is highly intensive. Provide clean, functional code for the most effective security analysis.
-                        </blockquote>
-                    </li>
                     <li><b>Workbench:</b> An iterative development environment. A script editor paired with an AI chat that has full context of the script, ideal for complex modifications.
                          <blockquote className="mt-1 pl-2 border-l-2 border-[var(--hud-color-darkest)] text-xs">
                            <b>Core Principle:</b> The AI always sees the code in the editor. Use the chat to give instructions or provide intel from other tools to guide its revisions.
@@ -73,7 +68,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                 <ul className="space-y-4 list-disc list-inside">
                     <li><b>Threat Vector:</b> Input a target URL to receive an AI-generated analysis of the likely technology stack and potential attack surfaces.
                         <blockquote className="mt-1 pl-2 border-l-2 border-[var(--hud-color-darkest)] text-xs">
-                           <b>Getting Started:</b> Provide a full URL (e.g., `https://example.com/login.php`). The AI will infer the technology and provide actionable recon commands.
+                           <b>Getting Started:</b> Provide a full URL (e.g., `https://example.com/login.php`). The AI will analyze the live response and provide actionable recon commands.
                         </blockquote>
                     </li>
                     <li><b>Live Recon:</b> Generates a 'scout' script to execute in a target's browser console. It intercepts network traffic and prepares it for exfiltration.

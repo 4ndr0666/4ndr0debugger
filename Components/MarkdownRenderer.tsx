@@ -175,16 +175,20 @@ export const MarkdownRenderer: React.FC<{
                     filename += '.md';
                 }
                 return (
-                  <ErrorBoundary key={`sub-${subIndex}`}>
-                    <GeneratedFile filename={filename} content={code.trim()} onSave={onSaveGeneratedFile} />
-                  </ErrorBoundary>
+                  <React.Fragment key={`sub-${subIndex}`}>
+                    <ErrorBoundary>
+                      <GeneratedFile filename={filename} content={code.trim()} onSave={onSaveGeneratedFile} />
+                    </ErrorBoundary>
+                  </React.Fragment>
                 );
             }
 
             return (
-              <ErrorBoundary key={`sub-${subIndex}`}>
-                <CodeBlock code={code.trim()} language={language} onLoadCodeIntoWorkbench={onLoadCodeIntoWorkbench} />
-              </ErrorBoundary>
+              <React.Fragment key={`sub-${subIndex}`}>
+                <ErrorBoundary>
+                  <CodeBlock code={code.trim()} language={language} onLoadCodeIntoWorkbench={onLoadCodeIntoWorkbench} />
+                </ErrorBoundary>
+              </React.Fragment>
             );
           }
           return <TextBlock key={`sub-${subIndex}`} text={subPart} />;

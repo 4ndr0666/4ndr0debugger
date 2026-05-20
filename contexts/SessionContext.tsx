@@ -1,11 +1,11 @@
 import React, { createContext, useState, useContext, useMemo, useCallback, useRef, useEffect } from 'react';
 import { Chat, Part } from "@google/genai";
-import { SupportedLanguage, ChatMessage, Version, ReviewProfile, LoadingAction, AppMode, ChatRevision, Feature, FeatureDecision, ChatContext, FinalizationSummary, FeatureDecisionRecord, ProjectFile, ChatFile, UIActions } from '../types.ts';
-import { GEMINI_MODELS, SYSTEM_INSTRUCTION, DEBUG_SYSTEM_INSTRUCTION, DOCS_SYSTEM_INSTRUCTION, PROFILE_SYSTEM_INSTRUCTIONS, GENERATE_TESTS_INSTRUCTION, EXPLAIN_CODE_INSTRUCTION, REVIEW_SELECTION_INSTRUCTION, COMMIT_MESSAGE_SYSTEM_INSTRUCTION, DOCS_INSTRUCTION, COMPARISON_SYSTEM_INSTRUCTION, COMPARISON_REVISION_SYSTEM_INSTRUCTION, FEATURE_MATRIX_SCHEMA, generateComparisonTemplate, LANGUAGE_TAG_MAP, generateAuditTemplate, AUDIT_SYSTEM_INSTRUCTION, ROOT_CAUSE_SYSTEM_INSTRUCTION, generateRootCauseTemplate, COMMIT_MESSAGE_SCHEMA, generateFinalizationPrompt, generateVersionNamePrompt, generateCommitMessageTemplate, ADVERSARIAL_REPORT_SYSTEM_INSTRUCTION, THREAT_VECTOR_SYSTEM_INSTRUCTION, generateThreatVectorPrompt, WORKBENCH_SYSTEM_INSTRUCTION, VERSION_NAME_SYSTEM_INSTRUCTION } from '../constants.ts';
+import { SupportedLanguage, ChatMessage, Version, ReviewProfile, LoadingAction, AppMode, ChatRevision, Feature, FeatureDecision, ChatContext, FinalizationSummary, FeatureDecisionRecord, ProjectFile, ChatFile, UIActions, SessionActionsContextType } from '../types.ts';
+import { GEMINI_MODELS, SYSTEM_INSTRUCTION, DEBUG_SYSTEM_INSTRUCTION, DOCS_SYSTEM_INSTRUCTION, PROFILE_SYSTEM_INSTRUCTIONS, GENERATE_TESTS_INSTRUCTION, EXPLAIN_CODE_INSTRUCTION, REVIEW_SELECTION_INSTRUCTION, COMMIT_MESSAGE_SYSTEM_INSTRUCTION, DOCS_INSTRUCTION, COMPARISON_SYSTEM_INSTRUCTION, COMPARISON_REVISION_SYSTEM_INSTRUCTION, FEATURE_MATRIX_SCHEMA, generateComparisonTemplate, LANGUAGE_TAG_MAP, generateRootCauseTemplate, ROOT_CAUSE_SYSTEM_INSTRUCTION, COMMIT_MESSAGE_SCHEMA, generateFinalizationPrompt, generateVersionNamePrompt, generateCommitMessageTemplate, ADVERSARIAL_REPORT_SYSTEM_INSTRUCTION, THREAT_VECTOR_SYSTEM_INSTRUCTION, generateThreatVectorPrompt, VERSION_NAME_SYSTEM_INSTRUCTION, generateReviewerTemplate, PLACEHOLDER_MARKER } from '../constants.ts';
 import { geminiService } from '../services.ts';
 import { useConfigContext, useInputContext, useToast } from '../AppContext.tsx';
 import { extractFinalCodeBlock, extractGeneratedMarkdownFiles } from '../utils.ts';
-import { usePersistenceContext } from './PersistenceContext.tsx';
+import { usePersistentState, usePersistenceContext } from './PersistenceContext.tsx';
 
 // --- New Context Definitions ---
 
@@ -50,7 +50,7 @@ interface ChatStateContextType {
   chatContext: ChatContext;
   activeFeatureForDiscussion: Feature | null;
   attachments: { file: File; content: string; mimeType: string }[];
-  contextFileIds: Set<string>;
+  contextFileIds: string[];
   setIsInputPanelVisible: React.Dispatch<React.SetStateAction<boolean>>;
   setChatInputValue: React.Dispatch<React.SetStateAction<string>>;
   setChatContext: React.Dispatch<React.SetStateAction<ChatContext>>;
@@ -60,45 +60,6 @@ interface ChatStateContextType {
 const ChatStateContext = createContext<ChatStateContextType | undefined>(undefined);
 
 // 4. Session Actions Context: For all action handlers.
-interface SessionActionsContextType {
-  setFeatureDecisions: React.Dispatch<React.SetStateAction<Record<string, FeatureDecisionRecord>>>;
-  setAdversarialReportContent: React.Dispatch<React.SetStateAction<string | null>>;
-  setThreatVectorReport: React.Dispatch<React.SetStateAction<string | null>>;
-  handleContextFileSelectionChange: (fileId: string, isSelected: boolean) => void;
-  resetForNewRequest: () => void;
-  registerUiActions: (actions: UIActions) => void;
-  handleStopGenerating: () => void;
-  handleReviewSubmit: (fullCodeToSubmit: string) => void;
-  handleAuditSubmit: () => void;
-  handleCompareAndOptimize: () => void;
-  handleCompareAndRevise: () => void;
-  handleAnalyzeRootCause: () => void;
-  handleStartFollowUp: (version?: Version) => Promise<void>;
-  handleFinalizeFeatureDiscussion: () => void;
-  handleGenerateTests: () => void;
-  handleGenerateDocs: (codeToDocument: string) => void;
-  onSaveGeneratedFile: (filename: string, content: string) => void;
-  handleExitChatMode: () => void;
-  handleGenerateCommitMessage: () => Promise<void>;
-  handleFinalizeComparison: () => void;
-  handleDownloadOutput: () => void;
-  handleAutoGenerateVersionName: (isSavingChat: boolean, onResult: (name: string) => void) => Promise<void>;
-  handleGenerateAdversarialReport: (reconData: string, targetHostname: string) => Promise<void>;
-  handleThreatVectorAnalysis: (targetUrl: string) => Promise<void>;
-  handleExplainSelection: (selection: string) => void;
-  handleReviewSelection: (selection: string) => void;
-  handleChatSubmit: () => Promise<void>;
-  handleLoadRevisionIntoEditor: (code: string) => void;
-  onClearChatRevisions: () => void;
-  onRenameChatRevision: (id: string, newName: string) => void;
-  onDeleteChatRevision: (id: string) => void;
-  onClearChatFiles: () => void;
-  onRenameChatFile: (id: string, newName: string) => void;
-  onDeleteChatFile: (id: string) => void;
-  handleLoadSession: (sessionState: any) => void;
-  featureDecisions: Record<string, FeatureDecisionRecord>; // Needs to be here for the setter
-  allFeaturesDecided: boolean; // Derived state, but depends on decisions
-}
 const SessionActionsContext = createContext<SessionActionsContextType | undefined>(undefined);
 
 // --- Main Provider ---
@@ -109,49 +70,49 @@ export const SessionProvider: React.FC<React.PropsWithChildren<{}>> = ({ childre
         setReviewProfile, setCustomReviewProfile, setAppMode, setTargetHostname,
     } = useConfigContext();
     const {
-        userOnlyCode, codeB, comparisonGoal, errorMessage, workbenchScript,
-        setUserOnlyCode, setCodeB, setComparisonGoal, setErrorMessage, setWorkbenchScript
+        userOnlyCode, codeB, comparisonGoal, errorMessage,
+        setUserOnlyCode, setCodeB, setErrorMessage, setComparisonGoal
     } = useInputContext();
 
     const { addToast } = useToast();
     const { projectFiles, setProjectFiles, setVersions } = usePersistenceContext();
 
     // All state previously in SessionProvider
-    const [reviewFeedback, setReviewFeedback] = useState<string | null>(null);
+    const [reviewFeedback, setReviewFeedback] = usePersistentState<string | null>('session_reviewFeedback', null);
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [isChatLoading, setIsChatLoading] = useState<boolean>(false);
     const [loadingAction, setLoadingAction] = useState<LoadingAction>(null);
-    const [outputType, setOutputType] = useState<LoadingAction>(null);
+    const [outputType, setOutputType] = usePersistentState<LoadingAction>('session_outputType', null);
     const [error, setError] = useState<string | null>(null);
-    const [reviewedCode, setReviewedCode] = useState<string | null>(null);
-    const [revisedCode, setRevisedCode] = useState<string | null>(null);
-    const [fullCodeForReview, setFullCodeForReview] = useState<string>('');
-    const [featureMatrix, setFeatureMatrix] = useState<Feature[] | null>(null);
-    const [rawFeatureMatrixJson, setRawFeatureMatrixJson] = useState<string | null>(null);
-    const [featureDecisions, setFeatureDecisions] = useState<Record<string, FeatureDecisionRecord>>({});
+    const [reviewedCode, setReviewedCode] = usePersistentState<string | null>('session_reviewedCode', null);
+    const [revisedCode, setRevisedCode] = usePersistentState<string | null>('session_revisedCode', null);
+    const [fullCodeForReview, setFullCodeForReview] = usePersistentState<string>('session_fullCodeForReview', '');
+    const [featureMatrix, setFeatureMatrix] = usePersistentState<Feature[] | null>('session_featureMatrix', null);
+    const [rawFeatureMatrixJson, setRawFeatureMatrixJson] = usePersistentState<string | null>('session_rawFeatureMatrixJson', null);
+    const [featureDecisions, setFeatureDecisions] = usePersistentState<Record<string, FeatureDecisionRecord>>('session_featureDecisions', {});
     const [allFeaturesDecided, setAllFeaturesDecided] = useState(false);
-    const [finalizationSummary, setFinalizationSummary] = useState<FinalizationSummary | null>(null);
-    const [finalizationBriefing, setFinalizationBriefing] = useState<string | null>(null);
-    const [isInputPanelVisible, setIsInputPanelVisible] = useState(true);
-    const [isChatMode, setIsChatMode] = useState<boolean>(false);
+    const [finalizationSummary, setFinalizationSummary] = usePersistentState<FinalizationSummary | null>('session_finalizationSummary', null);
+    const [finalizationBriefing, setFinalizationBriefing] = usePersistentState<string | null>('session_finalizationBriefing', null);
+    const [isInputPanelVisible, setIsInputPanelVisible] = usePersistentState<boolean>('session_isInputPanelVisible', true);
+    const [isChatMode, setIsChatMode] = usePersistentState<boolean>('session_isChatMode', false);
     const [chatSession, setChatSession] = useState<Chat | null>(null);
-    const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
-    const [chatInputValue, setChatInputValue] = useState<string>('');
-    const [chatRevisions, setChatRevisions] = useState<ChatRevision[]>([]);
-    const [chatFiles, setChatFiles] = useState<ChatFile[]>([]);
-    const [chatContext, setChatContext] = useState<ChatContext>('general');
-    const [activeFeatureForDiscussion, setActiveFeatureForDiscussion] = useState<Feature | null>(null);
+    const [chatHistory, setChatHistory] = usePersistentState<ChatMessage[]>('session_chatHistory', []);
+    const [chatInputValue, setChatInputValue] = usePersistentState<string>('session_chatInputValue', '');
+    const [chatRevisions, setChatRevisions] = usePersistentState<ChatRevision[]>('session_chatRevisions', []);
+    const [chatFiles, setChatFiles] = usePersistentState<ChatFile[]>('session_chatFiles', []);
+    const [chatContext, setChatContext] = usePersistentState<ChatContext>('session_chatContext', 'general');
+    const [activeFeatureForDiscussion, setActiveFeatureForDiscussion] = usePersistentState<Feature | null>('session_activeFeatureForDiscussion', null);
     const [isGeneratingReport, setIsGeneratingReport] = useState(false);
-    const [adversarialReportContent, setAdversarialReportContent] = useState<string | null>(null);
+    const [adversarialReportContent, setAdversarialReportContent] = usePersistentState<string | null>('session_adversarialReportContent', null);
     const [isGeneratingThreatVector, setIsGeneratingThreatVector] = useState(false);
-    const [threatVectorReport, setThreatVectorReport] = useState<string | null>(null);
+    const [threatVectorReport, setThreatVectorReport] = usePersistentState<string | null>('session_threatVectorReport', null);
     const [attachments, setAttachments] = useState<{ file: File; content: string; mimeType: string }[]>([]);
-    const [contextFileIds, setContextFileIds] = useState<Set<string>>(new Set());
+    const [contextFileIds, setContextFileIds] = usePersistentState<string[]>('session_contextFileIds', []);
     const abortControllerRef = useRef<AbortController | null>(null);
     const [uiActions, setUiActions] = useState<UIActions>({} as UIActions);
 
     // Derived State
-    const isReviewContextCurrent = reviewedCode !== null && (appMode === 'single' || appMode === 'debug' || appMode === 'audit' ? userOnlyCode === reviewedCode : true);
+    const isReviewContextCurrent = reviewedCode !== null && (appMode === 'single' || appMode === 'debug' ? userOnlyCode === reviewedCode : true);
     const reviewAvailable = !!reviewFeedback && isReviewContextCurrent;
     const commitMessageAvailable = !!reviewedCode && !!revisedCode && reviewedCode !== revisedCode;
     const showOutputPanel = isLoading || !!reviewFeedback || !!error;
@@ -164,13 +125,6 @@ export const SessionProvider: React.FC<React.PropsWithChildren<{}>> = ({ childre
             setAllFeaturesDecided(false);
         }
     }, [featureDecisions, featureMatrix]);
-
-    // This logic needs `handleStartFollowUp`, so it's initiated from the actions context consumer
-    useEffect(() => {
-        if (chatContext === 'feature_discussion' && activeFeatureForDiscussion) {
-            // The action to start the chat is now handled by the component that sets this state
-        }
-    }, [chatContext, activeFeatureForDiscussion]);
 
     const getSystemInstructionForReview = useCallback(() => {
         let instruction = SYSTEM_INSTRUCTION;
@@ -210,8 +164,8 @@ export const SessionProvider: React.FC<React.PropsWithChildren<{}>> = ({ childre
         setFinalizationSummary(null);
         setFinalizationBriefing(null);
         setAttachments([]);
-        setContextFileIds(new Set());
-    }, []);
+        setContextFileIds([]);
+    }, [setReviewFeedback, setIsChatMode, setChatHistory, setReviewedCode, setRevisedCode, setChatRevisions, setChatFiles, setFeatureMatrix, setFeatureDecisions, setChatContext, setActiveFeatureForDiscussion, setRawFeatureMatrixJson, setFinalizationSummary, setFinalizationBriefing, setContextFileIds]);
     
     const handleStreamingRequest = useCallback(async (
         action: LoadingAction,
@@ -263,27 +217,135 @@ export const SessionProvider: React.FC<React.PropsWithChildren<{}>> = ({ childre
             setIsLoading(false);
             setLoadingAction(null);
         }
-    }, [resetForNewRequest]);
+    }, [resetForNewRequest, setOutputType, setFullCodeForReview, setReviewedCode, setReviewFeedback, setRevisedCode]);
     
+    const handleStartFollowUp = useCallback(async (version?: Version) => {
+        const ai = geminiService.getAiClient();
+        if (!ai) {
+            addToast("Gemini AI not configured. Cannot start chat.", "error");
+            return;
+        }
+
+        if (version) {
+            addToast(`Starting follow-up from "${version.name}"...`, "info");
+            
+            if (version.appMode) {
+                setAppMode(version.appMode);
+            }
+
+            setChatHistory(version.chatHistory || []);
+            setChatRevisions(version.chatRevisions || []);
+            setChatFiles(version.chatFiles || []);
+    
+            setLanguage(version.language);
+            setUserOnlyCode(version.userCode);
+            setFullCodeForReview(version.fullPrompt);
+            setReviewFeedback(version.feedback);
+            setReviewedCode(version.userCode);
+            setRevisedCode(null);
+            if (version.reviewProfile) setReviewProfile(version.reviewProfile);
+            if (version.customReviewProfile) setCustomReviewProfile(version.customReviewProfile);
+            if (version.comparisonGoal) setComparisonGoal(version.comparisonGoal);
+            if (version.contextFileIds) setContextFileIds(version.contextFileIds);
+    
+        } else {
+            // Check if we are resuming or starting fresh
+            if (chatHistory.length === 0) {
+                 addToast("Initializing fresh comms link...", "info");
+            } else {
+                 addToast("Resuming secure channel...", "info");
+            }
+        }
+        
+        setIsChatMode(true);
+        setIsInputPanelVisible(true);
+    
+        const getChatSystemInstruction = () => {
+            if (chatContext === 'feature_discussion' && activeFeatureForDiscussion) {
+                return `${SYSTEM_INSTRUCTION}\n\n${COMPARISON_SYSTEM_INSTRUCTION}\n\nThe user wants to discuss the following feature: "${activeFeatureForDiscussion.name}". Description: "${activeFeatureForDiscussion.description}". Source: ${activeFeatureForDiscussion.source}.`;
+            }
+            switch(appMode) {
+                case 'debug': return `${SYSTEM_INSTRUCTION}\n\n${DEBUG_SYSTEM_INSTRUCTION}`;
+                case 'comparison': return `${SYSTEM_INSTRUCTION}\n\n${COMPARISON_SYSTEM_INSTRUCTION}`;
+                default: return getSystemInstructionForReview();
+            }
+        };
+    
+        // Only create a NEW session if one doesn't exist or if we loaded a version (which implies context switch)
+        if (!chatSession || version) {
+            const initialHistoryForGemini: { role: 'user' | 'model', parts: Part[] }[] = [];
+            
+            // Pre-load context from the review/analysis if we are starting fresh or loading a version
+            const sourceFeedback = version ? version.feedback : reviewFeedback;
+            const sourcePrompt = version ? version.fullPrompt : fullCodeForReview;
+            
+            // Only add context if the chat history is empty (new session) OR we are loading a specific version
+            if ((chatHistory.length === 0 || version) && sourcePrompt && sourceFeedback) {
+                initialHistoryForGemini.push({ role: 'user', parts: [{ text: sourcePrompt }] });
+                initialHistoryForGemini.push({ role: 'model', parts: [{ text: sourceFeedback }] });
+            } else if (chatHistory.length > 0 && !version) {
+                 // Resuming existing chat, reconstruct history for Gemini
+                 chatHistory.forEach(msg => {
+                     const parts: Part[] = [];
+                     if (msg.content) parts.push({ text: msg.content });
+                     msg.attachments?.forEach(att => {
+                        parts.push({ inlineData: { mimeType: att.mimeType, data: att.content }});
+                     });
+                     initialHistoryForGemini.push({ role: msg.role, parts });
+                 });
+            }
+        
+            const newChat = ai.chats.create({
+                model: GEMINI_MODELS.CORE_ANALYSIS,
+                history: initialHistoryForGemini,
+                config: {
+                systemInstruction: getChatSystemInstruction(),
+                }
+            });
+            setChatSession(newChat);
+        }
+    
+      }, [addToast, setLanguage, setUserOnlyCode, setReviewProfile, customReviewProfile, setComparisonGoal, appMode, chatContext, activeFeatureForDiscussion, getSystemInstructionForReview, reviewFeedback, fullCodeForReview, setAppMode, setChatHistory, setChatRevisions, setChatFiles, setFullCodeForReview, setReviewFeedback, setReviewedCode, setRevisedCode, setCustomReviewProfile, comparisonGoal, setContextFileIds, setIsChatMode, setIsInputPanelVisible, chatHistory, chatSession]);
+
+    const handleClearChatHistory = useCallback(() => {
+        if (window.confirm('Are you sure you want to clear the entire chat history? This cannot be undone.')) {
+            // Step 1: Wipe logical history
+            setChatHistory([]);
+            setChatRevisions([]);
+            setChatFiles([]);
+
+            // Step 2: Critical fix - Kill persistent AI session to prevent context bleed
+            setChatSession(null);
+            
+            // Step 3: Re-initialize fresh session immediately
+            handleStartFollowUp();
+
+            addToast("Cognitive slate purged. Fresh session initialized.", "success");
+        }
+    }, [setChatHistory, setChatRevisions, setChatFiles, addToast, handleStartFollowUp]);
+
     const handleReviewSubmit = useCallback((fullCodeToSubmit: string) => {
         const systemInstruction = appMode === 'debug'
           ? `${SYSTEM_INSTRUCTION}\n\n${DEBUG_SYSTEM_INSTRUCTION}`
           : getSystemInstructionForReview();
-        const selectedContextFiles = projectFiles.filter(pf => contextFileIds.has(pf.id));
+        const selectedContextFiles = projectFiles.filter(pf => contextFileIds.includes(pf.id));
         const contents = geminiService.buildPromptWithProjectFiles(fullCodeToSubmit, selectedContextFiles);
         handleStreamingRequest('review', contents, systemInstruction, GEMINI_MODELS.CORE_ANALYSIS, userOnlyCode, fullCodeToSubmit);
     }, [appMode, getSystemInstructionForReview, projectFiles, contextFileIds, handleStreamingRequest, userOnlyCode]);
 
     const handleAuditSubmit = useCallback(() => {
-        const fullCodeToSubmit = generateAuditTemplate(language, userOnlyCode);
-        const selectedContextFiles = projectFiles.filter(pf => contextFileIds.has(pf.id));
-        const contents = geminiService.buildPromptWithProjectFiles(fullCodeToSubmit, selectedContextFiles);
-        handleStreamingRequest('audit', contents, `${SYSTEM_INSTRUCTION}\n\n${AUDIT_SYSTEM_INSTRUCTION}`, GEMINI_MODELS.CORE_ANALYSIS, userOnlyCode, fullCodeToSubmit);
-    }, [language, userOnlyCode, projectFiles, contextFileIds, handleStreamingRequest]);
+        if (userOnlyCode.trim()) {
+            const fullCodeToSubmit = generateReviewerTemplate(language).replace(PLACEHOLDER_MARKER, userOnlyCode);
+            const auditSystemInstruction = `${SYSTEM_INSTRUCTION}\n\n## Special Focus: Security\n${PROFILE_SYSTEM_INSTRUCTIONS[ReviewProfile.SECURITY]}`;
+            const selectedContextFiles = projectFiles.filter(pf => contextFileIds.includes(pf.id));
+            const contents = geminiService.buildPromptWithProjectFiles(fullCodeToSubmit, selectedContextFiles);
+            handleStreamingRequest('review', contents, auditSystemInstruction, GEMINI_MODELS.CORE_ANALYSIS, userOnlyCode, fullCodeToSubmit);
+        }
+    }, [userOnlyCode, language, projectFiles, contextFileIds, handleStreamingRequest]);
 
     const handleCompareAndOptimize = useCallback(() => {
         const prompt = generateComparisonTemplate(language, comparisonGoal, userOnlyCode, codeB);
-        const selectedContextFiles = projectFiles.filter(pf => contextFileIds.has(pf.id));
+        const selectedContextFiles = projectFiles.filter(pf => contextFileIds.includes(pf.id));
         const contents = geminiService.buildPromptWithProjectFiles(prompt, selectedContextFiles);
         handleStreamingRequest('comparison', contents, `${SYSTEM_INSTRUCTION}\n\n${COMPARISON_SYSTEM_INSTRUCTION}`, GEMINI_MODELS.CORE_ANALYSIS, userOnlyCode, prompt);
     }, [language, comparisonGoal, userOnlyCode, codeB, projectFiles, contextFileIds, handleStreamingRequest]);
@@ -300,9 +362,9 @@ export const SessionProvider: React.FC<React.PropsWithChildren<{}>> = ({ childre
             } else {
                 newSet.delete(fileId);
             }
-            return newSet;
+            return Array.from(newSet);
         });
-    }, []);
+    }, [setContextFileIds]);
 
     const onSaveGeneratedFile = useCallback((filename: string, content: string) => {
         const newFile: ChatFile = {
@@ -312,35 +374,33 @@ export const SessionProvider: React.FC<React.PropsWithChildren<{}>> = ({ childre
         };
         setChatFiles(prev => [...prev, newFile]);
         addToast(`File "${filename}" saved to chat context.`, "success");
-    }, [addToast]);
+    }, [addToast, setChatFiles]);
     
     const handleExitChatMode = useCallback(() => {
         setIsChatMode(false);
-        setChatHistory([]);
-        setChatRevisions([]);
-        setChatFiles([]);
-        setChatSession(null);
-    }, []);
+        // CRITICAL: Do NOT clear history/session here. 
+        // This allows the user to return to the chat state intact.
+    }, [setIsChatMode]);
 
     const handleLoadRevisionIntoEditor = useCallback((code: string) => {
         setUserOnlyCode(code);
         addToast("Revision loaded into editor.", "success");
     }, [addToast, setUserOnlyCode]);
 
-    const onClearChatRevisions = useCallback(() => setChatRevisions([]), []);
+    const onClearChatRevisions = useCallback(() => setChatRevisions([]), [setChatRevisions]);
     const onRenameChatRevision = useCallback((id: string, newName: string) => {
         setChatRevisions(prev => prev.map(r => r.id === id ? { ...r, name: newName } : r));
-    }, []);
+    }, [setChatRevisions]);
     const onDeleteChatRevision = useCallback((id: string) => {
         setChatRevisions(prev => prev.filter(r => r.id !== id));
-    }, []);
-    const onClearChatFiles = useCallback(() => setChatFiles([]), []);
+    }, [setChatRevisions]);
+    const onClearChatFiles = useCallback(() => setChatFiles([]), [setChatFiles]);
     const onRenameChatFile = useCallback((id: string, newName: string) => {
         setChatFiles(prev => prev.map(f => f.id === id ? { ...f, name: newName } : f));
-    }, []);
+    }, [setChatFiles]);
     const onDeleteChatFile = useCallback((id: string) => {
         setChatFiles(prev => prev.filter(f => f.id !== id));
-    }, []);
+    }, [setChatFiles]);
 
     const handleAutoGenerateVersionName = useCallback(async (isSavingChat: boolean, onResult: (name: string) => void) => {
         const content = isSavingChat 
@@ -354,7 +414,7 @@ export const SessionProvider: React.FC<React.PropsWithChildren<{}>> = ({ childre
             const prompt = generateVersionNamePrompt(content);
             const name = await geminiService.generateText({
                 contents: prompt,
-                systemInstruction: VERSION_NAME_SYSTEM_INSTRUCTION,
+                systemInstruction: `${SYSTEM_INSTRUCTION}\n\n${VERSION_NAME_SYSTEM_INSTRUCTION}`,
                 model: GEMINI_MODELS.FAST_TASKS,
             });
             onResult(name.trim().replace(/["']/g, ''));
@@ -372,7 +432,7 @@ export const SessionProvider: React.FC<React.PropsWithChildren<{}>> = ({ childre
             let fullResponse = "";
             await geminiService.streamRequest({
                 contents: prompt,
-                systemInstruction: ADVERSARIAL_REPORT_SYSTEM_INSTRUCTION,
+                systemInstruction: `${SYSTEM_INSTRUCTION}\n\n${ADVERSARIAL_REPORT_SYSTEM_INSTRUCTION}`,
                 model: GEMINI_MODELS.CORE_ANALYSIS,
                 abortSignal: abortControllerRef.current.signal,
                 onChunk: (chunkText) => {
@@ -387,60 +447,66 @@ export const SessionProvider: React.FC<React.PropsWithChildren<{}>> = ({ childre
         } finally {
             setIsGeneratingReport(false);
         }
-    }, [addToast]);
+    }, [addToast, setAdversarialReportContent]);
 
     const handleThreatVectorAnalysis = useCallback(async (targetUrl: string) => {
         setIsGeneratingThreatVector(true);
         setThreatVectorReport('');
         abortControllerRef.current = new AbortController();
         try {
-            const prompt = generateThreatVectorPrompt(targetUrl);
+            // New logic: Use Gemini with fetch
+            const prompt = generateThreatVectorPrompt(targetUrl, undefined, "");
+            
             let fullResponse = "";
             await geminiService.streamRequest({
                 contents: prompt,
-                systemInstruction: THREAT_VECTOR_SYSTEM_INSTRUCTION,
+                systemInstruction: `${SYSTEM_INSTRUCTION}\n\n${THREAT_VECTOR_SYSTEM_INSTRUCTION}`,
                 model: GEMINI_MODELS.CORE_ANALYSIS,
                 abortSignal: abortControllerRef.current.signal,
+                tools: [{ fetch: {} }], // Enable URL access
                 onChunk: (chunkText) => {
                     fullResponse += chunkText;
                     setThreatVectorReport(fullResponse);
                 },
             });
+
         } catch(err) {
              if (err instanceof Error && err.message !== "STREAM_ABORTED") {
-                addToast(`Threat analysis failed: ${err.message}`, "error");
+                const errorMsg = err.message;
+                setThreatVectorReport(`# Analysis Failed\n\n**Error:** ${errorMsg}\n\nPlease verify the URL and try again.`);
+                addToast(`Threat analysis failed: ${errorMsg}`, "error");
             }
         } finally {
             setIsGeneratingThreatVector(false);
         }
-    }, [addToast]);
+    }, [addToast, setThreatVectorReport]);
     
     const handleExplainSelection = useCallback((selection: string) => {
         const prompt = `${EXPLAIN_CODE_INSTRUCTION}\n\n\`\`\`${LANGUAGE_TAG_MAP[language] || ''}\n${selection}\n\`\`\``;
-        const selectedContextFiles = projectFiles.filter(pf => contextFileIds.has(pf.id));
+        const selectedContextFiles = projectFiles.filter(pf => contextFileIds.includes(pf.id));
         const contents = geminiService.buildPromptWithProjectFiles(prompt, selectedContextFiles);
         handleStreamingRequest('explain-selection', contents, getSystemInstructionForReview(), GEMINI_MODELS.FAST_TASKS, selection, prompt);
     }, [language, projectFiles, contextFileIds, getSystemInstructionForReview, handleStreamingRequest]);
 
     const handleReviewSelection = useCallback((selection: string) => {
         const prompt = `${REVIEW_SELECTION_INSTRUCTION}\n\n\`\`\`${LANGUAGE_TAG_MAP[language] || ''}\n${selection}\n\`\`\``;
-        const selectedContextFiles = projectFiles.filter(pf => contextFileIds.has(pf.id));
+        const selectedContextFiles = projectFiles.filter(pf => contextFileIds.includes(pf.id));
         const contents = geminiService.buildPromptWithProjectFiles(prompt, selectedContextFiles);
         handleStreamingRequest('review-selection', contents, getSystemInstructionForReview(), GEMINI_MODELS.CORE_ANALYSIS, selection, prompt);
     }, [language, projectFiles, contextFileIds, getSystemInstructionForReview, handleStreamingRequest]);
 
     const handleGenerateTests = useCallback(() => {
         const prompt = `${GENERATE_TESTS_INSTRUCTION}\n\n\`\`\`${LANGUAGE_TAG_MAP[language]}\n${userOnlyCode}\n\`\`\``;
-        const selectedContextFiles = projectFiles.filter(pf => contextFileIds.has(pf.id));
+        const selectedContextFiles = projectFiles.filter(pf => contextFileIds.includes(pf.id));
         const contents = geminiService.buildPromptWithProjectFiles(prompt, selectedContextFiles);
         handleStreamingRequest('tests', contents, SYSTEM_INSTRUCTION, GEMINI_MODELS.CORE_ANALYSIS, userOnlyCode, prompt);
     }, [language, userOnlyCode, projectFiles, contextFileIds, handleStreamingRequest]);
 
     const handleGenerateDocs = useCallback((codeToDocument: string) => {
         const prompt = `${DOCS_INSTRUCTION}\n\n\`\`\`${LANGUAGE_TAG_MAP[language]}\n${codeToDocument}\n\`\`\``;
-        const selectedContextFiles = projectFiles.filter(pf => contextFileIds.has(pf.id));
+        const selectedContextFiles = projectFiles.filter(pf => contextFileIds.includes(pf.id));
         const contents = geminiService.buildPromptWithProjectFiles(prompt, selectedContextFiles);
-        handleStreamingRequest('docs', contents, DOCS_SYSTEM_INSTRUCTION, GEMINI_MODELS.CORE_ANALYSIS, codeToDocument, prompt);
+        handleStreamingRequest('docs', contents, `${SYSTEM_INSTRUCTION}\n\n${DOCS_SYSTEM_INSTRUCTION}`, GEMINI_MODELS.CORE_ANALYSIS, codeToDocument, prompt);
     }, [language, projectFiles, contextFileIds, handleStreamingRequest]);
 
     const handleFinalizeFeatureDiscussion = useCallback(() => {
@@ -462,7 +528,7 @@ export const SessionProvider: React.FC<React.PropsWithChildren<{}>> = ({ childre
         setActiveFeatureForDiscussion(null);
         handleExitChatMode();
         addToast(`Discussion for "${activeFeatureForDiscussion.name}" finalized.`, "success");
-    }, [activeFeatureForDiscussion, chatHistory, handleExitChatMode, addToast]);
+    }, [activeFeatureForDiscussion, chatHistory, handleExitChatMode, addToast, setFeatureDecisions, setChatContext, setActiveFeatureForDiscussion]);
       
     const handleGenerateCommitMessage = useCallback(async () => {
         if (!reviewedCode || !revisedCode) return;
@@ -488,7 +554,7 @@ export const SessionProvider: React.FC<React.PropsWithChildren<{}>> = ({ childre
             setIsLoading(false);
             setLoadingAction(null);
         }
-    }, [reviewedCode, revisedCode]);
+    }, [reviewedCode, revisedCode, setOutputType, setReviewFeedback]);
     
     const handleAnalyzeRootCause = useCallback(() => {
         if (!reviewedCode || !reviewFeedback || !revisedCode) {
@@ -496,7 +562,7 @@ export const SessionProvider: React.FC<React.PropsWithChildren<{}>> = ({ childre
             return;
         }
         const prompt = generateRootCauseTemplate(reviewedCode, errorMessage, reviewFeedback, revisedCode);
-        const selectedContextFiles = projectFiles.filter(pf => contextFileIds.has(pf.id));
+        const selectedContextFiles = projectFiles.filter(pf => contextFileIds.includes(pf.id));
         const contents = geminiService.buildPromptWithProjectFiles(prompt, selectedContextFiles);
         handleStreamingRequest('root-cause', contents, `${SYSTEM_INSTRUCTION}\n\n${ROOT_CAUSE_SYSTEM_INSTRUCTION}`, GEMINI_MODELS.CORE_ANALYSIS, reviewedCode, prompt);
     }, [reviewedCode, reviewFeedback, revisedCode, errorMessage, projectFiles, contextFileIds, addToast, handleStreamingRequest]);
@@ -513,7 +579,7 @@ export const SessionProvider: React.FC<React.PropsWithChildren<{}>> = ({ childre
         
         const prompt = generateFinalizationPrompt(userOnlyCode, codeB, summary, featureDecisions);
         handleStreamingRequest('finalization', prompt, `${SYSTEM_INSTRUCTION}\n\n${COMPARISON_SYSTEM_INSTRUCTION}`, GEMINI_MODELS.CORE_ANALYSIS, `${userOnlyCode}\n\n${codeB}`, prompt);
-    }, [featureMatrix, featureDecisions, userOnlyCode, codeB, handleStreamingRequest]);
+    }, [featureMatrix, featureDecisions, userOnlyCode, codeB, handleStreamingRequest, setFinalizationSummary]);
 
     const handleDownloadOutput = useCallback(() => {
         if (!reviewFeedback) return;
@@ -561,21 +627,25 @@ export const SessionProvider: React.FC<React.PropsWithChildren<{}>> = ({ childre
             };
     
             let submissionParts: Part[] = [];
-            if (message.trim()) {
-                submissionParts.push({ text: message });
-            }
+            let finalPromptText = message.trim();
+            const finalImageParts: Part[] = [];
+
             if (userMessage.attachments) {
                 userMessage.attachments.forEach(att => {
-                    submissionParts.push({
-                        inlineData: { mimeType: att.mimeType, data: att.content }
-                    });
+                    if (att.mimeType.startsWith('image/')) {
+                        finalImageParts.push({
+                            inlineData: { mimeType: att.mimeType, data: att.content }
+                        });
+                    } else {
+                        finalPromptText += `\n\n--- Attached File: ${att.name} ---\n\`\`\`\n${att.content}\n\`\`\`\n--- End of File ---`;
+                    }
                 });
             }
-    
-            if (appMode === 'workbench' && workbenchScript.trim()) {
-                const contextMessage = `## Current Script in Editor\n\nHere is the script I am working on. Use this as the primary context for my request.\n\n\`\`\`${LANGUAGE_TAG_MAP[language] || ''}\n${workbenchScript}\n\`\`\`\n\n## My Request\n\n${message}`;
-                submissionParts = [{ text: contextMessage }, ...submissionParts.slice(1)];
+
+            if (finalPromptText) {
+                submissionParts.push({ text: finalPromptText });
             }
+            submissionParts.push(...finalImageParts);
     
             const responseStream = await chatSession.sendMessageStream({ message: submissionParts });
             
@@ -611,6 +681,7 @@ export const SessionProvider: React.FC<React.PropsWithChildren<{}>> = ({ childre
     
         } catch (apiError) {
             const message = apiError instanceof Error ? apiError.message : "An unexpected error occurred.";
+            console.error("Chat submit error:", apiError);
             setChatHistory(prev => [...prev, {
                 id: `err_${Date.now()}`,
                 role: 'model',
@@ -621,7 +692,8 @@ export const SessionProvider: React.FC<React.PropsWithChildren<{}>> = ({ childre
         }
       }, [
           chatInputValue, isChatLoading, chatSession, attachments, addToast, appMode,
-          chatRevisions.length, workbenchScript, language
+          chatRevisions.length, language, setChatHistory, setAttachments,
+          setChatInputValue, setChatRevisions, setChatFiles
         ]);
 
     const handleCompareAndRevise = useCallback(async () => {
@@ -631,7 +703,7 @@ export const SessionProvider: React.FC<React.PropsWithChildren<{}>> = ({ childre
         }
         
         const prompt = generateComparisonTemplate(language, comparisonGoal, userOnlyCode, codeB);
-        const selectedContextFiles = projectFiles.filter(pf => contextFileIds.has(pf.id));
+        const selectedContextFiles = projectFiles.filter(pf => contextFileIds.includes(pf.id));
         const contents = geminiService.buildPromptWithProjectFiles(prompt, selectedContextFiles);
         
         setIsLoading(true);
@@ -663,80 +735,7 @@ export const SessionProvider: React.FC<React.PropsWithChildren<{}>> = ({ childre
             setIsLoading(false);
             setLoadingAction(null);
         }
-    }, [language, comparisonGoal, userOnlyCode, codeB, projectFiles, contextFileIds, resetForNewRequest]);
-      
-    const handleStartFollowUp = useCallback(async (version?: Version) => {
-        if (version) {
-            addToast(`Starting follow-up from "${version.name}"...`, "info");
-            
-            if (version.appMode) {
-                setAppMode(version.appMode);
-            }
-
-            setChatHistory(version.chatHistory || []);
-            setChatRevisions(version.chatRevisions || []);
-            setChatFiles(version.chatFiles || []);
-    
-            setLanguage(version.language);
-            setUserOnlyCode(version.userCode);
-            setFullCodeForReview(version.fullPrompt);
-            setReviewFeedback(version.feedback);
-            setReviewedCode(version.userCode);
-            setRevisedCode(null);
-            if (version.reviewProfile) setReviewProfile(version.reviewProfile);
-            if (version.customReviewProfile) setCustomReviewProfile(version.customReviewProfile);
-            if (version.comparisonGoal) setComparisonGoal(version.comparisonGoal);
-            if (version.contextFileIds) setContextFileIds(new Set(version.contextFileIds));
-    
-        } else {
-            addToast("Follow-up chat started!", "info");
-            setChatHistory([]);
-            setChatRevisions([]);
-            setChatFiles([]);
-        }
-        
-        setIsChatMode(true);
-        setIsInputPanelVisible(true);
-    
-        const ai = geminiService.getAiClient();
-        if (!ai) {
-            addToast("Gemini AI not configured. Cannot start chat.", "error");
-            return;
-        }
-    
-        const getChatSystemInstruction = () => {
-            if (chatContext === 'feature_discussion' && activeFeatureForDiscussion) {
-                return `${SYSTEM_INSTRUCTION}\n\n${COMPARISON_SYSTEM_INSTRUCTION}\n\nThe user wants to discuss the following feature: "${activeFeatureForDiscussion.name}". Description: "${activeFeatureForDiscussion.description}". Source: ${activeFeatureForDiscussion.source}.`;
-            }
-            if (appMode === 'workbench') {
-                return `${SYSTEM_INSTRUCTION}\n\n${WORKBENCH_SYSTEM_INSTRUCTION}`;
-            }
-            switch(appMode) {
-                case 'debug': return `${SYSTEM_INSTRUCTION}\n\n${DEBUG_SYSTEM_INSTRUCTION}`;
-                case 'comparison': return `${SYSTEM_INSTRUCTION}\n\n${COMPARISON_SYSTEM_INSTRUCTION}`;
-                case 'audit': return `${SYSTEM_INSTRUCTION}\n\n${AUDIT_SYSTEM_INSTRUCTION}`;
-                default: return getSystemInstructionForReview();
-            }
-        };
-    
-        const initialHistoryForGemini: { role: 'user' | 'model', parts: { text: string }[] }[] = [];
-        const sourceFeedback = version ? version.feedback : reviewFeedback;
-        const sourcePrompt = version ? version.fullPrompt : fullCodeForReview;
-        if (sourcePrompt && sourceFeedback) {
-            initialHistoryForGemini.push({ role: 'user', parts: [{ text: sourcePrompt }] });
-            initialHistoryForGemini.push({ role: 'model', parts: [{ text: sourceFeedback }] });
-        }
-    
-        const newChat = ai.chats.create({
-            model: GEMINI_MODELS.CORE_ANALYSIS,
-            history: initialHistoryForGemini,
-            config: {
-              systemInstruction: getChatSystemInstruction(),
-            }
-        });
-        setChatSession(newChat);
-    
-      }, [addToast, setLanguage, setUserOnlyCode, setReviewProfile, customReviewProfile, comparisonGoal, appMode, chatContext, activeFeatureForDiscussion, getSystemInstructionForReview, reviewFeedback, fullCodeForReview, setAppMode]);
+    }, [language, comparisonGoal, userOnlyCode, codeB, projectFiles, contextFileIds, resetForNewRequest, setOutputType, setFullCodeForReview, setReviewedCode, setReviewFeedback, setFeatureMatrix, setRawFeatureMatrixJson]);
       
     const handleLoadSession = useCallback((sessionState: any) => {
         try {
@@ -753,9 +752,8 @@ export const SessionProvider: React.FC<React.PropsWithChildren<{}>> = ({ childre
           if (typeof sessionState.comparisonGoal === 'string') setComparisonGoal(sessionState.comparisonGoal);
           if (Array.isArray(sessionState.versions)) setVersions(sessionState.versions);
           if (Array.isArray(sessionState.projectFiles)) setProjectFiles(sessionState.projectFiles);
-          if (Array.isArray(sessionState.contextFileIds)) setContextFileIds(new Set(sessionState.contextFileIds));
+          if (Array.isArray(sessionState.contextFileIds)) setContextFileIds(sessionState.contextFileIds);
           if (typeof sessionState.targetHostname === 'string') setTargetHostname(sessionState.targetHostname);
-          if (typeof sessionState.workbenchScript === 'string') setWorkbenchScript(sessionState.workbenchScript);
     
           // Operational Session State
           if (typeof sessionState.reviewFeedback === 'string') setReviewFeedback(sessionState.reviewFeedback);
@@ -789,13 +787,9 @@ export const SessionProvider: React.FC<React.PropsWithChildren<{}>> = ({ childre
                 const profile = sessionState.reviewProfile;
                 const customProfile = sessionState.customReviewProfile;
     
-                if (mode === 'workbench') {
-                    return `${SYSTEM_INSTRUCTION}\n\n${WORKBENCH_SYSTEM_INSTRUCTION}`;
-                }
                 switch(mode) {
                     case 'debug': return `${SYSTEM_INSTRUCTION}\n\n${DEBUG_SYSTEM_INSTRUCTION}`;
                     case 'comparison': return `${SYSTEM_INSTRUCTION}\n\n${COMPARISON_SYSTEM_INSTRUCTION}`;
-                    case 'audit': return `${SYSTEM_INSTRUCTION}\n\n${AUDIT_SYSTEM_INSTRUCTION}`;
                     default: 
                         let instruction = SYSTEM_INSTRUCTION;
                         if (profile && profile !== 'none' && profile !== ReviewProfile.CUSTOM && PROFILE_SYSTEM_INSTRUCTIONS[profile]) {
@@ -847,7 +841,10 @@ export const SessionProvider: React.FC<React.PropsWithChildren<{}>> = ({ childre
     }, [
         resetForNewRequest, setAppMode, setLanguage, setReviewProfile, setCustomReviewProfile,
         setUserOnlyCode, setCodeB, setErrorMessage, setComparisonGoal, setVersions, setProjectFiles,
-        setContextFileIds, setTargetHostname, setWorkbenchScript, addToast
+        setContextFileIds, setTargetHostname, addToast, setReviewFeedback, setRevisedCode,
+        setReviewedCode, setChatHistory, setChatRevisions, setChatFiles, setFeatureMatrix,
+        setRawFeatureMatrixJson, setFeatureDecisions, setFinalizationSummary, setFinalizationBriefing,
+        setIsChatMode, setIsInputPanelVisible, handleStartFollowUp
     ]);
 
 
@@ -871,10 +868,11 @@ export const SessionProvider: React.FC<React.PropsWithChildren<{}>> = ({ childre
         setChatContext, setActiveFeatureForDiscussion, setAttachments
     }), [
         isInputPanelVisible, isChatMode, chatHistory, chatInputValue, chatRevisions, chatFiles, chatContext,
-        activeFeatureForDiscussion, attachments, contextFileIds
+        activeFeatureForDiscussion, attachments, contextFileIds, setIsInputPanelVisible, setChatInputValue,
+        setChatContext, setActiveFeatureForDiscussion, setAttachments
     ]);
 
-    const sessionActionsValue = useMemo(() => ({
+    const sessionActionsValue: SessionActionsContextType = useMemo(() => ({
         setFeatureDecisions, setAdversarialReportContent, setThreatVectorReport, handleContextFileSelectionChange,
         resetForNewRequest, registerUiActions, handleStopGenerating, handleReviewSubmit, handleAuditSubmit,
         handleCompareAndOptimize, handleCompareAndRevise, handleAnalyzeRootCause, handleStartFollowUp,
@@ -882,9 +880,10 @@ export const SessionProvider: React.FC<React.PropsWithChildren<{}>> = ({ childre
         handleGenerateCommitMessage, handleFinalizeComparison, handleDownloadOutput, handleAutoGenerateVersionName,
         handleGenerateAdversarialReport, handleThreatVectorAnalysis, handleExplainSelection, handleReviewSelection,
         handleChatSubmit, handleLoadRevisionIntoEditor, onClearChatRevisions, onRenameChatRevision, onDeleteChatRevision,
-        onClearChatFiles, onRenameChatFile, onDeleteChatFile, handleLoadSession, featureDecisions, allFeaturesDecided
+        onClearChatFiles, onRenameChatFile, onDeleteChatFile, handleClearChatHistory, handleLoadSession, 
+        featureDecisions, allFeaturesDecided
     }), [
-        handleContextFileSelectionChange, resetForNewRequest, registerUiActions, handleStopGenerating,
+        setFeatureDecisions, setAdversarialReportContent, setThreatVectorReport, handleContextFileSelectionChange, resetForNewRequest, registerUiActions, handleStopGenerating,
         handleReviewSubmit, handleAuditSubmit, handleCompareAndOptimize, handleCompareAndRevise,
         handleAnalyzeRootCause, handleStartFollowUp, handleFinalizeFeatureDiscussion, handleGenerateTests,
         handleGenerateDocs, onSaveGeneratedFile, handleExitChatMode, handleGenerateCommitMessage,
@@ -892,7 +891,8 @@ export const SessionProvider: React.FC<React.PropsWithChildren<{}>> = ({ childre
         handleGenerateAdversarialReport, handleThreatVectorAnalysis, handleExplainSelection,
         handleReviewSelection, handleChatSubmit, handleLoadRevisionIntoEditor, onClearChatRevisions,
         onRenameChatRevision, onDeleteChatRevision, onClearChatFiles, onRenameChatFile, onDeleteChatFile,
-        handleLoadSession, featureDecisions, allFeaturesDecided
+        handleClearChatHistory, handleLoadSession,
+        featureDecisions, allFeaturesDecided
     ]);
     
     return (

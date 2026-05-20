@@ -7,12 +7,14 @@ import { ChatContext } from './ChatContext.tsx';
 import { DeleteIcon, FolderIcon, PaperclipIcon } from './Icons.tsx';
 import { useConfigContext, useActionsContext } from '../AppContext.tsx';
 import { useChatStateContext, useLoadingStateContext, useOutputContext, useSessionActionsContext } from '../contexts/SessionContext.tsx';
+import { Tooltip } from './Tooltip.tsx';
 
 interface ChatInterfaceProps {
   onSaveChatSession?: () => void;
   onAttachFileClick: () => void;
   onOpenProjectFilesModal: () => void;
   onLoadCodeIntoWorkbench?: (code: string) => void;
+  hideHeader?: boolean;
 }
 
 const AttachmentPreview: React.FC<{ file: File; onRemove: () => void; }> = ({ file, onRemove }) => {
@@ -74,7 +76,7 @@ const ChatMessageItem = memo<{
     return (
         <div 
             className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[80%] p-3 text-sm rounded-lg ${msg.role === 'user' ? 'bg-transparent border border-[var(--hud-color-darker)] text-[var(--hud-color)]' : 'bg-[var(--hud-color-darkest)] text-[var(--hud-color-darker)]'}`}>
+            <div className={`max-w-[80%] p-3 text-sm rounded-lg ${msg.role === 'user' ? 'bg-[var(--hud-bg-transparent)] backdrop-blur border border-[var(--hud-color-darker)] text-[var(--hud-color)]' : 'bg-[rgba(0,68,68,0.4)] backdrop-blur border border-[var(--hud-color-darkest)] text-[var(--hud-color-darker)]'}`}>
                 {msg.role === 'user' && renderAttachments(msg.attachments)}
                 <MarkdownRenderer markdown={msg.content} onSaveGeneratedFile={onSaveGeneratedFile} onLoadCodeIntoWorkbench={onLoadCodeIntoWorkbench} />
             </div>
@@ -83,7 +85,7 @@ const ChatMessageItem = memo<{
 });
 
 
-export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSaveChatSession, onAttachFileClick, onOpenProjectFilesModal, onLoadCodeIntoWorkbench }) => {
+export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSaveChatSession, onAttachFileClick, onOpenProjectFilesModal, onLoadCodeIntoWorkbench, hideHeader = false }) => {
   const { appMode } = useConfigContext();
   const { resetAndSetMode } = useActionsContext();
   const { isChatLoading } = useLoadingStateContext();
@@ -94,7 +96,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSaveChatSession,
   } = useChatStateContext();
   const {
     handleFinalizeFeatureDiscussion, handleChatSubmit, handleLoadRevisionIntoEditor, 
-    onSaveGeneratedFile, handleExitChatMode
+    onSaveGeneratedFile, handleExitChatMode, handleClearChatHistory
   } = useSessionActionsContext();
   
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -115,6 +117,16 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSaveChatSession,
     }
   }, [chatContext, revisedCode]);
 
+  useEffect(() => {
+    const textarea = inputRef.current;
+    if (textarea) {
+      // Reset height to shrink if text is deleted
+      textarea.style.height = 'auto';
+      // Set height to scroll height, respecting max-height from CSS
+      textarea.style.height = `${textarea.scrollHeight}px`;
+    }
+  }, [chatInputValue]);
+
   const handleSend = () => {
     if ((chatInputValue?.trim() || (attachments && attachments.length > 0)) && !isChatLoading) {
       handleChatSubmit();
@@ -128,11 +140,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSaveChatSession,
     }
   };
   
-  const chatTitle = chatContext === 'feature_discussion' 
+  const chatTitle = chatContext === 'feature_discussion'
     ? `DISCUSSING: ${activeFeatureForDiscussion?.name}`.toUpperCase()
     : chatContext === 'finalization'
     ? 'FINALIZING REVISION'
-    : (appMode === 'debug' ? 'DEBUGGING SESSION' : 'FOLLOW-UP CHAT');
+    : 'FOLLOW-UP CHAT';
   
   const isGeneralChat = chatContext !== 'feature_discussion';
   const endButtonText = isGeneralChat ? 'Back to Output' : 'Finalize Discussion';
@@ -144,128 +156,140 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSaveChatSession,
     setAttachments(atts => atts.filter(att => att.file !== fileToRemove));
   };
 
+  const hasHistory = chatHistory && (chatHistory.length > 0);
+
   return (
-    <div className="flex flex-col h-full min-h-0">
-        <div className={`flex justify-between items-center flex-shrink-0`}>
-            <h3 className={`text-xl font-heading truncate pr-4`} title={chatTitle}>{chatTitle}</h3>
-            {chatContext !== 'finalization' && endButtonAction && (
-              <Button onClick={endButtonAction} variant="secondary" className="py-1 px-3 text-xs">
-                  {endButtonText}
-              </Button>
-            )}
+    <div className="council-container">
+        {!hideHeader && (
+            <div className={`flex justify-between items-center flex-shrink-0 ${!hideHeader ? 'pb-4' : ''}`}>
+                <h3 className={`text-xl font-heading truncate pr-4`} title={chatTitle}>{chatTitle}</h3>
+                <div className="flex items-center gap-2">
+                    {/* Always allow clearing if there is history, even if just 1 message */}
+                    {hasHistory && chatContext !== 'finalization' && (
+                        <Button onClick={handleClearChatHistory} disabled={isChatLoading} variant="danger" className="py-1 px-3 text-xs">
+                            Clear Chat
+                        </Button>
+                    )}
+                    {chatContext !== 'finalization' && endButtonAction && (
+                    <Button onClick={endButtonAction} variant="secondary" className="py-1 px-3 text-xs">
+                        {endButtonText}
+                    </Button>
+                    )}
+                </div>
+            </div>
+        )}
+
+        <div className="flex flex-col md:flex-row gap-6 md:gap-8 message-log">
+            <div ref={chatContainerRef} className={`w-full md:w-3/5 h-full overflow-y-auto overflow-x-hidden border border-[var(--hud-color-darkest)]`}>
+                <div className="p-3 space-y-4 flex flex-col">
+                    {chatHistory?.map((msg) => (
+                        <ChatMessageItem
+                            key={msg.id}
+                            msg={msg}
+                            onSaveGeneratedFile={onSaveGeneratedFile}
+                            // Pass the handleLoadRevisionIntoEditor as the loader callback.
+                            // This ensures code blocks in chat can be loaded into the main editor.
+                            onLoadCodeIntoWorkbench={handleLoadRevisionIntoEditor}
+                        />
+                    ))}
+                    {isChatLoading && (
+                        <div className="flex justify-start">
+                            <div className="max-w-[80%] p-3 bg-[var(--hud-color-darkest)] text-[var(--hud-color)] rounded-lg">
+                            <LoadingSpinner size="w-5 h-5" />
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            <div className="w-full md:w-2/5 min-w-0 flex flex-col h-full">
+                <ChatContext />
+            </div>
         </div>
 
-        <div className="flex flex-col flex-grow min-h-0 mt-4">
-            <div className="flex flex-col md:flex-row flex-grow min-h-0 gap-6 md:gap-8">
-                <div ref={chatContainerRef} className="w-full md:w-3/5 flex-grow min-h-0 overflow-y-auto overflow-x-hidden border border-[var(--hud-color-darkest)]">
-                    <div className="p-3 space-y-4 flex flex-col">
-                        {chatHistory?.map((msg) => (
-                            <ChatMessageItem
-                                key={msg.id}
-                                msg={msg}
-                                onSaveGeneratedFile={onSaveGeneratedFile}
-                                onLoadCodeIntoWorkbench={onLoadCodeIntoWorkbench}
-                            />
-                        ))}
-                        {isChatLoading && (
-                            <div className="flex justify-start">
-                                <div className="max-w-[80%] p-3 bg-[var(--hud-color-darkest)] text-[var(--hud-color)] rounded-lg">
-                                <LoadingSpinner size="w-5 h-5" />
-                                </div>
-                            </div>
-                        )}
-                    </div>
+        <div className="flex items-end space-x-2 input-area">
+           {generationComplete ? (
+                <div className="w-full flex flex-wrap justify-center gap-3 animate-fade-in">
+                    <Button onClick={() => resetAndSetMode(appMode)} variant="secondary" className="post-review-button">Start New</Button>
+                    {onSaveChatSession && <Button onClick={onSaveChatSession} variant="primary" className="post-review-button">Save Final Revision</Button>}
+                    <Button onClick={() => handleLoadRevisionIntoEditor(revisedCode || '')} variant="primary" className="post-review-button">Load in Editor</Button>
                 </div>
-
-                <div className="w-full md:w-2/5 flex flex-col min-h-0">
-                    <ChatContext />
+            ) : (
+                <>
+                <div className="relative w-full">
+                    {attachments && attachments.length > 0 && (
+                       <div className="absolute bottom-full left-0 right-0 max-h-48 overflow-y-auto bg-black/80 border border-b-0 border-[var(--hud-color-darkest)] p-2 space-y-2 animate-fade-in">
+                            {attachments.map(att => (
+                                <AttachmentPreview key={att.file.name + att.file.lastModified} file={att.file} onRemove={() => onRemoveAttachment(att.file)} />
+                            ))}
+                        </div>
+                    )}
+                    <textarea
+                        ref={inputRef}
+                        value={chatInputValue || ''}
+                        onChange={(e) => setChatInputValue(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        rows={1}
+                        className="block w-full p-2 pr-36 font-mono text-sm text-[var(--hud-color)] bg-black border border-[var(--hud-color-darker)] focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)] focus:border-[var(--hud-color)] placeholder:text-transparent max-h-48 overflow-y-auto resize-none whitespace-pre-wrap break-words"
+                        placeholder={chatContext === 'finalization' ? "Final instructions..." : " "}
+                        disabled={isChatLoading}
+                        aria-label="Follow-up message input"
+                    />
+                    {!chatInputValue && !isChatLoading && (
+                        <span className="absolute left-[13px] top-[9px] pointer-events-none font-mono text-sm text-[var(--hud-color)]" aria-hidden="true">
+                            <span className="blinking-prompt">❯ </span>
+                            {chatContext === 'finalization' ? 
+                            <span className="text-[var(--hud-color-darker)]">Final instructions...</span>
+                            : appMode === 'debug' ? 
+                            <span className="text-[var(--hud-color-darker)]">Terminal Output...</span>
+                            : <span className="text-[var(--hud-color-darker)]">Your message...</span> }
+                        </span>
+                    )}
+                    {appMode === 'debug' && ((chatInputValue && chatInputValue.trim()) || (attachments && attachments.length > 0)) && !isChatLoading && (
+                        <button
+                        onClick={handleSend}
+                        className="absolute right-3 bottom-2 font-mono text-xs uppercase tracking-widest transition-all duration-200 hover:text-white focus:outline-none animate-fade-in text-[var(--hud-color)] border border-[var(--hud-color)] px-3 py-1.5 hover:bg-[var(--hud-color)]/20"
+                        aria-label="Send Results"
+                        title="Send Results"
+                        >
+                        Send Results
+                        </button>
+                    )}
                 </div>
-            </div>
-
-            <div className="flex items-end space-x-2 flex-shrink-0 mt-4">
-               {generationComplete ? (
-                    <div className="w-full flex flex-wrap justify-center gap-3 animate-fade-in">
-                        <Button onClick={() => resetAndSetMode(appMode)} variant="secondary" className="post-review-button">Start New</Button>
-                        {onSaveChatSession && <Button onClick={onSaveChatSession} variant="primary" className="post-review-button">Save Final Revision</Button>}
-                        <Button onClick={() => handleLoadRevisionIntoEditor(revisedCode || '')} variant="primary" className="post-review-button">Load in Editor</Button>
-                    </div>
-                ) : (
-                    <>
-                    <div className="relative w-full">
-                        {attachments && attachments.length > 0 && (
-                           <div className="absolute bottom-full left-0 right-0 max-h-48 overflow-y-auto bg-black/80 border border-b-0 border-[var(--hud-color-darkest)] p-2 space-y-2 animate-fade-in">
-                                {attachments.map(att => (
-                                    <AttachmentPreview key={att.file.name + att.file.lastModified} file={att.file} onRemove={() => onRemoveAttachment(att.file)} />
-                                ))}
-                            </div>
-                        )}
-                        <textarea
-                            ref={inputRef}
-                            value={chatInputValue || ''}
-                            onChange={(e) => setChatInputValue(e.target.value)}
-                            onKeyDown={handleKeyDown}
-                            rows={2}
-                            className="block w-full p-2 pr-36 font-mono text-sm text-[var(--hud-color)] bg-black border border-[var(--hud-color-darker)] focus:outline-none focus:ring-1 focus:ring-[var(--hud-color)] focus:border-[var(--hud-color)] resize-y placeholder:text-transparent"
-                            placeholder={chatContext === 'finalization' ? "Final instructions..." : " "}
-                            disabled={isChatLoading}
-                            aria-label="Follow-up message input"
-                        />
-                        {!chatInputValue && !isChatLoading && (
-                            <span className="absolute left-[13px] top-[9px] pointer-events-none font-mono text-sm text-[var(--hud-color)]" aria-hidden="true">
-                                <span className="blinking-prompt">❯ </span>
-                                {chatContext === 'finalization' ? 
-                                <span className="text-[var(--hud-color-darker)]">Final instructions...</span>
-                                : appMode === 'debug' ? 
-                                <span className="text-[var(--hud-color-darker)]">Terminal Output...</span>
-                                : <span className="text-[var(--hud-color-darker)]">Your message...</span> }
-                            </span>
-                        )}
-                        {appMode === 'debug' && ((chatInputValue && chatInputValue.trim()) || (attachments && attachments.length > 0)) && !isChatLoading && (
-                            <button
-                            onClick={handleSend}
-                            className="absolute right-3 bottom-2 font-mono text-xs uppercase tracking-widest transition-all duration-200 hover:text-white focus:outline-none animate-fade-in text-[var(--hud-color)] border border-[var(--hud-color)] px-3 py-1.5 hover:bg-[var(--hud-color)]/20"
-                            aria-label="Send Results"
-                            title="Send Results"
-                            >
-                            Send Results
-                            </button>
-                        )}
-                    </div>
-                    {chatContext !== 'finalization' && (
-                      <div className="flex items-center space-x-2">
-                         <button
-                           onClick={onOpenProjectFilesModal}
-                           disabled={isChatLoading}
-                           className="p-3 border border-[var(--hud-color-darker)] text-[var(--hud-color-darker)] hover:text-[var(--hud-color)] hover:border-[var(--hud-color)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                           title="Attach from Project Files"
-                           aria-label="Attach from Project Files"
-                         >
-                           <FolderIcon className="w-5 h-5" />
-                         </button>
-                         <button
-                           onClick={onAttachFileClick}
-                           disabled={isChatLoading}
-                           className="p-3 border border-[var(--hud-color-darker)] text-[var(--hud-color-darker)] hover:text-[var(--hud-color)] hover:border-[var(--hud-color)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                           title="Attach new file"
-                           aria-label="Attach new file"
-                         >
-                           <PaperclipIcon className="w-5 h-5" />
-                         </button>
-                      </div>
-                    )}
-                    {appMode !== 'debug' && chatContext !== 'finalization' && (
-                        <Button onClick={handleSend} isLoading={isChatLoading} disabled={isChatLoading || (!chatInputValue?.trim() && (!attachments || attachments.length === 0))}>
-                            Send
-                        </Button>
-                    )}
-                    {chatContext === 'finalization' && (
-                        <Button onClick={handleSend} isLoading={isChatLoading} disabled={isChatLoading}>
-                            Generate Revision
-                        </Button>
-                    )}
-                    </>
+                {chatContext !== 'finalization' && (
+                  <div className="flex items-center space-x-2">
+                     <button
+                       onClick={onOpenProjectFilesModal}
+                       disabled={isChatLoading}
+                       className="p-3 border border-[var(--hud-color-darker)] text-[var(--hud-color-darker)] hover:text-[var(--hud-color)] hover:border-[var(--hud-color)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                       title="Attach from Project Files"
+                       aria-label="Attach from Project Files"
+                     >
+                       <FolderIcon className="w-5 h-5" />
+                     </button>
+                     <button
+                       onClick={onAttachFileClick}
+                       disabled={isChatLoading}
+                       className="p-3 border border-[var(--hud-color-darker)] text-[var(--hud-color-darker)] hover:text-[var(--hud-color)] hover:border-[var(--hud-color)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                       title="Attach new file"
+                       aria-label="Attach new file"
+                     >
+                       <PaperclipIcon className="w-5 h-5" />
+                     </button>
+                  </div>
                 )}
-            </div>
+                {appMode !== 'debug' && chatContext !== 'finalization' && (
+                    <Button onClick={handleSend} isLoading={isChatLoading} disabled={isChatLoading || (!chatInputValue?.trim() && (!attachments || attachments.length === 0))}>
+                        Send
+                    </Button>
+                )}
+                {chatContext === 'finalization' && (
+                    <Button onClick={handleSend} isLoading={isChatLoading} disabled={isChatLoading}>
+                        Generate Revision
+                    </Button>
+                )}
+                </>
+            )}
         </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react';
-import { useConfigContext, useInputContext } from '../AppContext.tsx';
+import { useConfigContext } from '../AppContext.tsx';
 import { useOutputContext, useLoadingStateContext, useSessionActionsContext } from '../contexts/SessionContext.tsx';
 import { MarkdownRenderer } from './MarkdownRenderer.tsx';
 import { AppMode, ReviewProfile } from '../types.ts';
@@ -67,7 +67,7 @@ export const ReviewOutput = ({
   const { 
       handleStartFollowUp, handleGenerateCommitMessage, setFeatureDecisions, 
       allFeaturesDecided, handleFinalizeComparison, handleDownloadOutput, 
-      onSaveGeneratedFile, handleAnalyzeRootCause, featureDecisions
+      onSaveGeneratedFile, handleAnalyzeRootCause, featureDecisions,
   } = useSessionActionsContext();
 
   const [copied, setCopied] = useState(false);
@@ -127,7 +127,7 @@ export const ReviewOutput = ({
   const loadingPulseClass = isLoading && feedback ? 'is-loading-streaming' : '';
 
   return (
-    <div className={`hud-container flex flex-col h-full min-h-0 ${activeClass} ${loadingPulseClass} animate-fade-in ${showLoadingPlaceholder ? 'border-transparent bg-transparent shadow-none' : ''}`}>
+    <div className={`hud-container flex flex-col flex-1 min-h-0 ${activeClass} ${loadingPulseClass} animate-fade-in ${showLoadingPlaceholder ? 'border-transparent bg-transparent shadow-none' : ''}`}>
       {!showLoadingPlaceholder && (
         <>
             <div className="hud-corner corner-top-left"></div>
@@ -155,7 +155,7 @@ export const ReviewOutput = ({
         </div>
       </div>
 
-      <div className="flex-grow overflow-hidden relative">
+      <div className="flex-grow min-h-0 overflow-hidden relative">
         {showLoadingPlaceholder ? (
           <div className="flex flex-col items-center justify-center h-full">
             <AnalysisLoader />
@@ -216,7 +216,7 @@ export const ReviewOutput = ({
                   </Tooltip>
                 )}
                 {appMode === 'single' ? (
-                  <Tooltip text="Move the code and analysis to the Debugger for further iteration.">
+                   <Tooltip text="Move the code and analysis to the Debugger for further iteration.">
                     <Button onClick={() => handleStartFollowUp()} disabled={!reviewAvailable} variant="primary" className="post-review-button">
                         <BugIcon className="w-4 h-4 mr-2"/>
                         Debugger
@@ -237,13 +237,13 @@ export const ReviewOutput = ({
                     </Button>
                 </Tooltip>
                 <Tooltip text="Start an interactive chat session to ask questions or request modifications.">
-                    <Button onClick={() => handleStartFollowUp()} variant="primary" className="post-review-button">
+                    <Button onClick={() => handleStartFollowUp()} variant="secondary" className="post-review-button">
                         <ChatIcon className="w-4 h-4 mr-2" />
                         {followUpButtonText}
                     </Button>
                 </Tooltip>
                 <Tooltip text="Save this entire review session as a named version to load later.">
-                    <Button onClick={onSaveVersion} variant="primary" className="post-review-button">
+                    <Button onClick={onSaveVersion} variant="secondary" className="post-review-button">
                         <SaveIcon className="w-4 h-4 mr-2" />
                         Save Version
                     </Button>

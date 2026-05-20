@@ -13,17 +13,16 @@ import { SaveVersionModal } from './Components/SaveVersionModal.tsx';
 import { ApiKeyBanner } from './Components/ApiKeyBanner.tsx';
 import { DocumentationCenterModal } from './Components/DocumentationCenterModal.tsx';
 import { ProjectFilesModal } from './Components/ProjectFilesModal.tsx';
-import { AuditInput } from './Components/AuditInput.tsx';
 import { SessionManagerModal } from './Components/SessionManagerModal.tsx';
 import { AdversarialReportGenerator } from './Components/AdversarialReportGenerator.tsx';
 import { SegmentedControl } from './Components/SegmentedControl.tsx';
 import { LiveReconModal } from './Components/LiveReconModal.tsx';
-import { ExploitStagerModal } from './Components/ExploitStagerModal.tsx';
+import { PayloadCraftingModal } from './Components/PayloadCraftingModal.tsx';
 import { ThreatVectorModal } from './Components/ThreatVectorModal.tsx';
-import { Workbench } from './Components/Workbench.tsx';
 import { DebugInput } from './Components/DebugInput.tsx';
 import { CURRENT_SESSION_VERSION } from './constants.ts';
 import { HelpModal } from './Components/HelpModal.tsx';
+import { b64EncodeUnicode, b64DecodeUnicode } from './utils.ts';
 
 const App: React.FC = () => {
   const { 
@@ -32,16 +31,17 @@ const App: React.FC = () => {
   } = useConfigContext();
   const {
     userOnlyCode, setUserOnlyCode, codeB, errorMessage,
-    comparisonGoal, workbenchScript, setWorkbenchScript, setCodeB, setErrorMessage, setComparisonGoal,
+    comparisonGoal, setCodeB, setErrorMessage, setComparisonGoal,
   } = useInputContext();
   const { resetAndSetMode } = useActionsContext();
   const { versions, projectFiles, setProjectFiles, setVersions, setImportedSessions } = usePersistenceContext();
   
   const { isLoading, isChatLoading, isGeneratingReport } = useLoadingStateContext();
-  const { isInputPanelVisible, isChatMode, chatHistory, chatRevisions, chatFiles, contextFileIds, setAttachments } = useChatStateContext();
+  const { isInputPanelVisible, isChatMode, chatHistory, chatRevisions, chatFiles, contextFileIds, setAttachments, setIsInputPanelVisible } = useChatStateContext();
   const { 
     showOutputPanel, reviewFeedback, revisedCode, reviewedCode, featureMatrix, rawFeatureMatrixJson, 
-    finalizationSummary, finalizationBriefing, adversarialReportContent, fullCodeForReview, outputType
+    finalizationSummary, finalizationBriefing, adversarialReportContent, fullCodeForReview, outputType,
+    reviewAvailable
   } = useOutputContext();
   const { 
     handleStartFollowUp, handleGenerateTests, handleGenerateAdversarialReport,
@@ -60,7 +60,7 @@ const App: React.FC = () => {
   const [isSessionManagerModalOpen, setIsSessionManagerModalOpen] = useState(false);
   const [isReportGeneratorModalOpen, setIsReportGeneratorModalOpen] = useState(false);
   const [isReconModalOpen, setIsReconModalOpen] = useState(false);
-  const [isExploitStagerModalOpen, setIsExploitStagerModalOpen] = useState(false);
+  const [isPayloadCraftingModalOpen, setIsPayloadCraftingModalOpen] = useState(false);
   const [isThreatVectorModalOpen, setIsThreatVectorModalOpen] = useState(false);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [versionName, setVersionName] = useState('');
@@ -73,7 +73,7 @@ const App: React.FC = () => {
     const hash = window.location.hash.slice(1);
     if (hash) {
         try {
-            const decodedState = JSON.parse(atob(hash));
+            const decodedState = JSON.parse(b64DecodeUnicode(hash));
             if (decodedState.appMode) resetAndSetMode(decodedState.appMode);
             if (decodedState.language) setLanguage(decodedState.language);
             if (decodedState.reviewProfile) setReviewProfile(decodedState.reviewProfile);
@@ -83,7 +83,6 @@ const App: React.FC = () => {
             if (decodedState.codeB) setCodeB(decodedState.codeB);
             if (decodedState.errorMessage) setErrorMessage(decodedState.errorMessage);
             if (decodedState.comparisonGoal) setComparisonGoal(decodedState.comparisonGoal);
-            if (decodedState.workbenchScript) setWorkbenchScript(decodedState.workbenchScript);
 
             window.history.replaceState(null, '', window.location.pathname + window.location.search);
             addToast("Session loaded from URL", "info");
@@ -99,7 +98,7 @@ const App: React.FC = () => {
         const actions: UIActions = {
             openThreatVectorModal: () => setIsThreatVectorModalOpen(true),
             openReconModal: () => setIsReconModalOpen(true),
-            openExploitStagerModal: () => setIsExploitStagerModalOpen(true),
+            openPayloadCraftingModal: () => setIsPayloadCraftingModalOpen(true),
             openReportGenerator: () => setIsReportGeneratorModalOpen(true),
             generateTests: handleGenerateTests,
             openDocsModal: () => setIsDocsModalOpen(true),
@@ -123,13 +122,15 @@ const App: React.FC = () => {
         const sessionState = {
             version: CURRENT_SESSION_VERSION,
             appMode, language, reviewProfile, customReviewProfile, userOnlyCode, codeB, 
-            errorMessage, comparisonGoal, versions, projectFiles, targetHostname, workbenchScript,
+            errorMessage, comparisonGoal, versions, projectFiles, targetHostname,
             reviewFeedback, revisedCode, reviewedCode, chatHistory, chatRevisions, chatFiles,
             featureMatrix, rawFeatureMatrixJson, featureDecisions,
             finalizationSummary, finalizationBriefing,
-            contextFileIds: Array.from(contextFileIds),
+            contextFileIds: contextFileIds,
         };
-        const blob = new Blob([JSON.stringify(sessionState, null, 2)], { type: 'application/json' });
+        const sessionString = JSON.stringify(sessionState, null, 2);
+        const encodedData = b64EncodeUnicode(sessionString); // Hardened Unicode Serialization
+        const blob = new Blob([encodedData], { type: 'text/plain' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -138,7 +139,7 @@ const App: React.FC = () => {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        addToast("Session exported successfully!", "success");
+        addToast("Session exported with Unicode integrity.", "success");
     } catch (err) {
         console.error("Failed to export session:", err);
         addToast("Failed to export session.", "error");
@@ -146,20 +147,32 @@ const App: React.FC = () => {
   }, [
     appMode, language, reviewProfile, customReviewProfile, userOnlyCode, codeB, 
     errorMessage, comparisonGoal, versions, projectFiles, targetHostname, 
-    workbenchScript, reviewFeedback, revisedCode, reviewedCode, chatHistory, chatRevisions,
+    reviewFeedback, revisedCode, reviewedCode, chatHistory, chatRevisions,
     chatFiles, featureMatrix, rawFeatureMatrixJson, featureDecisions, finalizationSummary,
     finalizationBriefing, contextFileIds, addToast
   ]);
 
   const processImportedSessionFile = (fileContent: string, fileName: string) => {
     try {
-        const importedState = JSON.parse(fileContent);
+        let decodedContent = fileContent;
+        // Check for Base64 (HUD standard for versions >= 4.14.0)
+        if (!fileContent.trim().startsWith('{') && !fileContent.trim().startsWith('[')) {
+            try {
+                decodedContent = b64DecodeUnicode(fileContent);
+            } catch (e) {
+                console.warn("Could not decode content as Unicode-Safe Base64, treating as legacy raw string.", e);
+                decodedContent = fileContent;
+            }
+        }
+        
+        const importedState = JSON.parse(decodedContent);
+
         if (typeof importedState.appMode !== 'string' || typeof importedState.language !== 'string') {
             throw new Error("Invalid session file format.");
         }
         
         if (importedState.version !== CURRENT_SESSION_VERSION) {
-            addToast(`Warning: Session version (${importedState.version || '1.0.0'}) differs from current app version (${CURRENT_SESSION_VERSION}). Some features may not work correctly.`, 'info');
+            addToast(`Warning: Session version (${importedState.version || '1.0.0'}) differs from current app version (${CURRENT_SESSION_VERSION}).`, 'info');
         }
 
         const newSession: ImportedSession = {
@@ -203,7 +216,7 @@ const App: React.FC = () => {
   const handleShareSession = () => {
     try {
         const shareableState = { appMode, language, userOnlyCode, codeB, errorMessage, comparisonGoal, reviewProfile, customReviewProfile };
-        const base64State = btoa(JSON.stringify(shareableState));
+        const base64State = b64EncodeUnicode(JSON.stringify(shareableState));
         const url = new URL(window.location.href);
         url.hash = base64State;
         
@@ -244,7 +257,7 @@ const App: React.FC = () => {
         reviewProfile: reviewProfile,
         customReviewProfile: customReviewProfile,
         comparisonGoal: comparisonGoal,
-        contextFileIds: Array.from(contextFileIds),
+        contextFileIds: contextFileIds,
     };
 
     if (isSavingChat) {
@@ -253,7 +266,7 @@ const App: React.FC = () => {
         newVersion.chatRevisions = chatRevisions;
         newVersion.chatFiles = chatFiles;
     } else if (outputType) {
-        const typeMap = { 'docs': 'docs', 'tests': 'tests', 'commit': 'commit', 'finalization': 'finalization', 'audit': 'audit', 'root-cause': 'root-cause' };
+        const typeMap = { 'docs': 'docs', 'tests': 'tests', 'commit': 'commit', 'finalization': 'finalization', 'root-cause': 'root-cause' };
         if (typeMap[outputType]) newVersion.type = typeMap[outputType] as Version['type'];
     }
     
@@ -319,20 +332,35 @@ const App: React.FC = () => {
         }
     };
   
-    const handleUploadProjectFile = async (file: File) => {
+    const handleUploadProjectFiles = async (files: File[]) => {
         try {
-            const { content, mimeType } = await fileToContent(file);
-            setProjectFiles(prev => [{ id: `proj_${Date.now()}_${file.name}`, name: file.name, content, mimeType, timestamp: Date.now() }, ...prev]);
-            addToast(`File "${file.name}" uploaded to project.`, "success");
+            const processedFiles = await Promise.all(files.map(async (file) => {
+                const { content, mimeType } = await fileToContent(file);
+                return { 
+                    id: `proj_${Date.now()}_${Math.random().toString(36).substr(2, 9)}_${file.name}`, 
+                    name: file.name, 
+                    content, 
+                    mimeType, 
+                    timestamp: Date.now() 
+                };
+            }));
+            
+            setProjectFiles(prev => [...processedFiles, ...prev]);
+            addToast(`${processedFiles.length} file(s) uploaded successfully.`, "success");
         } catch (error) {
-            console.error("Failed to upload project file:", error);
-            addToast("Failed to upload file.", "error");
+            console.error("Failed to upload project files:", error);
+            addToast("Failed to upload files.", "error");
         }
     };
   
     const handleDeleteProjectFile = (fileId: string) => {
         setProjectFiles(prev => prev.filter(pf => pf.id !== fileId));
         addToast("Project file deleted.", "info");
+    };
+
+    const handleDeleteAllProjectFiles = () => {
+        setProjectFiles([]);
+        addToast("All project files deleted.", "info");
     };
 
     const handleDownloadProjectFile = async (content: string, filename: string, mimeType: string) => {
@@ -408,8 +436,6 @@ const App: React.FC = () => {
         return <DebugInput {...commonProps} {...chatHandlers} onOpenSaveModal={() => setIsSaveModalOpen(true)} onSaveChatSession={handleSaveChatSession} />;
       case 'comparison':
         return <ComparisonInput {...commonProps} {...chatHandlers} />;
-      case 'audit':
-        return <AuditInput {...commonProps} />;
       default:
         return null;
     }
@@ -429,13 +455,19 @@ const App: React.FC = () => {
         onToggleVersionHistory={() => setIsVersionHistoryModalOpen(true)}
         onOpenReportGenerator={() => setIsReportGeneratorModalOpen(true)}
         onOpenReconModal={() => setIsReconModalOpen(true)}
-        onOpenExploitStagerModal={() => setIsExploitStagerModalOpen(true)}
+        onOpenPayloadCraftingModal={() => setIsPayloadCraftingModalOpen(true)}
         onOpenThreatVectorModal={() => setIsThreatVectorModalOpen(true)}
         onExportSession={handleExportSession}
         onImportClick={() => setIsSessionManagerModalOpen(true)}
         onShare={handleShareSession}
         onEndChatSession={handleSaveChatSession}
         onOpenHelpModal={() => setIsHelpModalOpen(true)}
+        isInputPanelVisible={isInputPanelVisible}
+        setIsInputPanelVisible={setIsInputPanelVisible}
+        isChatMode={isChatMode}
+        reviewAvailable={reviewAvailable}
+        handleStartFollowUp={handleStartFollowUp}
+        handleGenerateTests={handleGenerateTests}
       />
       <ApiKeyBanner />
       <SegmentedControl
@@ -443,32 +475,21 @@ const App: React.FC = () => {
         onModeChange={resetAndSetMode}
         disabled={isLoading || isChatLoading}
       />
-      <main className={`flex-grow min-h-0 container mx-auto px-4 pb-4 sm:px-6 sm:pb-6 lg:px-8 lg:pb-8 grid grid-cols-1 ${isInputPanelVisible && showOutputPanel && !isChatMode && appMode !== 'workbench' ? 'md:grid-cols-[2fr_3fr]' : ''} gap-6 lg:gap-8 animate-fade-in overflow-hidden`}>
-          {appMode === 'workbench' ? (
-              <Workbench 
-                  onAttachFileClick={() => attachFileInputRef.current?.click()}
-                  onOpenProjectFilesModal={() => setIsProjectFilesModalOpen(true)}
-                  onSaveChatSession={handleSaveChatSession}
-                  onLoadCodeIntoWorkbench={setWorkbenchScript}
-              />
-          ) : (
-            <>
-              {isInputPanelVisible && (
-                <div className={`min-h-0 ${isChatMode ? 'md:col-span-2' : ''}`} onClick={() => !isChatMode && setActivePanel('input')}>
-                  {renderInputComponent()}
-                </div>
-              )}
-              
-              {showOutputPanel && !isChatMode && (
-                <div className="min-h-0" onClick={() => setActivePanel('output')}>
-                    <ReviewOutput
-                      onSaveVersion={() => setIsSaveModalOpen(true)}
-                      onShowDiff={() => setIsDiffModalOpen(true)}
-                      isActive={activePanel === 'output'}
-                    />
-                </div>
-              )}
-            </>
+      <main className={`flex-grow min-h-0 container mx-auto px-4 pb-4 sm:px-6 sm:pb-6 lg:px-8 lg:pb-8 grid grid-cols-1 ${isInputPanelVisible && showOutputPanel && !isChatMode ? 'md:grid-cols-[2fr_3fr]' : ''} gap-6 lg:gap-8 animate-fade-in`}>
+          {isInputPanelVisible && (
+            <div className={`flex flex-col min-h-0 ${isChatMode ? 'md:col-span-2' : ''}`} onClick={() => !isChatMode && setActivePanel('input')}>
+              {renderInputComponent()}
+            </div>
+          )}
+          
+          {showOutputPanel && !isChatMode && (
+            <div className="flex flex-col min-h-0" onClick={() => setActivePanel('output')}>
+                <ReviewOutput
+                  onSaveVersion={() => setIsSaveModalOpen(true)}
+                  onShowDiff={() => setIsDiffModalOpen(true)}
+                  isActive={activePanel === 'output'}
+                />
+            </div>
           )}
       </main>
       <footer className="py-4 text-center">
@@ -523,8 +544,9 @@ const App: React.FC = () => {
       <ProjectFilesModal
         isOpen={isProjectFilesModalOpen}
         onClose={() => setIsProjectFilesModalOpen(false)}
-        onUploadFile={handleUploadProjectFile}
+        onUploadFiles={handleUploadProjectFiles}
         onDeleteFile={handleDeleteProjectFile}
+        onDeleteAllFiles={handleDeleteAllProjectFiles}
         onAttachFile={handleAttachProjectFileToChat}
         onDownloadFile={handleDownloadProjectFile}
         isLoading={isLoading}
@@ -551,9 +573,9 @@ const App: React.FC = () => {
         isOpen={isReconModalOpen}
         onClose={() => setIsReconModalOpen(false)}
       />
-      <ExploitStagerModal
-        isOpen={isExploitStagerModalOpen}
-        onClose={() => setIsExploitStagerModalOpen(false)}
+      <PayloadCraftingModal
+        isOpen={isPayloadCraftingModalOpen}
+        onClose={() => setIsPayloadCraftingModalOpen(false)}
       />
       <ThreatVectorModal
         isOpen={isThreatVectorModalOpen}

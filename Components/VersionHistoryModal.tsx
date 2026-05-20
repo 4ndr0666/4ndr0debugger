@@ -58,7 +58,7 @@ export const VersionHistoryModal = ({ isOpen, onClose, isLoading = false, ...ver
           </button>
         </div>
         
-        <div className="flex-grow overflow-hidden mt-2">
+        <div className="flex-grow min-h-0 overflow-hidden mt-2">
             <VersionHistory 
                 {...versionHistoryProps}
                 versions={versions}

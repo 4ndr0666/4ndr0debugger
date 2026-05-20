@@ -63,7 +63,7 @@ export const DebugInput: React.FC<DebugInputProps> = (props) => {
 
   if (isChatMode) {
     return (
-      <div className={`hud-container h-full flex flex-col ${activeClass} animate-fade-in min-h-0`}>
+      <div className={`hud-container flex flex-col flex-1 min-h-0 ${activeClass} animate-fade-in`}>
           <div className="hud-corner corner-top-left"></div>
           <div className="hud-corner corner-top-right"></div>
           <div className="hud-corner corner-bottom-left"></div>
@@ -80,7 +80,7 @@ export const DebugInput: React.FC<DebugInputProps> = (props) => {
   const title = 'Debugger';
 
   return (
-    <div className={`hud-container h-full flex flex-col ${activeClass} animate-fade-in min-h-0`}>
+    <div className={`hud-container flex flex-col flex-1 min-h-0 ${activeClass} animate-fade-in`}>
       <div className="hud-corner corner-top-left"></div>
       <div className="hud-corner corner-top-right"></div>
       <div className="hud-corner corner-bottom-left"></div>
@@ -92,7 +92,7 @@ export const DebugInput: React.FC<DebugInputProps> = (props) => {
         </h2>
       </div>
           
-      <div className="flex-grow flex flex-col overflow-y-auto pr-2 mt-4">
+      <div className="flex-grow flex flex-col min-h-0 overflow-y-auto pr-2 mt-4">
         <div className="flex flex-col space-y-4 flex-grow">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
             <div>

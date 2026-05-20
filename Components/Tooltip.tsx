@@ -1,4 +1,4 @@
-import React, { useState, useId } from 'react';
+import React, { useState, useId, useRef } from 'react';
 
 interface TooltipProps {
   text: string;
@@ -10,6 +10,23 @@ export const Tooltip: React.FC<TooltipProps> = ({ text, children, position = 'to
   const [isVisible, setIsVisible] = useState(false);
   const id = useId();
   const tooltipId = `tooltip-${id}`;
+  const timeoutRef = useRef<number | null>(null);
+
+  const handleMouseEnter = () => {
+    if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+    }
+    timeoutRef.current = window.setTimeout(() => {
+        setIsVisible(true);
+    }, 300); // 300ms delay before showing
+  };
+
+  const handleMouseLeave = () => {
+    if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+    }
+    setIsVisible(false);
+  };
 
   const positionClasses = {
     top: 'bottom-full left-1/2 -translate-x-1/2 mb-2',
@@ -21,15 +38,14 @@ export const Tooltip: React.FC<TooltipProps> = ({ text, children, position = 'to
   return (
     <div 
       className="relative flex items-center"
-      onMouseEnter={() => setIsVisible(true)}
-      onMouseLeave={() => setIsVisible(false)}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
       onFocus={() => setIsVisible(true)}
       onBlur={() => setIsVisible(false)}
     >
       {React.cloneElement(children, {
-        // Fix: ARIA attributes in React should be kebab-cased, not camelCased.
-        'aria-describedby': isVisible && text ? tooltipId : undefined,
-      })}
+        "aria-describedby": isVisible && text ? tooltipId : undefined,
+      } as any)}
       {isVisible && text && (
         <div
           id={tooltipId}

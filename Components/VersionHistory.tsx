@@ -1,6 +1,7 @@
 import React from 'react';
 import { Version } from '../types.ts';
-import { SaveIcon as LoadIcon, ChatIcon, DeleteIcon } from './Icons.tsx';
+// FIX: Removed import for non-existent 'ShieldIcon'.
+import { SaveIcon as LoadIcon, ChatIcon, DeleteIcon, CodeIcon, DocsIcon, BoltIcon, CommitIcon, SparklesIcon, RootCauseIcon } from './Icons.tsx';
 import { EditableTitle } from './EditableTitle.tsx';
 
 interface VersionHistoryProps {
@@ -27,6 +28,19 @@ const timeAgo = (timestamp: number): string => {
     return "just now";
 }
 
+const getVersionIcon = (type: Version['type']) => {
+    const iconProps = { className: "w-4 h-4 mr-2 text-[var(--hud-color-darker)]" };
+    switch (type) {
+        case 'docs': return <DocsIcon {...iconProps} />;
+        case 'tests': return <BoltIcon {...iconProps} />;
+        case 'commit': return <CommitIcon {...iconProps} />;
+        case 'finalization': return <SparklesIcon {...iconProps} />;
+        case 'root-cause': return <RootCauseIcon {...iconProps} />;
+        case 'review':
+        default: return <CodeIcon {...iconProps} />;
+    }
+};
+
 export const VersionHistory = ({ versions, onLoadVersion, onDeleteVersion, onStartFollowUp, onRenameVersion, isLoading = false }: VersionHistoryProps) => {
   if (versions.length === 0) {
     return (
@@ -51,11 +65,12 @@ export const VersionHistory = ({ versions, onLoadVersion, onDeleteVersion, onSta
           <div key={version.id} className="p-3 bg-black/50 border border-[var(--hud-color-darkest)]">
             <div className="flex justify-between items-start">
               <div className="flex-grow overflow-hidden mr-2">
-                <div className="font-semibold text-[var(--hud-color)] uppercase tracking-wider">
+                <div className="font-semibold text-[var(--hud-color)] uppercase tracking-wider flex items-center">
+                   {getVersionIcon(version.type)}
                    <EditableTitle 
                     initialTitle={version.name}
                     onSave={(newName) => onRenameVersion(version.id, newName)}
-                    className="cursor-pointer hover:text-white"
+                    className="cursor-pointer hover:text-white flex-1 truncate"
                     inputClassName="bg-transparent font-semibold text-[var(--hud-color)] uppercase tracking-wider w-full outline-none border-b border-b-[var(--hud-color-darker)]"
                     disabled={isLoading}
                   />

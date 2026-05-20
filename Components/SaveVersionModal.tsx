@@ -44,10 +44,6 @@ export const SaveVersionModal = ({
     } else if (outputType === 'tests') {
       examples.push(`Tests: ${language} Utilities`);
       examples.push(`Unit Tests for Auth Logic`);
-    } else if (outputType === 'audit') {
-        examples.push(`OSCP Audit: ${language}`);
-        examples.push(`Security Audit: ${new Date().toLocaleDateString()}`);
-        examples.push(`Code Hardening Review`);
     } else if (outputType === 'finalization' || outputType === 'revise') {
       examples.push('Finalized Revision');
       examples.push('Unified Feature Set');

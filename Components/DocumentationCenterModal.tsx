@@ -168,7 +168,7 @@ export const DocumentationCenterModal = ({
             <TabButton active={activeTab === 'saved'} onClick={() => setActiveTab('saved')}>Saved Documentation</TabButton>
         </div>
 
-        <div className="flex-grow overflow-y-auto">
+        <div className="flex-grow min-h-0 overflow-y-auto">
             {activeTab === 'generate' ? renderGenerateTab() : renderSavedTab()}
         </div>
       </div>
